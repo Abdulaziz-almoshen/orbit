@@ -17,10 +17,22 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+
+# Observability: emit "who's talking" events + drive the live checklist. activity.py sits
+# next to this file (both scaffolded into .orbit/). If it's missing, degrade to no-ops so
+# the loop still runs — observability never breaks the loop.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from activity import emit, set_tasks, update_task  # noqa: F401
+except Exception:
+    def emit(*a, **k): pass
+    def set_tasks(*a, **k): pass
+    def update_task(*a, **k): pass
 
 
 # --------------------------------------------------------------------------- config
@@ -139,40 +151,50 @@ def run(cfg: dict):
         # DECIDE (pre-check): does any hard limit say stop before we even start?
         reason = hard_stop_reason(cfg, budget, cycle, fail_streak)
         if reason:
-            print(f"[STOP] {reason}")
+            emit("orchestrator", "decide", "blocked", f"STOP — {reason}", cycle=cycle)
             on_run_end({"cfg": cfg, "budget": budget, "reason": reason})
             return
 
-        # READ
+        # READ — a fresh agent learns where things stand from the files alone.
+        emit("orchestrator", "read", "start", "reading CLAUDE.md + STATE.md", cycle=cycle)
         claude_md, state = read_state(cfg)
         context = claude_md + "\n\n" + state
 
-        # PLAN + ACT: the orchestrator decides the next action and delegates.
-        # In a real impl the orchestrator role returns the plan; here we model one step.
+        # PLAN + ACT: the orchestrator decides the next action and delegates. A real impl
+        # plans a task list (set_tasks) and dispatches each item to its owning role,
+        # emitting start/done around every dispatch so the live view shows who's talking.
+        emit("orchestrator", "plan", "info", "planning next action", cycle=cycle)
         task = {"goal": cfg.get("run_goal", "")}
+        emit("orchestrator", "act", "start", "delegating to specialist(s)", cycle=cycle)
         result = dispatch("orchestrator", task, context, cfg)
+        emit("orchestrator", "act", "done", result.get("summary", "(no summary)"), cycle=cycle)
         budget.tokens += result.get("tokens", 0)
         budget.cost_usd += result.get("cost_usd", 0.0)
 
         # Human checkpoint mid-cycle if the orchestrator proposed a gated action.
         if result.get("needs_human"):
-            print(f"[PAUSE] human approval needed: {result['needs_human']}")
+            emit("human", "decide", "blocked",
+                 f"awaiting approval: {result['needs_human']}", cycle=cycle)
             on_run_end({"cfg": cfg, "budget": budget, "reason": "awaiting human"})
             return  # resume is a fresh invocation after the human acts
 
-        # EVALUATE
+        # EVALUATE — Safety (veto) + Reviewer (quality) gates.
+        emit("reviewer", "evaluate", "start", "checking gates", cycle=cycle)
         ev = evaluate_gates(result, cfg)
         passed = ev["input"] and ev["quality"] and ev["safety"]
         fail_streak = 0 if passed else fail_streak + 1
+        emit("reviewer", "evaluate", "done" if passed else "blocked", _g(ev), cycle=cycle)
 
         # UPDATE
         decision = "done" if (passed and _goal_met(result, cfg)) else \
                    "continue" if passed else "fix-and-retry"
         update_state(cfg, cycle, result.get("summary", "(no summary)"), ev, decision)
+        emit("orchestrator", "update", "done", f"decision: {decision}", cycle=cycle)
 
         # DECIDE (post): explicit done?
         if decision == "done":
-            print("[DONE] run goal met and quality gate passed.")
+            emit("orchestrator", "decide", "done", "run goal met + quality gate passed",
+                 cycle=cycle)
             on_run_end({"cfg": cfg, "budget": budget, "reason": "done"})
             return
 

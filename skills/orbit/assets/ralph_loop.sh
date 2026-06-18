@@ -35,7 +35,9 @@ Run exactly ONE cycle of the self-prompting loop, then stop:
    plan first.
 3. ACT: delegate to the appropriate sub-agent(s) per .orbit/roles/ (use Claude Code
    subagents in .claude/agents/). Roles write artifacts to .orbit/artifacts/ and report
-   back.
+   back. Each role announces itself: open its report with "[role] ..." and emit to
+   .orbit/activity.py; keep the checklist current (TodoWrite, and .orbit/tasks.json for
+   the orbit-status dashboard) so a watcher can see who's talking and what's done.
 4. EVALUATE: check the output against CLAUDE.md section 3 and the eval gates in
    .orbit/loop.config.json (input / quality / safety). Safety has veto power.
 5. UPDATE: overwrite STATE.md's snapshot/queue/handoffs, append one line to the cycle log
@@ -50,6 +52,7 @@ propose it via STATE.md instead. Then STOP; do not start another cycle yourself.
 EOF
 
 echo "Ralph loop starting: max_iters=$MAX_ITERS max_runtime=${MAX_RUNTIME}s"
+echo "Tip: in another pane, run  scripts/orbit-status --follow  to watch who's talking live."
 
 while :; do
   # --- hard limits, checked before every cycle (the brake) --------------------------

@@ -40,6 +40,8 @@
     "roles_dir": ".orbit/roles",
     "skills_dir": ".orbit/skills",
     "artifacts_dir": ".orbit/artifacts",
+    "activity": ".orbit/activity.jsonl",
+    "tasks": ".orbit/tasks.json",
     "stop_sentinel": ".orbit/STOP"
   }
 }

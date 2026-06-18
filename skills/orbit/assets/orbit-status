@@ -1,0 +1,123 @@
+#!/usr/bin/env python3
+"""
+orbit-status — live "who's talking + checklist" dashboard for an Orbit run.
+
+Run it in a second terminal pane while the loop runs:
+
+    scripts/orbit-status --follow     # redraws ~1/s, like a pinned dashboard
+    scripts/orbit-status              # one-shot snapshot
+    scripts/orbit-status --tail 40    # show the last N thread lines
+
+It reads the event stream written by activity.py:
+    .orbit/tasks.json       the checklist
+    .orbit/activity.jsonl   the who-said-what thread
+
+Stdlib only; no install. Set ORBIT_DIR to point at a different state dir.
+"""
+import json
+import os
+import sys
+import time
+from pathlib import Path
+
+ORBIT_DIR = Path(os.environ.get("ORBIT_DIR", ".orbit"))
+TASKS = ORBIT_DIR / "tasks.json"
+ACTIVITY = ORBIT_DIR / "activity.jsonl"
+
+DIM = "\033[2m"; B = "\033[1m"; RST = "\033[0m"
+ROLE_COLORS = {
+    "orchestrator": "\033[35m", "pm": "\033[35m",
+    "data": "\033[36m", "input": "\033[36m", "research": "\033[36m",
+    "builder": "\033[32m", "executor": "\033[32m", "writer": "\033[32m",
+    "analyst": "\033[34m", "technical": "\033[34m",
+    "safety": "\033[31m", "compliance": "\033[31m", "risk": "\033[31m",
+    "reviewer": "\033[33m", "evaluator": "\033[33m", "editor": "\033[33m",
+    "reporter": "\033[37m", "human": "\033[1;33m",
+}
+TASK_MARK = {"done": "✓", "in_progress": "▸", "pending": "○", "skipped": "⊘"}
+EVENT_BADGE = {"done": "✓", "start": "▸", "blocked": "✗", "info": "·"}
+
+
+def role_color(role: str) -> str:
+    key = (role or "").lower().replace("/", " ").split()[0] if role else ""
+    return ROLE_COLORS.get(key, "\033[37m")
+
+
+def load_tasks():
+    try:
+        return json.loads(TASKS.read_text())
+    except Exception:
+        return []
+
+
+def load_events(n):
+    try:
+        lines = [l for l in ACTIVITY.read_text().splitlines() if l.strip()]
+        return [json.loads(l) for l in lines[-n:]]
+    except Exception:
+        return []
+
+
+def render(tail: int) -> str:
+    tasks = load_tasks()
+    events = load_events(tail)
+    out = [f"{B}🛰  ORBIT — live status{RST}   {DIM}{ORBIT_DIR}{RST}", ""]
+
+    out.append(f"{B}Checklist{RST}")
+    if not tasks:
+        out.append(f"  {DIM}(no tasks yet){RST}")
+    for t in tasks:
+        mark = TASK_MARK.get(t.get("status", "pending"), "○")
+        owner = t.get("owner", "")
+        own = f"{role_color(owner)}[{owner}]{RST} " if owner else ""
+        line = f"  {mark} {own}{t.get('title', '')}"
+        if t.get("status") == "done":
+            line = f"{DIM}{line}{RST}"
+        out.append(line)
+    out.append("")
+
+    if events:
+        e = events[-1]
+        col = role_color(e.get("role", ""))
+        ph = e.get("phase", "")
+        out.append(f"{B}Now{RST}  {col}{B}[{e.get('role', '?')}]{RST} "
+                   f"{ph + ' — ' if ph else ''}{e.get('msg', '')}")
+        out.append("")
+
+    out.append(f"{B}Thread{RST} {DIM}(who said what){RST}")
+    if not events:
+        out.append(f"  {DIM}(waiting for activity…){RST}")
+    for e in events:
+        col = role_color(e.get("role", ""))
+        ts = e.get("ts", "")[11:19]
+        badge = EVENT_BADGE.get(e.get("status", "info"), "·")
+        ph = e.get("phase", "")
+        out.append(f"  {DIM}{ts}{RST} {col}{badge} [{e.get('role', '?')}]{RST} "
+                   f"{ph + ': ' if ph else ''}{e.get('msg', '')}")
+    return "\n".join(out)
+
+
+def main():
+    argv = sys.argv[1:]
+    follow = "--follow" in argv or "-f" in argv
+    tail = 20
+    if "--tail" in argv:
+        try:
+            tail = int(argv[argv.index("--tail") + 1])
+        except Exception:
+            pass
+    if not follow:
+        print(render(tail))
+        return
+    try:
+        while True:
+            sys.stdout.write("\033[2J\033[H")  # clear screen + cursor home
+            sys.stdout.write(render(tail) + "\n")
+            sys.stdout.flush()
+            time.sleep(1)
+    except KeyboardInterrupt:
+        sys.stdout.write(RST + "\n")
+
+
+if __name__ == "__main__":
+    main()

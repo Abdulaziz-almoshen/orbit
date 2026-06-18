@@ -51,6 +51,12 @@ Write each role to `.orbit/roles/<role>.md` in this shape so any model can adopt
 
 ## Limits & safety
 - (context/scope boundaries; what it must NOT do; when it must escalate to a human)
+
+## Announce yourself (observability)
+- Emit a `start` event when you pick up work and `done`/`blocked` when you hand off, via
+  `.orbit/activity.py`'s `emit(role, phase, status, msg)`; open your report with `[role] …`.
+  This is how the live view (TodoWrite + `orbit-status`) shows who's talking. See
+  `observability.md`.
 ```
 
 ## Claude Code adapter (subagents)

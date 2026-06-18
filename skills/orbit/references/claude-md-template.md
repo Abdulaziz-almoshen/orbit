@@ -57,6 +57,9 @@ to your domain:)
 - **Never take an irreversible, financial, or outward-facing action autonomously.**
   Propose; a human approves. Run in dry-run / sandbox mode by default.
 - Stay within the stop conditions in §8. If you'd exceed one, stop and report.
+- **Announce yourself.** Open your output with `[role] …` and emit to `.orbit/activity.jsonl`
+  (via `.orbit/activity.py`); keep the checklist current (TodoWrite in Claude Code, or
+  `.orbit/tasks.json` for `orbit-status`) so a watcher always sees who's doing what.
 - Update this file when a durable fact changes; update `STATE.md` every cycle.
 
 ## 6. Sub-Agent Roster

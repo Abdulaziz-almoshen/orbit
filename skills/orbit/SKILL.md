@@ -81,12 +81,20 @@ job, a CI step):
 - `.orbit/loop.py` — a reference runner implementing read→act→evaluate→update→decide
   against `loop.config.json`. Model-agnostic; the dispatch function is a seam you wire
   to the user's orchestrator (e.g. Gemini, or any model/runtime).
+- `.orbit/activity.py` + `scripts/orbit-status` — the **observability layer**: every role
+  emits "who's talking" events to `.orbit/activity.jsonl` and a checklist to
+  `.orbit/tasks.json`, and `orbit-status --follow` renders a live dashboard (current
+  speaker + phase + the checklist crossing itself off). See `references/observability.md`.
 
 **B. Claude Code adapter** — so the same system runs natively here:
 - `.claude/agents/*.md` — the roles as Claude Code subagents.
 - `.claude/settings.json` hooks — automated validation/notification on key events.
 - `scripts/ralph_loop.sh` — an external "Ralph loop" that drives headless `claude -p`
   with **fresh context each cycle**, enforcing the same hard limits.
+- **Native live checklist via TodoWrite** — inside Claude Code, mirror `.orbit/tasks.json`
+  into the built-in TodoWrite tool (each item prefixed with its owning role, e.g.
+  `[data] validate inputs`) so you get the pinned, auto-crossed-off list; each role
+  announces itself `[role] …` so the transcript shows who's talking.
 
 Bundled templates live in `assets/`; copy and adapt them rather than inventing from
 scratch. The deterministic skeleton (directories + static files) can be laid down with
@@ -192,6 +200,22 @@ Wire integration per `references/hooks-and-tools.md`:
   CLAUDE.md.
 - Prefer shelling out to existing, trusted CLIs over rebuilding them.
 
+### Phase 6.5 — Make the loop watchable (observability)
+
+A loop you can't watch is a loop nobody trusts. Lay down the live "who's talking +
+checklist" layer per `references/observability.md`:
+- `scaffold.py` already drops `.orbit/activity.py` and `scripts/orbit-status`. Wire the
+  loop and each role to `emit(role, phase, status, msg)` and to keep `.orbit/tasks.json`
+  current (one writer — the Orchestrator).
+- Tell the user the two ways to watch:
+  - **Inside Claude Code:** mirror the checklist into **TodoWrite** (role-prefixed items
+    like `[data] validate inputs`, marked in_progress→completed live), and have each role
+    open its report with `[role] …` so the transcript thread shows who's speaking.
+  - **Anywhere (their own orchestrator):** run `scripts/orbit-status --follow` in a second
+    pane for a live dashboard — current speaker, phase, and the checklist crossing itself off.
+- Each role's spec (`references/roles.md`) must say "announce yourself": emit a `start` when
+  it picks up work and `done`/`blocked` when it hands off.
+
 ### Phase 7 — Report and recommend the first run
 
 When the scaffolding is in place, deliver:
@@ -228,7 +252,10 @@ loop on your own work, the same way the system will.
 - `references/loop-design.md` — loop structure, stop conditions, Ralph loop, the
   config contract.
 - `references/hooks-and-tools.md` — hook events, tool wiring, CLI-first guidance.
+- `references/observability.md` — the "who's talking" event stream + live checklist
+  (TodoWrite + the `orbit-status` dashboard).
 - `references/profiles/generic.md` — the universal profile: how to characterize any
   product and fit the system to it. Add your own profiles here for repeated setups.
-- `assets/` — copyable `loop.config.json`, `loop.py`, `ralph_loop.sh`, example subagent.
+- `assets/` — copyable `loop.config.json`, `loop.py`, `activity.py`, `ralph_loop.sh`,
+  `orbit-status`, example subagent.
 - `scripts/scaffold.py` — lays down the deterministic skeleton.

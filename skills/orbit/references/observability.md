@@ -1,0 +1,91 @@
+# Observability — "who's talking" + the live checklist
+
+A loop you can't watch is a loop you don't trust. Orbit makes every cycle legible: at any
+moment you can see **which agent is talking, what stage it's in, what it just did, and the
+checklist crossing itself off**. This is the difference between staring at a black box and
+watching a team work.
+
+The design is one principle: **one event stream, multiple renderers.** The loop and every
+role emit structured events to a single place; you render them however your environment
+allows. Don't scatter ad-hoc prints — emit events, then render.
+
+## The two data files (written by `activity.py`)
+
+- **`.orbit/activity.jsonl`** — append-only thread, one event per line:
+  ```json
+  {"ts":"2026-06-18T20:01:04Z","cycle":1,"role":"data","phase":"act","status":"start","msg":"validating inputs","task_id":"t2"}
+  ```
+  `role` = who's talking. `phase` ∈ plan·act·evaluate·update·decide·read. `status` ∈
+  start·done·blocked·info. `msg` = the human-readable line.
+- **`.orbit/tasks.json`** — the checklist:
+  ```json
+  [{"id":"t2","title":"validate inputs","owner":"data","status":"in_progress"}]
+  ```
+  `status` ∈ pending·in_progress·done·skipped. `owner` = the role responsible — this is how
+  the checklist also shows *who* owns each step.
+
+`activity.py` (scaffolded to `.orbit/activity.py`) gives three best-effort calls:
+`emit(role, phase, status, msg, cycle, task_id)`, `set_tasks(tasks)`,
+`update_task(id, status)`. They never raise into the caller.
+
+## Renderer 1 — Claude Code native (the pinned TodoWrite checklist)
+
+When the loop runs **inside Claude Code**, mirror the checklist into the built-in
+**TodoWrite** tool. That gives you the pinned, auto-crossed-off list in the terminal/IDE —
+the exact behavior you see in VS Code. Two conventions make it show *who*:
+
+1. **Prefix every todo with its owning role**, so the pinned list reads as a cast list:
+   ```
+   [orchestrator] plan cycle 1
+   [data] validate inputs
+   [analyst] derive candidate output
+   [safety] gate the output        (veto)
+   [reviewer] check vs success criteria
+   [reporter] write the result
+   ```
+   Mark each `in_progress` when its role starts and `completed` when it finishes — TodoWrite
+   strikes it through live.
+2. **Every role announces itself in one line** when it acts: `[data] fetched 412 rows, validating…`
+   → the transcript thread itself becomes the "who's talking" log. Keep the role tag first
+   so it's scannable. The Orchestrator narrates handoffs: `[orchestrator] → safety: gate AAPL signal`.
+
+Keep TodoWrite and `tasks.json` in sync — same ids, same owners. The Orchestrator owns both
+(one writer), the same way it owns STATE.md.
+
+## Renderer 2 — anywhere (the `orbit-status` dashboard)
+
+Your production loop runs on your own orchestrator (e.g. Gemini), where there's no
+TodoWrite. So Orbit ships a portable dashboard. Run it in a second terminal pane:
+
+```bash
+scripts/orbit-status --follow      # redraws ~1/s — a pinned live dashboard
+scripts/orbit-status               # one-shot snapshot
+scripts/orbit-status --tail 40     # last N thread lines
+```
+
+It reads `tasks.json` + `activity.jsonl` and renders: the **checklist** (✓ done / ▸ active /
+○ pending, each tagged with its owner), a **Now** line (the current speaker + phase + msg),
+and a color-coded **thread** of who said what. Roles are color-coded so you track speakers
+at a glance. Stdlib only — nothing to install.
+
+## How the loop wires it in
+
+- `loop.py` calls `emit()` at each phase boundary (READ/PLAN/ACT/EVALUATE/UPDATE/DECIDE) and
+  around every `dispatch(role, …)` (`start` before, `done`/`blocked` after), and
+  `set_tasks()` / `update_task()` as the plan and its progress change.
+- Each **role**, in its spec (`references/roles.md`), is told to emit a `start` when it picks
+  up work and a `done`/`blocked` when it hands off, and to prefix its report with `[role]`.
+- A **human checkpoint** emits `role:"human", status:"blocked", msg:"awaiting approval: …"`
+  so the dashboard makes it obvious the loop is paused on *you*.
+
+## Why this shape
+
+- **One source of truth.** The same events drive TodoWrite, the dashboard, and STATE.md's
+  snapshot — they can't drift.
+- **Renderer-agnostic.** Today TodoWrite + `orbit-status`; tomorrow a web view or an IDE
+  panel reads the same `activity.jsonl`. No loop changes needed.
+- **Cheap and safe.** Append-only JSONL, best-effort writes, zero deps. If observability
+  breaks, the loop doesn't.
+
+The goal: a developer glancing at the screen always knows **who is doing what, right now**,
+and how much of the plan is done — live, not after the fact.

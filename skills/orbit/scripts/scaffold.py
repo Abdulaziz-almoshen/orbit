@@ -27,7 +27,9 @@ ASSETS = SKILL_ROOT / "assets"
 FILE_PLAN = [
     ("loop.config.json", ".orbit/loop.config.json", None),
     ("loop.py",          ".orbit/loop.py",          0o755),
+    ("activity.py",      ".orbit/activity.py",      None),
     ("ralph_loop.sh",    "scripts/ralph_loop.sh",     0o755),
+    ("orbit-status",     "scripts/orbit-status",      0o755),
     ("claude-agents/safety-gate.md", ".claude/agents/safety-gate.md", None),
 ]
 
