@@ -20,8 +20,7 @@ description: >-
 
 ## Preamble — run this first (update check)
 
-Before doing anything else, check whether a newer version of this plugin is available, the
-same way gstack does. Run:
+Before doing anything else, check whether a newer version of this plugin is available. Run:
 
 ```bash
 _UPD=""

@@ -165,7 +165,7 @@ run — start small, dry-run, every checkpoint set to human, watch it stop on it
   You launch it deliberately when you want the system to run autonomously for N cycles — and
   it stops itself at the stop conditions.
 
-## Self-update (the gstack way)
+## Self-update
 
 Every time you run `/orbit`, a preamble quietly checks GitHub for a newer version (throttled
 to once a day). If there's one, it offers to upgrade and then continues. You can also:
