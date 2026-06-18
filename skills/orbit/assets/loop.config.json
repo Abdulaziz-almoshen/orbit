@@ -1,0 +1,45 @@
+{
+  "_help": "Portable safety + behavior contract for the self-prompting loop. Both runners (loop.py and ralph_loop.sh) read this. Keys starting with _ are comments and ignored. Fill thresholds with real values for your product; keep this in sync with CLAUDE.md section 8.",
+
+  "run_goal": "Produce one validated output for <unit of work> that passes the quality and safety gates, fully explained.",
+
+  "_hard_limits_help": "Absolute, judgment-free brakes. Checked before every cycle. The backstop that holds even if every other check is misconfigured.",
+  "hard_limits": {
+    "max_iterations": 3,
+    "token_budget": { "per_cycle": 60000, "per_run": 250000 },
+    "cost_budget_usd": { "per_run": 5.0 },
+    "max_runtime_seconds": 1800,
+    "gate_failure_streak": 2
+  },
+
+  "_eval_gates_help": "Proceed only if all pass. A single failure routes a fix task into the queue; gate_failure_streak consecutive failures trips a hard stop (the loop is thrashing). Thresholds are domain-specific; fit them to your product.",
+  "eval_gates": {
+    "input":   { "require_complete": true, "max_staleness_seconds": 3600 },
+    "quality": { "min_reviewer_score": 8, "max_score": 10 },
+    "safety":  { "require_safety_approval": true, "forbid_unreviewed_side_effects": true }
+  },
+
+  "_approval_checkpoints_help": "Values: 'auto' = loop may do it; 'human' = pause and wait for approval; 'FORBIDDEN' = never. Numeric value = threshold above which a human is required. Add the side effects your product can take.",
+  "approval_checkpoints": {
+    "move_money": "FORBIDDEN",
+    "external_message": "human",
+    "deploy": "human",
+    "delete_data": "human",
+    "spend_over_usd": 1.0
+  },
+
+  "done_when": "STATE.md run_goal satisfied AND the Reviewer quality gate passed",
+
+  "_dispatch_help": "The model seam. orchestrator names the backend wired into loop.py dispatch(); model is its id. Swapping models is a one-function change.",
+  "dispatch": { "orchestrator": "your-orchestrator", "model": "<model-id>" },
+
+  "_paths_help": "Where the loop reads/writes. Relative to repo root.",
+  "paths": {
+    "claude_md": "CLAUDE.md",
+    "state": ".orbit/STATE.md",
+    "roles_dir": ".orbit/roles",
+    "skills_dir": ".orbit/skills",
+    "artifacts_dir": ".orbit/artifacts",
+    "stop_sentinel": ".orbit/STOP"
+  }
+}

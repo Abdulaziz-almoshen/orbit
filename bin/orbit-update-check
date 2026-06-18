@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+#
+# orbit-update-check — is a newer version available on the remote?
+#
+# Prints exactly one of:
+#   UPGRADE_AVAILABLE <local> <remote>   a newer version exists on the remote
+#   JUST_UPGRADED <from> <to>            first run right after an upgrade
+#   (nothing)                            up to date, throttled, snoozed, or offline
+#
+# It NEVER fails the caller: always exits 0. The skill preamble calls it, reads the
+# one line, and decides what to do. Throttled to once / 24h unless called with --force.
+#
+# State lives in ${ORBIT_HOME:-~/.orbit}: last-update-check, update-snoozed,
+# just-upgraded-from, config (key=value lines, e.g. update_check=false / auto_upgrade=true).
+#
+# CONFIGURE: set GH_SLUG below to your GitHub "owner/repo" so the curl fallback works for
+# non-git installs. The primary (git) path needs no edit — it uses the clone's own remote.
+set -u
+
+GH_SLUG="Abdulaziz-almoshen/orbit"
+
+FORCE=0
+[ "${1:-}" = "--force" ] && FORCE=1
+
+STATE_DIR="${ORBIT_HOME:-$HOME/.orbit}"
+mkdir -p "$STATE_DIR" 2>/dev/null || true
+
+# This script lives in <install_dir>/bin/ ; the install dir holds VERSION and (if a git
+# install) the .git dir we update from.
+SELF="$(cd "$(dirname "$0")" 2>/dev/null && pwd -P)"
+INSTALL_DIR="$(dirname "$SELF")"
+VERSION_FILE="$INSTALL_DIR/VERSION"
+
+CONFIG="$STATE_DIR/config"
+_cfg() { [ -f "$CONFIG" ] && grep -E "^$1=" "$CONFIG" 2>/dev/null | tail -1 | cut -d= -f2- || true; }
+
+# user disabled checks entirely
+[ "$(_cfg update_check)" = "false" ] && exit 0
+
+# announce a just-completed upgrade exactly once (marker written by the upgrade skill)
+if [ -f "$STATE_DIR/just-upgraded-from" ]; then
+  _from="$(tr -d '[:space:]' < "$STATE_DIR/just-upgraded-from" 2>/dev/null)"
+  _to="$(tr -d '[:space:]' < "$VERSION_FILE" 2>/dev/null || echo unknown)"
+  rm -f "$STATE_DIR/just-upgraded-from" 2>/dev/null || true
+  [ -n "$_from" ] && echo "JUST_UPGRADED $_from $_to"
+  exit 0
+fi
+
+LOCAL_VER="$(tr -d '[:space:]' < "$VERSION_FILE" 2>/dev/null || echo unknown)"
+[ "$LOCAL_VER" = "unknown" ] || [ -z "$LOCAL_VER" ] && exit 0
+
+# throttle: at most once per 24h unless --force
+STAMP="$STATE_DIR/last-update-check"
+if [ "$FORCE" = "0" ] && [ -f "$STAMP" ]; then
+  _last="$(cat "$STAMP" 2>/dev/null || echo 0)"; case "$_last" in *[!0-9]*) _last=0 ;; esac
+  [ $(( $(date +%s) - _last )) -lt 86400 ] && exit 0
+fi
+date +%s > "$STAMP" 2>/dev/null || true
+
+# resolve the remote version: prefer the git clone's own origin, fall back to raw GitHub
+REMOTE_VER=""
+if [ -d "$INSTALL_DIR/.git" ] && command -v git >/dev/null 2>&1; then
+  ( cd "$INSTALL_DIR" && git fetch --quiet origin 2>/dev/null ) || true
+  _branch="$(cd "$INSTALL_DIR" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)"
+  REMOTE_VER="$(cd "$INSTALL_DIR" && git show "origin/${_branch}:VERSION" 2>/dev/null | tr -d '[:space:]')"
+fi
+if [ -z "$REMOTE_VER" ] && command -v curl >/dev/null 2>&1; then
+  for _b in main master; do
+    REMOTE_VER="$(curl -fsSL "https://raw.githubusercontent.com/${GH_SLUG}/${_b}/VERSION" 2>/dev/null | tr -d '[:space:]')"
+    [ -n "$REMOTE_VER" ] && break
+  done
+fi
+[ -z "$REMOTE_VER" ] && exit 0
+
+# respect a snooze for this exact version (escalating backoff set by the upgrade skill)
+SNOOZE="$STATE_DIR/update-snoozed"
+if [ -f "$SNOOZE" ]; then
+  _sv="$(awk '{print $1}' "$SNOOZE" 2>/dev/null)"
+  _sl="$(awk '{print $2}' "$SNOOZE" 2>/dev/null)"; case "$_sl" in *[!0-9]*) _sl=0 ;; esac
+  _st="$(awk '{print $3}' "$SNOOZE" 2>/dev/null)"; case "$_st" in *[!0-9]*) _st=0 ;; esac
+  if [ "$_sv" = "$REMOTE_VER" ]; then
+    case "$_sl" in 1) _win=86400 ;; 2) _win=172800 ;; *) _win=604800 ;; esac
+    [ $(( $(date +%s) - _st )) -lt "$_win" ] && exit 0
+  fi
+fi
+
+# announce only if the remote is strictly newer (sort -V = version-aware compare)
+if [ "$LOCAL_VER" != "$REMOTE_VER" ]; then
+  _older="$(printf '%s\n%s\n' "$LOCAL_VER" "$REMOTE_VER" | sort -V | head -1)"
+  [ "$_older" = "$LOCAL_VER" ] && echo "UPGRADE_AVAILABLE $LOCAL_VER $REMOTE_VER"
+fi
+exit 0

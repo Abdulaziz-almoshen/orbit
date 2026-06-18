@@ -1,0 +1,15 @@
+{
+  "name": "orbit",
+  "owner": { "name": "Abdulaziz Almohsen" },
+  "metadata": {
+    "description": "Marketplace for the orbit plugin — install a self-prompting agentic loop system into any product repo.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "orbit",
+      "source": "./",
+      "description": "Scaffold a self-prompting agentic loop (memory + sub-agents + skills + loop + stop conditions) into any product repo. Includes self-update."
+    }
+  ]
+}

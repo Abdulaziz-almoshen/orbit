@@ -1,0 +1,9 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# macOS
+.DS_Store
+
+# Orbit runtime state (created at install/use time, never committed)
+.orbit/
