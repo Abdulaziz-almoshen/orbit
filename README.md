@@ -12,10 +12,11 @@ One command sets it up. It runs on your own orchestrator. It updates itself.
 
 <br/>
 
-![version](https://img.shields.io/badge/version-0.1.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.2.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![self-updating](https://img.shields.io/badge/self--updating-yes-22863a)
+![observable](https://img.shields.io/badge/observable-live%20dashboard-e8590c)
 ![domain-agnostic](https://img.shields.io/badge/domain-agnostic-805ad5)
 
 </div>
@@ -47,6 +48,51 @@ flowchart LR
 keep going. Hit an iteration / token / cost / runtime cap, fail a gate too many times, or
 reach an explicit "done", and it stops cleanly.
 
+## 👀 Watch it work — see *who's talking*, live
+
+A loop you can't watch is a loop you don't trust. Orbit makes every cycle legible: at any
+moment you can see **which agent is talking, what stage it's in, and the checklist crossing
+itself off**. Every role announces itself; one event stream feeds two views.
+
+**In Claude Code** — the checklist is mirrored into the native pinned **TodoWrite** list
+(the one your IDE keeps on screen), each item tagged with the role that owns it and struck
+through the instant it finishes:
+
+```text
+  ✔ [orchestrator] plan cycle 1
+  ✔ [data]         validate inputs
+  ▸ [analyst]      derive candidate output     ← in progress
+  ☐ [safety]       gate the output
+  ☐ [reviewer]     check vs success criteria
+```
+
+**Anywhere — including your own orchestrator** — run `scripts/orbit-status --follow` in a
+second pane for a live, color-coded dashboard:
+
+```text
+🛰  ORBIT — live status   .orbit
+
+Checklist
+  ✓ [orchestrator] plan cycle 1
+  ✓ [data]         validate inputs
+  ▸ [analyst]      derive candidate output
+  ○ [safety]       gate the output
+  ○ [reviewer]     check vs success criteria
+
+Now  [analyst] act — scoring 412 validated rows
+
+Thread (who said what)
+  20:14:02 ✓ [orchestrator] plan: planned 5 tasks for cycle 1
+  20:14:09 ▸ [data]         act: fetching + validating inputs
+  20:14:15 ✓ [data]         act: 412 rows, schema OK
+  20:14:15 ▸ [analyst]      act: scoring 412 validated rows
+```
+
+Both views read **one source of truth** — `.orbit/activity.jsonl` (the who·phase·what event
+stream) + `.orbit/tasks.json` (the checklist) — so a web panel or IDE view can plug into the
+same stream later with zero loop changes. And when the loop pauses for you, the dashboard
+says so loudly: `[human] awaiting approval: publish to CMS`.
+
 ## What you get
 
 Run `/orbit` in a repo and it audits the project, then scaffolds two layers:
@@ -58,11 +104,14 @@ Run `/orbit` in a repo and it audits the project, then scaffolds two layers:
 - `.orbit/skills/*.md` — packaged domain knowledge, loaded on demand
 - `.orbit/loop.config.json` — the safety contract (caps, gates, checkpoints)
 - `.orbit/loop.py` — a reference runner; wire its one `dispatch()` seam to your model
+- `.orbit/activity.py` + `scripts/orbit-status` — the **observability layer**: a who·phase·what
+  event stream and the live `orbit-status --follow` dashboard (see the "Watch it work" section above)
 
 **🔌 Claude Code adapter** — so the same system runs natively here:
 - `.claude/agents/*.md` — the roles as Claude Code subagents
 - `.claude/settings.json` hooks — automated validation on key events
 - `scripts/ralph_loop.sh` — a fresh-context "Ralph loop" driving headless `claude -p`
+- **native TodoWrite checklist** — the pinned, auto-crossed-off list, role-tagged per item
 
 **The team** it stands up: an **Orchestrator** that plans and delegates, the **specialists**
 your domain needs, a **Safety gate** with veto power, a **Reviewer gate** that decides what
@@ -154,8 +203,10 @@ orbit/                              ← this repo = the plugin
 └── skills/
     ├── orbit/                      # the main skill
     │   ├── SKILL.md
-    │   ├── references/             # methodology, templates, roles, loop design, profile
-    │   ├── assets/                 # copyable loop.py, loop.config.json, ralph_loop.sh
+    │   ├── references/             # methodology, templates, roles, loop design,
+    │   │                           #   observability, profile
+    │   ├── assets/                 # loop.py, loop.config.json, activity.py,
+    │   │                           #   ralph_loop.sh, orbit-status, example subagent
     │   ├── scripts/scaffold.py     # lays down the deterministic skeleton
     │   └── evals/                  # test cases (for contributors)
     └── orbit-upgrade/
