@@ -1,6 +1,6 @@
 {
   "name": "orbit",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Transform any product repo into a production-grade, self-prompting agentic loop system (Daisy Hollman's 'build a system that prompts itself'): persistent memory, a specialized sub-agent team, domain skills, a read→act→evaluate→update→decide loop, and hard stop conditions. Model-agnostic core + Claude Code adapter. Domain-agnostic.",
   "author": { "name": "Abdulaziz Almohsen" },
   "homepage": "https://github.com/Abdulaziz-almoshen/orbit",

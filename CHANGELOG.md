@@ -3,6 +3,22 @@
 All notable changes to the `orbit` plugin are documented here. The version here
 must match `VERSION` and `.claude-plugin/plugin.json` — the update checker compares them.
 
+## 0.6.0
+
+The safety hook is now **default-on (announced), not opt-in** — so Orbit's safety is real
+out of the box. A floor you have to opt into is a floor most people skip.
+
+- **`/orbit` installs the `PreToolUse` safety hook by default** as part of setup — no
+  question — and **announces exactly what it added** (the deny/ask lists) plus the one-line
+  removal (`orbit-uninstall`). Never silent; the original footgun was silence + no off-switch,
+  not the install itself. Skipped only if `.orbit/setup.json` records a prior removal.
+- **`scaffold.py --install-hooks`** — deterministic wiring: backs up `.claude/settings.json`,
+  merges the `PreToolUse(Bash)` guard idempotently (never double-adds), prints the JSON.
+- The hook still **fails open** and only **denies the catastrophic** (force-push, secrets-
+  branch push, schema migration) while **asking** on normal pushes — so default-on won't
+  disrupt workflows. README/Phase 6a reworded: the hook is the one binding layer; routing +
+  roles remain advisory.
+
 ## 0.5.1
 
 Docs accuracy fix. Verified against Claude Code plugin docs that plugin slash commands are

@@ -12,7 +12,7 @@ One command sets it up. It runs on your own orchestrator. It updates itself.
 
 <br/>
 
-![version](https://img.shields.io/badge/version-0.5.1-2b6cb0)
+![version](https://img.shields.io/badge/version-0.6.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![self-updating](https://img.shields.io/badge/self--updating-yes-22863a)
@@ -241,16 +241,18 @@ Be clear-eyed about where the guarantees are:
   tokens, cost, runtime), `move_money` is `FORBIDDEN`, and side effects route through
   human-approval checkpoints. The loop proposes; a human disposes. This part is enforced by
   the runner.
-- **Normal chat is normal Claude.** Orbit does **not** intercept every message — the rules in
-  `CLAUDE.md` and the roles are *guidance*, which an agent can skip on a quick edit. So those
-  are advisory, not a wall.
-- **The wall is opt-in:** install the always-on **`PreToolUse` safety hook** (`/orbit` Phase
-  6a) and your non-negotiables (e.g. `git push`, a frozen path) bind on *every* tool call,
-  loop or not — because the harness runs the hook before the tool and can deny it. That's the
-  only mechanism the agent can't talk its way around. Until you install it, treat the safety
-  story as "strong defaults," not "impossible to bypass."
+- **Routing + roles are advisory.** The §10 routing rule and the roles are *guidance* the
+  model follows reliably (gstack-level), but no tool can *force* them — so they're discipline,
+  not a wall.
+- **The wall is the safety hook — and `/orbit` installs it by default.** The always-on
+  **`PreToolUse` hook** makes your non-negotiables (e.g. force-push, a schema migration,
+  pushing a secrets branch) bind on *every* command, loop or not — the harness runs it before
+  the tool and can `deny`. It's the one thing the agent can't talk its way around. `/orbit`
+  wires it as part of setup and **tells you exactly what it added** (it denies the
+  catastrophic, only *asks* on normal pushes, and **fails open** so it never bricks your
+  shell). Not silent, not opt-in-and-forgotten.
 
-Everything Orbit adds is removable with `orbit-uninstall`.
+Everything Orbit adds — including the hook — is removable with `orbit-uninstall`.
 
 ## Repo layout
 

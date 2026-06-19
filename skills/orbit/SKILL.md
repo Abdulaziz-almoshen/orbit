@@ -258,23 +258,30 @@ Claude Code runs it before a tool call and, if it returns `deny`, the tool never
 That is the line between a guarantee and a suggestion — see `references/hooks-and-tools.md`
 → "Enforcement vs suggestion."
 
-`scaffold.py` places `.orbit/checks/guard.py` but leaves it **unwired** — it does nothing
-until it's registered in `.claude/settings.json`. Wiring it is a **consented** step:
+Install it **by default — no question — but never silently.** A safety floor the user has to
+opt into is a floor most users skip, and then Orbit's safety is fake. So wire it as part of
+setup and **announce exactly what you did**. (The original footgun wasn't "installed without
+a prompt" — it was "installed *silently* with no findable off-switch." Announce + an easy
+removal fixes that; default-on is correct for a safety floor.)
 
 1. Edit `.orbit/checks/guard.py` so its `RULES` match *this* repo's truly-dangerous actions
    (parse argv precisely — never substring-match a command). `deny` only for irreversible/
-   forbidden actions; `ask` for reversible-but-risky ones.
-2. **Ask before touching settings.json**, e.g. *"I can install an always-on hook that blocks
-   <X> on every command, even outside the loop. It edits .claude/settings.json. Install it?
-   [y/N]"*. Never wire it silently — a guard with no findable off-switch is its own footgun.
-3. On yes: back up first (`cp .claude/settings.json .claude/settings.json.bak.$(date +%s)`),
-   add a `PreToolUse` hook (matcher `Bash`) running
-   `python3 "$CLAUDE_PROJECT_DIR/.orbit/checks/guard.py"`, then **print the exact JSON you
-   added and the one-line removal** (`orbit-uninstall`). Leave the rest of settings.json intact.
+   forbidden actions (push a secrets branch, force-push, schema migration); `ask` for
+   reversible-but-risky ones (normal push, deploy, `rm -rf`).
+2. **Wire it by default** — run `python3 .orbit/scripts/.../scaffold.py --install-hooks`
+   (or, if scaffold isn't handy, back up `.claude/settings.json` and merge a `PreToolUse`
+   hook, matcher `Bash`, running `python3 "$CLAUDE_PROJECT_DIR/.orbit/checks/guard.py"`).
+   It backs up settings.json first and is idempotent (won't double-add).
+3. **Announce it, plainly:** "Installed an always-on safety hook — it **denies** <the deny
+   list> and **asks** before <the ask list>, on every command, in or out of the loop. Remove
+   anytime with `orbit-uninstall`." Print the exact JSON added.
+4. If `.orbit/setup.json` records that the user previously removed it, **don't re-add
+   silently** — mention it and let them decide.
 
 This makes Orbit's safety claims true: the non-negotiables hold even when the user is just
-chatting. The role/gate/checklist *ceremony* stays opt-in (you run it deliberately); the
-*safety floor* is always on. This is the recommended default (Hybrid).
+chatting. The hook is the *only* binding layer; the role/gate/checklist ceremony and the §10
+routing stay advisory. The hook **fails open** (a guard bug never bricks the shell) and only
+denies the catastrophic, so default-on won't wreck anyone's workflow.
 
 ### Phase 6.5 — Make the loop watchable (observability)
 
