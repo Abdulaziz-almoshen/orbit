@@ -12,7 +12,7 @@ One command sets it up. It runs on your own orchestrator. It updates itself.
 
 <br/>
 
-![version](https://img.shields.io/badge/version-0.6.1-2b6cb0)
+![version](https://img.shields.io/badge/version-0.7.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![self-updating](https://img.shields.io/badge/self--updating-yes-22863a)
@@ -26,12 +26,32 @@ One command sets it up. It runs on your own orchestrator. It updates itself.
 > **"You're not supposed to prompt Claude. You're supposed to build a system that prompts itself."**
 > — Daisy Hollman
 
-A single prompt runs once and the context evaporates. A **system** keeps its own state,
-splits its own work across specialists, checks its own results against a bar it set, writes
-down what it learned, and decides its own next move — safely, inside hard limits, with a
-human at the gates that matter. Orbit installs that system into your repo in one shot.
+Right now you **babysit** your AI: re-explaining the project every session, watching it
+drift, never quite sure what it's doing — or whether it'll do something it can't undo. Orbit
+ends that. It turns your repo into a **system that runs itself**: it remembers, it routes
+your work through a small team of specialists that check each other, it shows you who's
+doing what **live**, and it **physically can't run away or wreck your project**. One command
+sets it up — it reads your repo and asks almost nothing.
+
+## Why you'll care
+
+| Without Orbit | With Orbit |
+|---|---|
+| Re-explain your project every chat | It **remembers** — goals, decisions, conventions, progress (in `CLAUDE.md` + `STATE.md`) |
+| One agent does everything, you catch the mess later | A **team** — plan → build → **safety gate** → **quality gate** — that checks its own work |
+| A wall of text; you're not sure what's happening | A **live checklist** of who's working, crossing itself off as it goes |
+| It free-edits, force-pushes, maybe breaks your DB | A guard **physically blocks** the catastrophic; irreversible actions are *proposed*, never done alone |
+| A crash → it starts over and re-burns tokens | **Checkpointed** — it resumes from the last finished step |
+| It does exactly what you typed, bugs and all | It's **smarter than the prompt** — clarifies, challenges weak assumptions, proposes a better approach |
+
+You ask for a **task** → it runs the loop. You ask a **question** → it just answers. That's
+the whole idea: *a system that prompts itself*, so you stop hand-holding and start shipping.
 
 ## The loop
+
+Every cycle is the same honest shape — and you can watch each step happen:
+
+
 
 ```mermaid
 flowchart LR
@@ -50,9 +70,9 @@ reach an explicit "done", and it stops cleanly.
 
 ## 👀 Watch it work — see *who's talking*, live
 
-A loop you can't watch is a loop you don't trust. Orbit makes every cycle legible: at any
-moment you can see **which agent is talking, what stage it's in, and the checklist crossing
-itself off**. Every role announces itself; one event stream feeds two views.
+This is the part people love. No black box: at any moment you see **which agent is talking,
+what stage it's in, and the checklist crossing itself off** — like watching a small team work.
+Every role announces itself; one event stream feeds the views below.
 
 **In Claude Code (default)** — the checklist is built with the native **`TaskCreate` /
 `TaskUpdate`** tools (the pinned list your IDE keeps on screen; these replaced the now-default-off

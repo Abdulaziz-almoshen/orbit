@@ -13,19 +13,38 @@ default; rename and re-scope each role to the real subtasks of the product you'r
 
 | Role | Remit | Reads | Writes |
 |------|-------|-------|--------|
-| **Dispatcher / Router** | Classify each request: **question** → answer directly (no loop); **task** → hand to the Orchestrator to route through the loop (CLAUDE.md §10). Classification only — no edit tools. | the user request, CLAUDE.md §10 | a routing decision (question \| task \| ambiguous) |
-| **Orchestrator / PM** | Plan, decompose, delegate, control the loop, own STATE.md, check stop conditions. | CLAUDE.md, STATE.md | STATE.md |
+| **Dispatcher / Router** | Classify each request: **question** → answer directly (no loop); **task** → first **clarify & challenge** (infer from the repo, surface premises, ask only the gap), then hand to the Orchestrator to route through the loop (CLAUDE.md §10). Loads `clarify-and-challenge`. No edit tools. | the user request, CLAUDE.md §10 | a routing decision + clarified intent |
+| **Orchestrator / PM** | Plan, decompose, delegate, control the loop, own STATE.md, check stop conditions. Frames real forks as **decision briefs** and runs a **plan-review** (CEO + eng lenses) before building. Loads `planning-and-decision-briefs`. | CLAUDE.md, STATE.md | STATE.md, decision briefs |
 | **Input / Research Specialist** | Gather, clean, and validate the inputs the work needs; guarantee they're complete and fresh before anyone uses them. | external sources, input-validation skill | validated inputs + a quality report |
-| **Builder / Executor** | Produce the core output of the product from the validated inputs. | validated inputs, the domain skill | candidate output + rationale |
+| **Builder / Executor** | Produce the core output of the product from the validated inputs. (On a frontend repo, implements the Designer's Design Plan.) | validated inputs, the domain skill, design-plan | candidate output + rationale |
+| **Designer** *(frontend repos only — see `profiles/frontend.md`)* | Turn a UI brief into a distinctive, production-grade **Design Plan** (tokens + layout + signature), grounded in the product's world, never a templated default. Loads `design-methodology` + `anti-ai-aesthetics`. | the brief, design source of truth | a Design Plan for the Builder |
 | **Analyst** | Derive, transform, or evaluate as the domain requires; add context the Builder needs. | inputs, prior outputs | analysis notes |
 | **Safety / Compliance** | Check the output is safe, permitted, and free of unreviewed side effects; block anything forbidden. **Veto power.** | candidate output, safety-rules skill | approved-or-rejected output + reason |
-| **Reviewer / Evaluator** | Quality gate before "done": check the output against §3 success criteria; catch errors/regressions. **Gate power.** | all outputs, success criteria | pass/fail + reasons |
+| **Reviewer / Evaluator** | Quality gate before "done": check the output against §3 success criteria; catch errors/regressions. On UI work, also apply the **Design Distinctiveness** gate (matches the brief / design source of truth; doesn't read like a default). **Gate power.** | all outputs, success criteria | pass/fail + reasons |
 | **Reporter** | Turn results into clear, decision-ready outputs/explanations. | everything above, output-formatting skill | reports, summaries |
 
 Two roles hold special power and must always exist: **Safety/Compliance** can veto any
 action (it is the safety gate), and **Reviewer/Evaluator** decides whether a cycle's
 output is good enough to count as progress (it is the quality gate). The Orchestrator may
 delegate freely but cannot overrule either gate without a human.
+
+## Skill library — provision skills to a role when you create it
+
+Orbit ships a growing library of reusable role **playbooks** in `references/playbooks/`. A
+playbook is packaged know-how a role loads on demand — *not* baked into the role spec, so the
+same playbook can serve many products and the library grows over time. When `/orbit` creates a
+sub-agent, it **provisions the relevant playbooks** by copying them into the repo's
+`.orbit/skills/` and pointing the role at them. Current library:
+
+| Playbook | Provisioned to | When |
+|----------|----------------|------|
+| `design-methodology.md`, `anti-ai-aesthetics.md` | **Designer** | frontend/UI repos (`profiles/frontend.md`) |
+| `planning-and-decision-briefs.md` | **Orchestrator** | always |
+| `clarify-and-challenge.md` | **Dispatcher / Orchestrator** | always (the task path) |
+
+Add new playbooks here as the system grows (e.g. data-validation, backtesting, fact-checking
+for other domains). A role's spec just says "load `<playbook>`"; the substance lives once, in
+the library.
 
 ## Role spec format (model-agnostic)
 

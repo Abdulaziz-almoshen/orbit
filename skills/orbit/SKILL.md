@@ -147,7 +147,10 @@ is the fallback.** Interrogating the user with four questions is a failure mode.
    re-run. (Write it at the end of setup: the domain characterization + any choices.)
 2. **Mine the repo and INFER** product, goal, "most expensive mistake," and integrations
    from README, package manifests (package.json, *.csproj, requirements.txt…), config, and
-   code. Read `references/profiles/generic.md` for what to look for.
+   code. Read `references/profiles/generic.md` for what to look for. **Also detect whether
+   it's a frontend/UI repo** (React/Vue/Svelte/Next/Tailwind, `.tsx`/`.cshtml`/views, a
+   design file) — if so, load `references/profiles/frontend.md` too and plan to stand up the
+   **Designer** role. Don't add a Designer to a backend/CLI/data project.
 3. **Then decide:**
    - **Existing product, enough inferred** → ask **nothing**. State your inferred
      characterization in one short paragraph "I read the repo as: <…> — correct me if wrong"
@@ -197,19 +200,27 @@ Also create `.orbit/STATE.md` from `references/state-template.md` and seed it wi
 open tasks you discovered in the audit. At the end of setup, write `.orbit/setup.json`
 (the inferred characterization + any choices) so a re-run doesn't re-ask.
 
-### Phase 3 — Define the sub-agent team
+### Phase 3 — Define the sub-agent team (+ provision their skills)
 
 Don't build one big agent. Decompose into specialized roles, following
 `references/roles.md`. Keep the *shape* — one planner, several executors, one safety
 gate, one quality gate — and rename/scope the roles to the product's real subtasks:
-Orchestrator/PM, the specialists this domain needs, Safety/Compliance, Quality
-Reviewer/Evaluator, Reporter.
+Dispatcher, Orchestrator/PM, the specialists this domain needs, Safety/Compliance, Quality
+Reviewer/Evaluator, Reporter. **Add the conditional roles the repo calls for** — most
+importantly the **Designer** when this is a frontend/UI product (see `references/profiles/frontend.md`);
+plenty of products don't need one, so only stand it up when the signals are there.
 
 For each role, write a model-agnostic spec to `.orbit/roles/<role>.md` **and** a Claude
 Code subagent to `.claude/agents/<role>.md` (the adapter — same responsibilities, Claude
-Code frontmatter). Document in CLAUDE.md and in `references/roles.md`'s handoff section
-how roles hand off work and how they read/write shared state (`STATE.md`), so the
-orchestrator can fan out parallel work without agents stepping on each other.
+Code frontmatter). Document handoffs + shared-state rules per `references/roles.md`.
+
+**Provision each role its skills.** Orbit ships a reusable playbook library
+(`references/playbooks/` — see the "Skill library" section of `references/roles.md`). When
+you create a role, copy the playbooks it needs into `.orbit/skills/` and point the role's
+spec at them: the **Orchestrator** always gets `planning-and-decision-briefs`, the
+**Dispatcher/Orchestrator** get `clarify-and-challenge` (so tasks are understood and improved,
+not executed literally), and the **Designer** gets `design-methodology` + `anti-ai-aesthetics`.
+This is how the system grows — add playbooks to the library over time.
 
 ### Phase 4 — Create domain skills
 
@@ -367,9 +378,13 @@ your own work, the same way the system will.
 - `references/durable-execution.md` — what *runs* the loop: the loop/skill/orchestrator
   model, step checkpointing, concurrency, and when to graduate to a durable engine.
 - `references/profiles/generic.md` — the universal profile: how to characterize any
-  product and fit the system to it. Add your own profiles here for repeated setups.
+  product. `references/profiles/frontend.md` — the frontend/UI profile that activates the
+  **Designer**. Add your own profiles here for repeated setups.
+- `references/playbooks/` — the reusable **role-skill library** provisioned to sub-agents:
+  `design-methodology.md` + `anti-ai-aesthetics.md` (Designer), `planning-and-decision-briefs.md`
+  (Orchestrator), `clarify-and-challenge.md` (Dispatcher/Orchestrator). Grow this over time.
 - `assets/` — copyable `loop.config.json`, `loop.py`, `activity.py`, `ralph_loop.sh`,
-  `orbit-status`, `checks/guard.py`, `runners/inngest-loop.ts`, example subagent.
+  `orbit-status`, `checks/guard.py`, `runners/inngest-loop.ts`, example subagents (incl. designer).
 - `scripts/scaffold.py` — lays down the deterministic skeleton.
 - `commands/orbit-run.md` — the `/orbit:orbit-run <task>` slash command: explicitly send a task
   through the loop. (Auto-routing is the CLAUDE.md §10 rule; this is the manual target.)

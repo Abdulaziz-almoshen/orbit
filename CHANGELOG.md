@@ -3,6 +3,26 @@
 All notable changes to the `orbit` plugin are documented here. The version here
 must match `VERSION` and `.claude-plugin/plugin.json` — the update checker compares them.
 
+## 0.7.0
+
+A reusable role-skill library + a conditional Designer + planning rigor + a beginner-exciting README.
+
+- **Skill library** (`references/playbooks/`): reusable playbooks provisioned to sub-agents when
+  they're created — `design-methodology` + `anti-ai-aesthetics` (Designer), `planning-and-decision-briefs`
+  (Orchestrator), `clarify-and-challenge` (Dispatcher/Orchestrator). Grows over time; documented in
+  `roles.md` → "Skill library".
+- **Designer sub-agent (conditional)**: a new role + `profiles/frontend.md` that stands it up only on
+  frontend/UI repos. Embeds the frontend-design methodology (two-pass plan→critique→build, named token
+  system, hero-is-thesis, one signature, anti-AI-aesthetic checklist, quality floor) — self-contained,
+  no external-skill dependency. Produces a Design Plan for the Builder; Reviewer gains a Design
+  Distinctiveness gate.
+- **Planning rigor + clarify/challenge**: Orchestrator frames forks as decision briefs (stakes,
+  Completeness X/10, recommendation, Net) and runs a CEO+eng plan-review; Dispatcher clarifies and
+  challenges the ask (infer-first, surface premises, forcing questions, propose 2-3 approaches) instead
+  of executing literally — "be smarter than the prompt." Advisory (prompt-driven), like routing.
+- **README glow-up**: a beginner-facing "Why you'll care" before/after table and a punchier value prop.
+
+
 ## 0.6.1
 
 Fixes the live checklist not appearing. Root cause (confirmed against Claude Code docs):
