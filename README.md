@@ -121,36 +121,27 @@ counts as progress, and a **Reporter**. No single agent does everything.
 
 ### Option A — Paste this prompt, let Claude install it (easiest)
 
-Open Claude Code and paste this. Claude does the rest:
+Open Claude Code and paste this:
 
 ```text
-Install the "Orbit" Claude Code plugin and wire it up. Show the output of each shell command.
+Install the "Orbit" Claude Code plugin for me. Run these shell commands and show the output:
 
-1. Install it (user scope):
-     claude plugin marketplace add Abdulaziz-almoshen/orbit
-     claude plugin install orbit@orbit
-     claude plugin list
-   Confirm "orbit@orbit" shows as enabled.
+  claude plugin marketplace add Abdulaziz-almoshen/orbit
+  claude plugin install orbit@orbit
+  claude plugin list
 
-2. Add an "Orbit" section to this project's CLAUDE.md (create the file if it doesn't exist):
-   - Orbit installs a self-prompting agentic loop into a repo: persistent memory
-     (CLAUDE.md + .orbit/STATE.md), a specialized sub-agent team, domain skills, a
-     read→act→evaluate→update→decide loop, and hard stop conditions.
-   - Run /orbit to turn a repo into that system (or upgrade it); run /orbit-upgrade to
-     update the Orbit plugin itself.
-   - After /orbit has run, watch a loop live with `scripts/orbit-status --follow` — the
-     "who's talking" dashboard (current speaker + the checklist crossing itself off).
-
-3. Tell me to restart Claude Code so the /orbit and /orbit-upgrade commands load.
-
-4. Then ask me whether I also want Orbit available to teammates on this project. If yes,
-   re-run the install with project scope and commit the resulting .claude/ change:
-     claude plugin marketplace add Abdulaziz-almoshen/orbit --scope project
-     claude plugin install orbit@orbit --scope project
-
-Orbit is a self-prompting agentic-loop plugin (https://github.com/Abdulaziz-almoshen/orbit).
-Don't make any other changes.
+Confirm "orbit@orbit" shows as enabled, then tell me to restart Claude Code so the /orbit
+and /orbit-upgrade commands load. Do NOT edit any project files and do NOT make any git
+commits — installation is user-scoped and self-contained.
 ```
+
+That's the whole install — it's user-scoped, so `/orbit` and `/orbit-upgrade` work in every
+project after a restart.
+
+**Want teammates to get it on a shared project too?** After installing, ask Claude:
+*"add Orbit to this project for teammates"*. It runs the install with `--scope project`,
+which writes `.claude/settings.json` — and then **you** review and commit that file. Orbit
+never commits to your repo for you.
 
 ### Option B — Run the commands yourself (marketplace)
 
