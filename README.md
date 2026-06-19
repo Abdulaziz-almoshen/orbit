@@ -12,7 +12,7 @@ One command sets it up. It runs on your own orchestrator. It updates itself.
 
 <br/>
 
-![version](https://img.shields.io/badge/version-0.6.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.6.1-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![self-updating](https://img.shields.io/badge/self--updating-yes-22863a)
@@ -54,9 +54,11 @@ A loop you can't watch is a loop you don't trust. Orbit makes every cycle legibl
 moment you can see **which agent is talking, what stage it's in, and the checklist crossing
 itself off**. Every role announces itself; one event stream feeds two views.
 
-**In Claude Code (default)** — the checklist is the native pinned **TodoWrite** list (the one
-your IDE keeps on screen). It appears **automatically — no command, no second terminal** — each
-item tagged with the role that owns it and struck through the instant it finishes:
+**In Claude Code (default)** — the checklist is built with the native **`TaskCreate` /
+`TaskUpdate`** tools (the pinned list your IDE keeps on screen; these replaced the now-default-off
+`TodoWrite`). The main orchestrator drives it — each item tagged with the role that owns it and
+struck through the instant it finishes. Orbit also mirrors it to `.orbit/tasks.json` every cycle,
+so if the task tools aren't called you can still see it via `orbit-status` (below):
 
 ```text
   ✔ [orchestrator] plan cycle 1
@@ -112,7 +114,7 @@ Run `/orbit` in a repo and it audits the project, then scaffolds two layers:
 - `.claude/agents/*.md` — the roles as Claude Code subagents
 - `.claude/settings.json` hooks — automated validation on key events
 - `scripts/ralph_loop.sh` — a fresh-context "Ralph loop" driving headless `claude -p`
-- **native TodoWrite checklist** — the pinned, auto-crossed-off list, role-tagged per item
+- **native TaskCreate/TaskUpdate checklist** — the pinned, auto-crossed-off list, role-tagged per item
 
 **The team** it stands up: an **Orchestrator** that plans and delegates, the **specialists**
 your domain needs, a **Safety gate** with veto power, a **Reviewer gate** that decides what

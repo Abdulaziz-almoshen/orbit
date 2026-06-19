@@ -122,8 +122,8 @@ job, a CI step):
 - `.claude/settings.json` hooks — automated validation/notification on key events.
 - `scripts/ralph_loop.sh` — an external "Ralph loop" that drives headless `claude -p`
   with **fresh context each cycle**, enforcing the same hard limits.
-- **Native live checklist via TodoWrite** — inside Claude Code, mirror `.orbit/tasks.json`
-  into the built-in TodoWrite tool (each item prefixed with its owning role, e.g.
+- **Native live checklist via TaskCreate/TaskUpdate** — inside Claude Code, mirror `.orbit/tasks.json`
+  into the built-in TaskCreate/TaskUpdate tool (each item prefixed with its owning role, e.g.
   `[data] validate inputs`) so you get the pinned, auto-crossed-off list; each role
   announces itself `[role] …` so the transcript shows who's talking.
 
@@ -286,20 +286,25 @@ denies the catastrophic, so default-on won't wreck anyone's workflow.
 ### Phase 6.5 — Make the loop watchable (observability)
 
 A loop you can't watch is a loop nobody trusts. Lay down the live "who's talking + checklist"
-layer per `references/observability.md`. There is **one live view per environment — don't
-offer both**:
-- **Inside Claude Code (default):** drive the **native TodoWrite** checklist — role-prefixed
-  items (`[data] validate inputs`) marked in_progress→completed as work happens. It is pinned
-  on screen **automatically — no command, no second terminal.** Each role opens its report
-  with `[role] …` so the transcript also shows who's speaking. Do NOT tell the user to run a
-  CLI or open another pane; the checklist is already on their screen.
-- **Headless / your own orchestrator only (Gemini, cron, CI):** there's no chat to pin a
-  checklist into, so run `scripts/orbit-status --follow` in a terminal (press **Ctrl-C** to
-  stop). It reads `.orbit/activity.jsonl` + `.orbit/tasks.json`.
+layer per `references/observability.md`. **Do two things every cycle — not one:**
 
-Wire the loop and each role to `emit(role, phase, status, msg)` and keep `.orbit/tasks.json`
-current (one writer — the Orchestrator). Each role's spec (`references/roles.md`) must
-"announce itself": emit a `start` on pickup and `done`/`blocked` on handoff.
+1. **ALWAYS write `.orbit/tasks.json` + `.orbit/activity.jsonl`** (via `.orbit/activity.py`'s
+   `set_tasks` / `update_task` / `emit`). This is the **guaranteed-visible** path: it feeds
+   `scripts/orbit-status` and never depends on a tool being enabled. **Do this first** — a run
+   that only narrates `[role]` lines and skips these files leaves the user with *no* checklist
+   (the exact failure to avoid).
+2. **Also build the native checklist with `TaskCreate` / `TaskUpdate`** — role-prefixed items
+   (`[data] validate inputs`) flipped `in_progress`→`completed` as work happens. That's the
+   pinned, on-screen list in Claude Code. **Use the `Task*` tools, NOT `TodoWrite`** — TodoWrite
+   is off by default in current Claude Code (≥ v2.1.142). **Drive it from the MAIN orchestrator**
+   (a subagent's task calls don't surface to the user). It's best-effort (needs the model to
+   call it); that's why step 1 is the floor.
+
+Inside Claude Code the user watches the native checklist on screen (no second terminal). For a
+**headless / own-orchestrator** run (no chat UI), they run `scripts/orbit-status --follow`
+(press **Ctrl-C** to stop), which renders from the files in step 1. Each role "announces
+itself": `emit` a `start` on pickup and `done`/`blocked` on handoff, and open its report with
+`[role] …`.
 
 ### Phase 7 — Report, in plain language, and recommend the first run
 
@@ -358,7 +363,7 @@ your own work, the same way the system will.
   config contract.
 - `references/hooks-and-tools.md` — hook events, tool wiring, CLI-first guidance.
 - `references/observability.md` — the "who's talking" event stream + live checklist
-  (TodoWrite + the `orbit-status` dashboard).
+  (TaskCreate/TaskUpdate + the `orbit-status` dashboard).
 - `references/durable-execution.md` — what *runs* the loop: the loop/skill/orchestrator
   model, step checkpointing, concurrency, and when to graduate to a durable engine.
 - `references/profiles/generic.md` — the universal profile: how to characterize any

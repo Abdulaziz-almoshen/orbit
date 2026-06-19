@@ -28,11 +28,26 @@ allows. Don't scatter ad-hoc prints — emit events, then render.
 `emit(role, phase, status, msg, cycle, task_id)`, `set_tasks(tasks)`,
 `update_task(id, status)`. They never raise into the caller.
 
-## Renderer 1 — Claude Code native (the pinned TodoWrite checklist)
+## Renderer 1 — Claude Code native (the pinned task checklist)
 
-When the loop runs **inside Claude Code**, mirror the checklist into the built-in
-**TodoWrite** tool. That gives you the pinned, auto-crossed-off list in the terminal/IDE —
-the exact behavior you see in VS Code. Two conventions make it show *who*:
+When the loop runs **inside Claude Code**, build the checklist with the built-in
+**`TaskCreate` / `TaskUpdate` / `TaskList`** tools (`TaskCreate` to add an item, `TaskUpdate`
+to flip it `in_progress`→`completed`). That gives you the pinned, auto-crossed-off list in
+the terminal/IDE — the exact behavior you see in VS Code.
+
+> **Important (this is the bug that hid the checklist):** these tools **replaced
+> `TodoWrite`**, which is **disabled by default** in current Claude Code (≥ v2.1.142). Use
+> the `Task*` tools, not `TodoWrite`. Two more rules that make it actually show:
+> - **Drive it from the MAIN orchestrator, not a subagent.** A subagent's `Task*` calls run
+>   in its own isolated context and **do not surface** in the user's view — only its final
+>   text returns. So the top-level agent owns the checklist; role subagents report back and
+>   the orchestrator updates the list on their behalf.
+> - **The native checklist is best-effort** — it only appears if the model actually calls
+>   the tool. So **always also write `.orbit/tasks.json`** (via `activity.set_tasks` /
+>   `update_task`). That feeds `orbit-status` and is the **guaranteed-visible** fallback if
+>   the task tools aren't called or aren't enabled.
+
+Two conventions make it show *who*:
 
 1. **Prefix every todo with its owning role**, so the pinned list reads as a cast list:
    ```
@@ -43,19 +58,19 @@ the exact behavior you see in VS Code. Two conventions make it show *who*:
    [reviewer] check vs success criteria
    [reporter] write the result
    ```
-   Mark each `in_progress` when its role starts and `completed` when it finishes — TodoWrite
+   Mark each `in_progress` when its role starts and `completed` when it finishes — TaskCreate/TaskUpdate
    strikes it through live.
 2. **Every role announces itself in one line** when it acts: `[data] fetched 412 rows, validating…`
    → the transcript thread itself becomes the "who's talking" log. Keep the role tag first
    so it's scannable. The Orchestrator narrates handoffs: `[orchestrator] → safety: gate AAPL signal`.
 
-Keep TodoWrite and `tasks.json` in sync — same ids, same owners. The Orchestrator owns both
+Keep TaskCreate/TaskUpdate and `tasks.json` in sync — same ids, same owners. The Orchestrator owns both
 (one writer), the same way it owns STATE.md.
 
 ## Renderer 2 — anywhere (the `orbit-status` dashboard)
 
 Your production loop runs on your own orchestrator (e.g. Gemini), where there's no
-TodoWrite. So Orbit ships a portable dashboard. Run it in a second terminal pane:
+TaskCreate/TaskUpdate. So Orbit ships a portable dashboard. Run it in a second terminal pane:
 
 ```bash
 scripts/orbit-status --follow      # redraws ~1/s — a pinned live dashboard
@@ -80,9 +95,9 @@ at a glance. Stdlib only — nothing to install.
 
 ## Why this shape
 
-- **One source of truth.** The same events drive TodoWrite, the dashboard, and STATE.md's
+- **One source of truth.** The same events drive TaskCreate/TaskUpdate, the dashboard, and STATE.md's
   snapshot — they can't drift.
-- **Renderer-agnostic.** Today TodoWrite + `orbit-status`; tomorrow a web view or an IDE
+- **Renderer-agnostic.** Today TaskCreate/TaskUpdate + `orbit-status`; tomorrow a web view or an IDE
   panel reads the same `activity.jsonl`. No loop changes needed.
 - **Cheap and safe.** Append-only JSONL, best-effort writes, zero deps. If observability
   breaks, the loop doesn't.

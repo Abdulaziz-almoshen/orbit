@@ -12,8 +12,12 @@ Task: $ARGUMENTS
 2. **QUEUE** — append the task to `.orbit/STATE.md`'s task queue with a clear done-gate.
 3. **RUN the cycle** via the sub-agent roster in `.claude/agents/`: Dispatcher (confirm it's a
    task, not a question) → the specialists it needs → Safety (veto) → Reviewer (quality gate)
-   → Reporter. Use the Task tool to dispatch roles, and drive a TodoWrite checklist with
-   role-tagged items (`[data] …`, `[safety] …`) so the user sees who's working.
+   → Reporter. Dispatch roles with the Task tool. **Show the checklist two ways (do both):**
+   (a) **write `.orbit/tasks.json`** via `.orbit/activity.py` `set_tasks`/`update_task` —
+   the guaranteed-visible path that feeds `orbit-status`; (b) **also build the native checklist
+   with `TaskCreate`/`TaskUpdate`** (the `Task*` tools — NOT `TodoWrite`, which is off by
+   default), role-tagged (`[data] …`, `[safety] …`), **driven by you, the main orchestrator**
+   (a subagent's task calls don't surface). Don't just narrate `[role]` lines and skip the files.
 4. **EVALUATE** against `CLAUDE.md` §3 and the gates in `.orbit/loop.config.json`. Honor the
    stop conditions (§8) and approval checkpoints — **propose, never auto-perform**, anything
    irreversible, financial, or outward-facing.

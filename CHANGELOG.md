@@ -3,6 +3,27 @@
 All notable changes to the `orbit` plugin are documented here. The version here
 must match `VERSION` and `.claude-plugin/plugin.json` — the update checker compares them.
 
+## 0.6.1
+
+Fixes the live checklist not appearing. Root cause (confirmed against Claude Code docs):
+Orbit's observability targeted **`TodoWrite`, which is disabled by default** in current
+Claude Code (≥ v2.1.142) — so the agent correctly reported it "isn't available," fell back
+to prose, and (since it also never wrote `.orbit/tasks.json`) left nothing for `orbit-status`
+to render either. No checklist, from either path.
+
+- **Migrated observability from `TodoWrite` → the current `TaskCreate` / `TaskUpdate` /
+  `TaskList` tools** across SKILL.md, observability.md, the CLAUDE.md template, roles.md,
+  the `/orbit-run` command, README, and `activity.py`.
+- **Belt-and-suspenders, stated as a hard rule:** every cycle **always writes
+  `.orbit/tasks.json` + `.orbit/activity.jsonl`** (the guaranteed-visible path that feeds
+  `orbit-status`) *and* builds the native `Task*` checklist. A run that only narrates `[role]`
+  lines and skips the files is called out as the failure to avoid.
+- **Drive the checklist from the MAIN orchestrator** — a subagent's `Task*` calls run in
+  isolated context and don't surface to the user; documented explicitly.
+- Honest framing kept: the native checklist is best-effort (model must call the tool); the
+  file-fed `orbit-status` (or running the loop runner, which emits deterministically) is the
+  guaranteed-visible fallback.
+
 ## 0.6.0
 
 The safety hook is now **default-on (announced), not opt-in** — so Orbit's safety is real

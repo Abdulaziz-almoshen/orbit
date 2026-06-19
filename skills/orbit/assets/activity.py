@@ -11,7 +11,7 @@ Writes (all under $ORBIT_DIR, default .orbit/):
   tasks.json       the checklist (id, title, owner, status)
 
 Render the live view with the bundled `orbit-status` script (a second terminal pane), or
-mirror tasks.json into Claude Code's TodoWrite for the native pinned checklist.
+mirror tasks.json into Claude Code's TaskCreate/TaskUpdate for the native pinned checklist.
 """
 from __future__ import annotations
 import json

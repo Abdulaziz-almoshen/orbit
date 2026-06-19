@@ -58,7 +58,7 @@ to your domain:)
   Propose; a human approves. Run in dry-run / sandbox mode by default.
 - Stay within the stop conditions in §8. If you'd exceed one, stop and report.
 - **Announce yourself.** Open your output with `[role] …` and emit to `.orbit/activity.jsonl`
-  (via `.orbit/activity.py`); keep the checklist current (TodoWrite in Claude Code, or
+  (via `.orbit/activity.py`); keep the checklist current (TaskCreate/TaskUpdate in Claude Code, or
   `.orbit/tasks.json` for `orbit-status`) so a watcher always sees who's doing what.
 - Update this file when a durable fact changes; update `STATE.md` every cycle.
 
@@ -119,7 +119,7 @@ being prompted one message at a time:
   file + `.orbit/STATE.md`, append the task to STATE.md's queue, then run
   read→plan→act→evaluate→update→decide via the roles in `.claude/agents/` (Dispatcher →
   specialists → Safety → Reviewer → Reporter). Announce `[orchestrator] routing: <task>`
-  and drive the TodoWrite checklist. The user can also start one explicitly with
+  and drive the TaskCreate/TaskUpdate checklist. The user can also start one explicitly with
   `/orbit:orbit-run <task>`.
 - **AMBIGUOUS** → ask exactly one clarifying question; don't guess.
 
