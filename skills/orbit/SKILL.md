@@ -311,7 +311,7 @@ End every `/orbit` run with a short, beginner-readable summary — not a file du
 6. **How to undo** — `orbit-uninstall` from this repo removes everything Orbit added and
    leaves your CLAUDE.md alone.
 7. **How routing now works** — say it plainly: *"From now on in this repo, a **task**
-   (build/fix/change something) routes through the loop — or run `/orbit-run <task>`; a
+   (build/fix/change something) routes through the loop — or run `/orbit:orbit-run <task>`; a
    **question** is answered directly. The safety hook is: <on / off>."*
 8. **What binds vs. what's advisory** (don't oversell): routing is **advisory** — the model
    follows the CLAUDE.md rule reliably, but Claude Code can't *force* it; the only hard wall
@@ -359,5 +359,5 @@ your own work, the same way the system will.
 - `assets/` — copyable `loop.config.json`, `loop.py`, `activity.py`, `ralph_loop.sh`,
   `orbit-status`, `checks/guard.py`, `runners/inngest-loop.ts`, example subagent.
 - `scripts/scaffold.py` — lays down the deterministic skeleton.
-- `commands/orbit-run.md` — the `/orbit-run <task>` slash command: explicitly send a task
+- `commands/orbit-run.md` — the `/orbit:orbit-run <task>` slash command: explicitly send a task
   through the loop. (Auto-routing is the CLAUDE.md §10 rule; this is the manual target.)

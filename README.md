@@ -12,7 +12,7 @@ One command sets it up. It runs on your own orchestrator. It updates itself.
 
 <br/>
 
-![version](https://img.shields.io/badge/version-0.5.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.5.1-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![self-updating](https://img.shields.io/badge/self--updating-yes-22863a)
@@ -185,7 +185,7 @@ and installs the routing rule.
 Claude to:
 - **route a *task*** ("add a logout button", "fix this bug", "port this screen") **through
   the loop** — read state → plan → act via the roles → gates → update — or you can kick one
-  off explicitly with **`/orbit-run <task>`**;
+  off explicitly with **`/orbit:orbit-run <task>`**;
 - **answer a *question*** ("is the project live?", "what does X do?") **directly**, no loop.
 
 This is what "a system that prompts itself" means: the plugin drives the next step, you're

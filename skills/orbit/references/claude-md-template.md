@@ -120,7 +120,7 @@ being prompted one message at a time:
   read→plan→act→evaluate→update→decide via the roles in `.claude/agents/` (Dispatcher →
   specialists → Safety → Reviewer → Reporter). Announce `[orchestrator] routing: <task>`
   and drive the TodoWrite checklist. The user can also start one explicitly with
-  `/orbit-run <task>`.
+  `/orbit:orbit-run <task>`.
 - **AMBIGUOUS** → ask exactly one clarifying question; don't guess.
 
 When in doubt, route to the loop. **Never silently edit a source-of-truth file outside the

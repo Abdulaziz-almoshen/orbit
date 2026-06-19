@@ -3,6 +3,14 @@
 All notable changes to the `orbit` plugin are documented here. The version here
 must match `VERSION` and `.claude-plugin/plugin.json` — the update checker compares them.
 
+## 0.5.1
+
+Docs accuracy fix. Verified against Claude Code plugin docs that plugin slash commands are
+**namespaced**: the new command is invoked as **`/orbit:orbit-run`**, not `/orbit-run`.
+Corrected the references in CLAUDE.md §10, SKILL.md, and the README. (Claude Code lists
+commands under "Skills" in `plugin details` because commands and skills have converged —
+`commands/orbit-run.md` is the correct location.)
+
 ## 0.5.0
 
 Orbit becomes a task router with a smooth, self-answering install. Grounded in a deep study
@@ -13,7 +21,7 @@ gstack-parity reliable-advisory routing; the only hard wall remains the safety h
 - **Task vs. question routing.** New `CLAUDE.md` §10 "Request Routing" (written on every
   `/orbit` run): a *task* (build/fix/change) routes through the loop; a *question* is answered
   directly; ambiguous → ask one. This is the "system prompts itself" behavior.
-- **`/orbit-run <task>` command.** The plugin's first `commands/` — a deterministic, user-
+- **`/orbit:orbit-run <task>` command.** The plugin's first `commands/` — a deterministic, user-
   invoked target to send a task through the loop. Plus a **Dispatcher/Router** role.
 - **Smooth, infer-first install.** Phase 0 rewritten: infer the domain from the repo and ask
   **0 questions** on an existing repo, **1** only on greenfield; headless → safe defaults,
