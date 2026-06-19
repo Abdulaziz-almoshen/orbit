@@ -30,6 +30,7 @@ FILE_PLAN = [
     ("activity.py",      ".orbit/activity.py",      None),
     ("ralph_loop.sh",    "scripts/ralph_loop.sh",     0o755),
     ("orbit-status",     "scripts/orbit-status",      0o755),
+    ("checks/guard.py",  ".orbit/checks/guard.py",    0o755),  # placed, NOT wired (see skill Phase 6a)
     ("claude-agents/safety-gate.md", ".claude/agents/safety-gate.md", None),
 ]
 
@@ -84,6 +85,17 @@ def main():
         "  * .orbit/roles/*.md  -> references/roles.md (+ .claude/agents/*.md adapters)\n"
         "  * .orbit/skills/*.md -> the active profile in references/profiles/\n"
         "  * wire loop.py dispatch() to your orchestrator; fill loop.config.json thresholds"
+    )
+    print(
+        "\nSafety guard: .orbit/checks/guard.py is PLACED but NOT wired — it does nothing\n"
+        "until it's registered as a PreToolUse hook in .claude/settings.json. That is a\n"
+        "separate, consented step (skill Phase 6a): the agent shows you the exact JSON and\n"
+        "the one-line removal before touching settings.json. Nothing here edits settings.json."
+    )
+    print(
+        "\nTo undo everything later: run `orbit-uninstall` from this repo (lists, asks, then\n"
+        "removes .orbit/, scripts/ralph_loop.sh, scripts/orbit-status, and any Orbit hooks;\n"
+        "leaves your CLAUDE.md alone)."
     )
 
 

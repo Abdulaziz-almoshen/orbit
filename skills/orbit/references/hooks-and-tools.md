@@ -81,3 +81,33 @@ notification in one place, independent of any harness. Same rules, no Claude Cod
 
 When you're tempted to add a long "always remember to…" rule to CLAUDE.md, ask which of
 the other three it really belongs in. Usually it's a hook or a skill.
+
+## Enforcement vs. suggestion (the rule that actually matters)
+
+A rule in CLAUDE.md, a role spec, or `loop.py` is **advisory**: it only takes effect if the
+agent chooses to honor it, and a normal request goes to normal Claude — which can edit a file
+or run a command with none of it firing. A **`PreToolUse` hook is binding**: Claude Code runs
+it *before* the tool, and if it returns a deny decision the tool never executes — the agent
+gets no say. If a safety rule is non-negotiable, it must be a hook; otherwise you've shipped a
+suggestion and called it a guarantee.
+
+A `PreToolUse` hook is a small program: it reads the tool call as JSON on **stdin** and prints
+a decision on **stdout** — `{}` to allow, or `{"permissionDecision":"deny"|"ask","message":"…"}`
+to block (`deny`) or pause for the human (`ask`). State (e.g. a frozen boundary) lives in an
+external file read on every call, so the rule binds across turns and fresh contexts. Register
+it in `.claude/settings.json` under `hooks.PreToolUse` with a matcher (e.g. `Bash`). Confirm
+the exact field names against current Claude Code hook docs before shipping — a malformed hook
+silently does nothing. `.orbit/checks/guard.py` is a working template (left unwired until the
+user consents — see SKILL.md Phase 6a).
+
+## Guardrail best practices
+
+- **Match the action, not the string.** Parse the command with `shlex.split()` and match the
+  parsed argv (e.g. `tokens[0]=="git" and "push" in tokens`). Substring matching on the raw
+  command is the classic footgun — it blocks `git push --dry-run`, a command that merely
+  mentions "git push" in a string, and even your own test command.
+- **`deny` vs `ask`.** Reserve `deny` for truly irreversible/forbidden actions; use `ask` for
+  reversible-but-risky ones so normal work isn't over-blocked.
+- **Fail open.** On any parse error, allow — a guard must never brick the user's shell.
+- **Be findable.** Install hooks only with consent, print the exact JSON added, and ship a
+  one-line removal (`orbit-uninstall`). A guard the user can't turn off is its own hazard.

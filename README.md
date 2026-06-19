@@ -54,9 +54,9 @@ A loop you can't watch is a loop you don't trust. Orbit makes every cycle legibl
 moment you can see **which agent is talking, what stage it's in, and the checklist crossing
 itself off**. Every role announces itself; one event stream feeds two views.
 
-**In Claude Code** — the checklist is mirrored into the native pinned **TodoWrite** list
-(the one your IDE keeps on screen), each item tagged with the role that owns it and struck
-through the instant it finishes:
+**In Claude Code (default)** — the checklist is the native pinned **TodoWrite** list (the one
+your IDE keeps on screen). It appears **automatically — no command, no second terminal** — each
+item tagged with the role that owns it and struck through the instant it finishes:
 
 ```text
   ✔ [orchestrator] plan cycle 1
@@ -66,8 +66,9 @@ through the instant it finishes:
   ☐ [reviewer]     check vs success criteria
 ```
 
-**Anywhere — including your own orchestrator** — run `scripts/orbit-status --follow` in a
-second pane for a live, color-coded dashboard:
+**Headless only — your own orchestrator (Gemini, cron, CI)** — there's no chat to pin a
+checklist into, so run `scripts/orbit-status --follow` for a live, color-coded dashboard
+(press **Ctrl-C** to stop):
 
 ```text
 🛰  ORBIT — live status   .orbit
@@ -206,12 +207,24 @@ Want it fully hands-off? Add `auto_upgrade=true` to `~/.orbit/config`.
 > touched. To pull template improvements into an existing project, re-run `/orbit` — it
 > merges, it doesn't clobber.
 
-## Safety is not optional
+## Safety — what binds, and what doesn't
 
-The scaffolded loop **never** takes an irreversible, financial, or outward-facing action on
-its own — it proposes; a human disposes. `move_money` is `FORBIDDEN` by default, side effects
-route through human-approval checkpoints, and the loop defaults to dry-run / sandbox. A loop
-without hard caps is a defect, so Orbit always installs them — even if you ask it not to.
+Be clear-eyed about where the guarantees are:
+
+- **Inside the loop** (`loop.py` / `ralph_loop.sh`): hard caps always apply (iterations,
+  tokens, cost, runtime), `move_money` is `FORBIDDEN`, and side effects route through
+  human-approval checkpoints. The loop proposes; a human disposes. This part is enforced by
+  the runner.
+- **Normal chat is normal Claude.** Orbit does **not** intercept every message — the rules in
+  `CLAUDE.md` and the roles are *guidance*, which an agent can skip on a quick edit. So those
+  are advisory, not a wall.
+- **The wall is opt-in:** install the always-on **`PreToolUse` safety hook** (`/orbit` Phase
+  6a) and your non-negotiables (e.g. `git push`, a frozen path) bind on *every* tool call,
+  loop or not — because the harness runs the hook before the tool and can deny it. That's the
+  only mechanism the agent can't talk its way around. Until you install it, treat the safety
+  story as "strong defaults," not "impossible to bypass."
+
+Everything Orbit adds is removable with `orbit-uninstall`.
 
 ## Repo layout
 
@@ -223,14 +236,15 @@ orbit/                              ← this repo = the plugin
 ├── VERSION                         # single source of truth for the version
 ├── CHANGELOG.md                    # what "what's new" reads from
 ├── bin/
-│   └── orbit-update-check          # prints UPGRADE_AVAILABLE / JUST_UPGRADED / nothing
+│   ├── orbit-update-check          # prints UPGRADE_AVAILABLE / JUST_UPGRADED / nothing
+│   └── orbit-uninstall             # removes the Orbit scaffold from a product repo
 └── skills/
     ├── orbit/                      # the main skill
     │   ├── SKILL.md
     │   ├── references/             # methodology, templates, roles, loop design,
-    │   │                           #   observability, profile
-    │   ├── assets/                 # loop.py, loop.config.json, activity.py,
-    │   │                           #   ralph_loop.sh, orbit-status, example subagent
+    │   │                           #   observability, hooks/enforcement, profile
+    │   ├── assets/                 # loop.py, loop.config.json, activity.py, ralph_loop.sh,
+    │   │                           #   orbit-status, checks/guard.py, example subagent
     │   ├── scripts/scaffold.py     # lays down the deterministic skeleton
     │   └── evals/                  # test cases (for contributors)
     └── orbit-upgrade/

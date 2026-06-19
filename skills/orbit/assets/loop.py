@@ -61,7 +61,9 @@ def dispatch(role: str, task: dict, context: str, cfg: dict) -> dict:
 
     Wire this to Gemini (or anything). Keep token/cost accounting accurate so hard limits
     actually bite. The Claude Code adapter swaps this for a native subagent call."""
-    raise NotImplementedError("Wire dispatch() to your orchestrator (Gemini).")
+    # [STUB] Not wired. This raises until you connect your orchestrator. Until then the
+    # portable runner does nothing — the Claude Code path (subagents) is what works today.
+    raise NotImplementedError("Wire dispatch() to your orchestrator (e.g. Gemini).")
 
 
 def evaluate_gates(cycle_output: dict, cfg: dict) -> dict:
@@ -130,7 +132,12 @@ def hard_stop_reason(cfg: dict, budget: Budget, cycle: int, fail_streak: int) ->
 
 def needs_human(action: str, cfg: dict, amount_usd: float = 0.0) -> bool:
     """Approval checkpoint. FORBIDDEN actions never run; 'human' pauses; numbers gate by
-    threshold. Default-deny: an unknown action is treated as needing a human."""
+    threshold. Default-deny: an unknown action is treated as needing a human.
+
+    NOTE: this is APPLICATION-level enforcement — it only fires when the loop calls it, so
+    it covers the portable/Gemini path. It does NOT bind a direct tool call made outside the
+    loop. On the Claude Code path, install the always-on PreToolUse hook (.orbit/checks/guard.py,
+    skill Phase 6a) so the non-negotiables hold even when no loop is running."""
     rule = cfg["approval_checkpoints"].get(action, "human")
     if rule == "FORBIDDEN":
         raise PermissionError(f"Action '{action}' is FORBIDDEN by config and must never run.")

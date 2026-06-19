@@ -7,3 +7,7 @@ __pycache__/
 
 # Orbit runtime state (created at install/use time, never committed)
 .orbit/
+
+# Local-only planning + eval artifacts (never published)
+BEGINNER-MODE.md
+orbit-workspace/

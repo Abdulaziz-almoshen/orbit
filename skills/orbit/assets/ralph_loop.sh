@@ -52,7 +52,7 @@ propose it via STATE.md instead. Then STOP; do not start another cycle yourself.
 EOF
 
 echo "Ralph loop starting: max_iters=$MAX_ITERS max_runtime=${MAX_RUNTIME}s"
-echo "Tip: in another pane, run  scripts/orbit-status --follow  to watch who's talking live."
+echo "Tip: in another pane, run  scripts/orbit-status --follow  to watch live (Ctrl-C to stop)."
 
 while :; do
   # --- hard limits, checked before every cycle (the brake) --------------------------

@@ -3,6 +3,29 @@
 All notable changes to the `orbit` plugin are documented here. The version here
 must match `VERSION` and `.claude-plugin/plugin.json` — the update checker compares them.
 
+## 0.3.0
+
+Real enforcement + beginner mode. Grounded in how gstack actually binds safety (real
+`PreToolUse` hooks, not prose).
+
+- **Binding safety hooks (Hybrid C).** Ships `.orbit/checks/guard.py` — a `PreToolUse` hook
+  that Claude Code evaluates *before* a tool runs and can `deny`, so the non-negotiables hold
+  even outside the loop. It is **placed but unwired**; `/orbit` Phase 6a installs it only with
+  explicit consent, backs up `.claude/settings.json`, and prints the exact JSON + one-line
+  removal. Argv-matched (not substring), fail-open. Fixes the "agent silently bypasses its own
+  gates" trust trap.
+- **`orbit-uninstall`.** A real undo: lists, confirms, removes the Orbit scaffold and strips
+  only Orbit-tagged hooks (with backup); never touches your CLAUDE.md.
+- **One live view per environment.** Claude Code uses the native pinned TodoWrite checklist
+  automatically (no command, no second terminal); `orbit-status --follow` is reserved for the
+  headless path (with "Ctrl-C to stop").
+- **Beginner onboarding.** Plain-language preface + 5-line glossary; Phase 7 now ends with a
+  "what I installed / the 3 files that matter / works-today-vs-wire-later / spend / how-to-undo"
+  summary and a status line. `loop.py`'s `dispatch()` is labeled a stub.
+- **Honesty pass.** README safety section now distinguishes what binds (in-loop caps + the
+  opt-in hook) from what's advisory (normal chat). New `hooks-and-tools.md` section:
+  "Enforcement vs. suggestion" + guardrail best practices.
+
 ## 0.2.0
 
 Observability — see who's talking and watch the checklist live.

@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+#
+# orbit-uninstall — remove the Orbit scaffold from THIS product repo.
+#
+# Run it from the repo where you ran /orbit. It lists exactly what it will remove, asks
+# once, then removes the Orbit-authored files and strips any Orbit-tagged hooks from
+# .claude/settings.json (restoring is also possible from the timestamped backup the skill
+# makes). It NEVER touches your CLAUDE.md — that file is yours; only its content can tell
+# the difference between "yours" and "Orbit's", so you edit it. It is idempotent and safe
+# to re-run.
+#
+#   orbit-uninstall            # interactive (asks before deleting)
+#   orbit-uninstall --force    # no prompt
+#
+# To remove the PLUGIN itself (not this repo's scaffold):
+#   claude plugin uninstall orbit@orbit && claude plugin marketplace remove orbit
+set -uo pipefail
+
+FORCE=0
+[ "${1:-}" = "--force" ] && FORCE=1
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$ROOT" || { echo "cannot cd to repo root"; exit 1; }
+
+TARGETS=(".orbit" "scripts/ralph_loop.sh" "scripts/orbit-status")
+SETTINGS=".claude/settings.json"
+
+echo "Orbit uninstall — repo: $ROOT"
+echo
+echo "Will remove (Orbit-authored):"
+for t in "${TARGETS[@]}"; do [ -e "$t" ] && echo "  - $t"; done
+# Orbit-tagged hooks = any hook whose command references .orbit/
+HOOK_HITS=0
+if [ -f "$SETTINGS" ]; then
+  HOOK_HITS=$(python3 -c "import json;print(json.dumps(json.load(open('$SETTINGS')).get('hooks',{})).count('.orbit/'))" 2>/dev/null || echo 0)
+  [ "${HOOK_HITS:-0}" != "0" ] && echo "  - Orbit hook(s) in $SETTINGS (the rest of the file is preserved)"
+fi
+echo
+echo "Will NOT touch:"
+echo "  - CLAUDE.md (yours — edit out the Orbit section by hand if you want)"
+echo "  - .claude/agents/*.md (review/remove these yourself; some may be yours)"
+echo
+
+if [ "$FORCE" = "0" ]; then
+  printf "Proceed? [y/N] "
+  read -r ans
+  case "$ans" in y|Y|yes|YES) ;; *) echo "Aborted. Nothing removed."; exit 0 ;; esac
+fi
+
+REMOVED=()
+for t in "${TARGETS[@]}"; do
+  if [ -e "$t" ]; then rm -rf "$t" && REMOVED+=("$t"); fi
+done
+
+# Strip only Orbit-tagged hooks (command contains ".orbit/"); back up first.
+if [ -f "$SETTINGS" ] && [ "${HOOK_HITS:-0}" != "0" ]; then
+  cp "$SETTINGS" "$SETTINGS.bak.$(date +%s)"
+  python3 - "$SETTINGS" <<'PY'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p))
+hooks = d.get("hooks", {})
+def keep(group):
+    out = []
+    for entry in group:
+        cmds = json.dumps(entry.get("hooks", entry))
+        if ".orbit/" in cmds:
+            continue
+        out.append(entry)
+    return out
+for event in list(hooks.keys()):
+    hooks[event] = keep(hooks[event])
+    if not hooks[event]:
+        del hooks[event]
+if hooks:
+    d["hooks"] = hooks
+else:
+    d.pop("hooks", None)
+json.dump(d, open(p, "w"), indent=2)
+PY
+  REMOVED+=("$SETTINGS (Orbit hooks; backup written)")
+fi
+
+echo
+echo "Removed:"
+for r in "${REMOVED[@]:-}"; do [ -n "$r" ] && echo "  - $r"; done
+[ ${#REMOVED[@]} -eq 0 ] && echo "  (nothing — already clean)"
+echo
+echo "Done. CLAUDE.md left as-is. To remove the plugin too:"
+echo "  claude plugin uninstall orbit@orbit && claude plugin marketplace remove orbit"

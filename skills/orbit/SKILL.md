@@ -63,6 +63,24 @@ you re-typing the prompt each time.
 Read `references/methodology.md` once before you start — it distills the principles
 so the rest of this skill makes sense.
 
+## In plain language (tell the user this up front)
+
+Most people who run `/orbit` are not experts in agent frameworks. Before the jargon, say
+the gist in one breath and name the few files that matter:
+
+> "I'm going to set this repo up to do repeatable work by itself, safely. Three files
+> matter: **CLAUDE.md** (the plan + the rules), **.orbit/STATE.md** (live progress), and
+> **.orbit/loop.config.json** (the limits — how many steps, how much it can spend, what it
+> may never do). Everything else is detail you can ignore until you need it. Nothing runs
+> on its own and nothing risky happens without you — and you can undo all of it."
+
+Five terms you'll use — gloss each the first time, in one line:
+- **loop** — one pass of: read state → do a small step → check it → write down what happened → decide whether to continue or stop.
+- **role / sub-agent** — a specialist with one job (gather inputs, build, check safety, review quality). Keeps each step focused.
+- **gate** — a check the output must pass to count as progress (a quality bar; a safety OK).
+- **stop condition** — a hard brake: max steps, max spend, max time, or a forbidden action.
+- **dispatch** — the one function in `loop.py` you'd wire to your own model (e.g. Gemini) to run the loop *off* Claude. Until you do, it's a stub.
+
 ## What you produce (hybrid output)
 
 Two layers, written into the target repo:
@@ -199,35 +217,73 @@ Wire integration per `references/hooks-and-tools.md`:
   CLAUDE.md.
 - Prefer shelling out to existing, trusted CLIs over rebuilding them.
 
+### Phase 6a — Install the always-on safety hooks (the part that actually binds)
+
+The most important phase, and the one most setups skip. Everything in CLAUDE.md, the roles,
+and the loop is **advisory** — a normal request goes to normal Claude, which can edit a file
+or run a command without any of it firing (this is the exact bypass the audit caught). The
+only thing that binds *regardless of whether anyone is "in a loop"* is a **PreToolUse hook**:
+Claude Code runs it before a tool call and, if it returns `deny`, the tool never executes.
+That is the line between a guarantee and a suggestion — see `references/hooks-and-tools.md`
+→ "Enforcement vs suggestion."
+
+`scaffold.py` places `.orbit/checks/guard.py` but leaves it **unwired** — it does nothing
+until it's registered in `.claude/settings.json`. Wiring it is a **consented** step:
+
+1. Edit `.orbit/checks/guard.py` so its `RULES` match *this* repo's truly-dangerous actions
+   (parse argv precisely — never substring-match a command). `deny` only for irreversible/
+   forbidden actions; `ask` for reversible-but-risky ones.
+2. **Ask before touching settings.json**, e.g. *"I can install an always-on hook that blocks
+   <X> on every command, even outside the loop. It edits .claude/settings.json. Install it?
+   [y/N]"*. Never wire it silently — a guard with no findable off-switch is its own footgun.
+3. On yes: back up first (`cp .claude/settings.json .claude/settings.json.bak.$(date +%s)`),
+   add a `PreToolUse` hook (matcher `Bash`) running
+   `python3 "$CLAUDE_PROJECT_DIR/.orbit/checks/guard.py"`, then **print the exact JSON you
+   added and the one-line removal** (`orbit-uninstall`). Leave the rest of settings.json intact.
+
+This makes Orbit's safety claims true: the non-negotiables hold even when the user is just
+chatting. The role/gate/checklist *ceremony* stays opt-in (you run it deliberately); the
+*safety floor* is always on. This is the recommended default (Hybrid).
+
 ### Phase 6.5 — Make the loop watchable (observability)
 
-A loop you can't watch is a loop nobody trusts. Lay down the live "who's talking +
-checklist" layer per `references/observability.md`:
-- `scaffold.py` already drops `.orbit/activity.py` and `scripts/orbit-status`. Wire the
-  loop and each role to `emit(role, phase, status, msg)` and to keep `.orbit/tasks.json`
-  current (one writer — the Orchestrator).
-- Tell the user the two ways to watch:
-  - **Inside Claude Code:** mirror the checklist into **TodoWrite** (role-prefixed items
-    like `[data] validate inputs`, marked in_progress→completed live), and have each role
-    open its report with `[role] …` so the transcript thread shows who's speaking.
-  - **Anywhere (their own orchestrator):** run `scripts/orbit-status --follow` in a second
-    pane for a live dashboard — current speaker, phase, and the checklist crossing itself off.
-- Each role's spec (`references/roles.md`) must say "announce yourself": emit a `start` when
-  it picks up work and `done`/`blocked` when it hands off.
+A loop you can't watch is a loop nobody trusts. Lay down the live "who's talking + checklist"
+layer per `references/observability.md`. There is **one live view per environment — don't
+offer both**:
+- **Inside Claude Code (default):** drive the **native TodoWrite** checklist — role-prefixed
+  items (`[data] validate inputs`) marked in_progress→completed as work happens. It is pinned
+  on screen **automatically — no command, no second terminal.** Each role opens its report
+  with `[role] …` so the transcript also shows who's speaking. Do NOT tell the user to run a
+  CLI or open another pane; the checklist is already on their screen.
+- **Headless / your own orchestrator only (Gemini, cron, CI):** there's no chat to pin a
+  checklist into, so run `scripts/orbit-status --follow` in a terminal (press **Ctrl-C** to
+  stop). It reads `.orbit/activity.jsonl` + `.orbit/tasks.json`.
 
-### Phase 7 — Report and recommend the first run
+Wire the loop and each role to `emit(role, phase, status, msg)` and keep `.orbit/tasks.json`
+current (one writer — the Orchestrator). Each role's spec (`references/roles.md`) must
+"announce itself": emit a `start` on pickup and `done`/`blocked` on handoff.
 
-When the scaffolding is in place, deliver:
-1. The new/updated `CLAUDE.md` (show it).
-2. The list of sub-agents and skills created (names + one-line purpose each).
-3. The loop implementation (the config + the runner, with the dispatch seam called out).
-4. A recommended **first autonomous loop to run** and the **exact stop conditions** to
-   use for it — start tiny and safe (the smallest useful unit of work, dry-run mode, max
-   3 iterations, hard token budget, every checkpoint set to human).
-5. Immediate gaps and recommended improvements to the existing orchestration.
+### Phase 7 — Report, in plain language, and recommend the first run
 
-Then update `.orbit/STATE.md` and `CLAUDE.md` to reflect what was built — close the
-loop on your own work, the same way the system will.
+End every `/orbit` run with a short, beginner-readable summary — not a file dump:
+
+1. **What I installed** — a few grouped bullets (memory, team, loop, safety).
+2. **The 3 files that matter** — `CLAUDE.md` (plan + rules), `.orbit/STATE.md` (progress),
+   `.orbit/loop.config.json` (limits). "The rest is detail you can ignore until you need it."
+3. **Works today vs. wire later** — be honest: `loop.py`'s `dispatch()` is a **stub** that
+   raises until you connect your own model; the Claude Code path works now via the
+   subagents. Don't let scaffolding read as a finished product.
+4. **What it can spend** — in plain words: "a run can use up to ~$X and N steps, then it
+   stops itself; anything risky waits for you."
+5. **The first loop to run** + its exact stop conditions — start tiny and safe (smallest
+   unit of work, dry-run, max 3 iterations, every checkpoint human).
+6. **How to undo** — `orbit-uninstall` from this repo removes everything Orbit added and
+   leaves your CLAUDE.md alone.
+7. **A status line** — `DONE` / `DONE_WITH_CONCERNS (…)` / `BLOCKED (…)` so the true state
+   is unambiguous.
+
+Then update `.orbit/STATE.md` and `CLAUDE.md` to reflect what was built — close the loop on
+your own work, the same way the system will.
 
 ## Guardrails for you, the builder
 
@@ -241,6 +297,12 @@ loop on your own work, the same way the system will.
   belongs in a skill or a hook instead.
 - **Stay model-agnostic in the core.** The Claude Code adapter is a convenience layer,
   not the foundation. The user runs production on their own orchestrator.
+- **Don't bypass silently.** Most everyday requests are fine to handle directly — the full
+  role/gate ceremony is for deliberate loop runs, not every chat. But if a loop is active or
+  a request touches a guarded action, say so out loud and, if you act outside the loop, write
+  a one-line `[decision]` note in `.orbit/STATE.md` saying what you did and why. The thing
+  that actually protects the work is the Phase 6a hook — not your memory to route through the
+  gates. Never imply the gates ran when they didn't.
 
 ## Reference map
 
