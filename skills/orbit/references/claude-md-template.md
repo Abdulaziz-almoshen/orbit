@@ -67,6 +67,7 @@ to your domain:)
 `.claude/agents/`. Handoff protocol in `.orbit/roles/README.md` / `references/roles.md`.
 Rename and scope these to your product's real subtasks; keep the shape — one planner,
 several executors, one safety gate, one quality gate.)
+- Dispatcher/Router — classifies each request (task vs question) per §10 and routes it.
 - Orchestrator/PM — plans, decomposes, controls the loop, owns STATE.md.
 - Input/Research Specialist — gather, clean, and validate the inputs the work needs.
 - Builder/Executor — produce the core output of the product.
@@ -106,6 +107,26 @@ read `CLAUDE.md` + `STATE.md` → plan next action → act via sub-agent(s) → 
 → update `STATE.md`/`CLAUDE.md` → decide (continue / spawn sub-task / STOP). Runner:
 `.orbit/loop.py` (portable, dispatch seam wired to the orchestrator) or
 `scripts/ralph_loop.sh` (Claude Code, fresh context per cycle). Config: §8 / loop.config.json.
+
+## 10. Request Routing — task vs. question  (read on EVERY user message)
+Classify each request before acting. This is how the system prompts itself instead of
+being prompted one message at a time:
+
+- **QUESTION** (status / explanation: "is it live?", "what does X do?", "why did Y fail?")
+  → answer directly. No loop, no roles. Read `.orbit/STATE.md` if it helps.
+- **TASK** (changes the product: build, implement, add, fix, refactor, create, develop,
+  migrate, redesign, port…) → **do NOT free-edit.** Route it through the loop: read this
+  file + `.orbit/STATE.md`, append the task to STATE.md's queue, then run
+  read→plan→act→evaluate→update→decide via the roles in `.claude/agents/` (Dispatcher →
+  specialists → Safety → Reviewer → Reporter). Announce `[orchestrator] routing: <task>`
+  and drive the TodoWrite checklist. The user can also start one explicitly with
+  `/orbit-run <task>`.
+- **AMBIGUOUS** → ask exactly one clarifying question; don't guess.
+
+When in doubt, route to the loop. **Never silently edit a source-of-truth file outside the
+loop**; if you must act outside it, say so and add a `[decision]` line to `.orbit/STATE.md`.
+(This routing is a discipline the model follows — it is advisory, not enforced. The only
+hard wall is the §8 safety hook.)
 
 ## Maintenance
 Update §2 pointer line and `STATE.md` every cycle. Update §3/§4/§6/§7/§8 only when a

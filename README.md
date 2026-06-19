@@ -12,7 +12,7 @@ One command sets it up. It runs on your own orchestrator. It updates itself.
 
 <br/>
 
-![version](https://img.shields.io/badge/version-0.2.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.5.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![self-updating](https://img.shields.io/badge/self--updating-yes-22863a)
@@ -170,25 +170,33 @@ Then point Claude Code at the local copy:
 
 ## Use
 
-In the product repo you want to upgrade, run:
+**Set it up once** — in the product repo, run:
 
 ```text
 /orbit
 ```
 
-It asks a couple of questions to characterize your domain (or infers them from the repo),
-audits the current state, scaffolds the whole system, and recommends a safe first loop to
-run — start small, dry-run, every checkpoint set to human, watch it stop on its own.
+It **reads your repo to characterize the domain itself** (stack, goal, what's risky) and
+asks **at most one** product question — usually **none** on an existing repo; it only asks
+on a blank/greenfield project where there's nothing to infer. Then it scaffolds the system
+and installs the routing rule.
 
-### One mental model that matters
+**After that, it's a task router.** A rule in your `CLAUDE.md` (read every session) tells
+Claude to:
+- **route a *task*** ("add a logout button", "fix this bug", "port this screen") **through
+  the loop** — read state → plan → act via the roles → gates → update — or you can kick one
+  off explicitly with **`/orbit-run <task>`**;
+- **answer a *question*** ("is the project live?", "what does X do?") **directly**, no loop.
 
-- **`/orbit` is a one-time installer.** Like a setup wizard: you run it, it does its work,
-  it ends, and you're back to normal Claude. It does **not** intercept every later message.
-- **The always-on part is what it installs** — the `CLAUDE.md` (auto-loaded every session)
-  and hooks act as standing guardrails.
-- **The continuous part is the loop runner** (`.orbit/loop.py` / `scripts/ralph_loop.sh`).
-  You launch it deliberately when you want the system to run autonomously for N cycles — and
-  it stops itself at the stop conditions.
+This is what "a system that prompts itself" means: the plugin drives the next step, you're
+not feeding it one prompt at a time.
+
+> **Honest about what binds:** the routing rule is **advisory** — Claude follows it, but no
+> tool can *force* a workflow to run on a given message (gstack's routing is advisory too).
+> The one thing that truly **binds** is the optional §6a **safety hook** (it blocks/asks
+> before dangerous commands, in or out of the loop). So: routing = reliable discipline,
+> safety hook = the hard wall. For unattended/multi-step runs, launch the loop yourself
+> (`scripts/ralph_loop.sh`, dev) or a durable engine (production).
 
 ### Dev runner vs. durable production
 

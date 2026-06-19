@@ -13,6 +13,7 @@ default; rename and re-scope each role to the real subtasks of the product you'r
 
 | Role | Remit | Reads | Writes |
 |------|-------|-------|--------|
+| **Dispatcher / Router** | Classify each request: **question** → answer directly (no loop); **task** → hand to the Orchestrator to route through the loop (CLAUDE.md §10). Classification only — no edit tools. | the user request, CLAUDE.md §10 | a routing decision (question \| task \| ambiguous) |
 | **Orchestrator / PM** | Plan, decompose, delegate, control the loop, own STATE.md, check stop conditions. | CLAUDE.md, STATE.md | STATE.md |
 | **Input / Research Specialist** | Gather, clean, and validate the inputs the work needs; guarantee they're complete and fresh before anyone uses them. | external sources, input-validation skill | validated inputs + a quality report |
 | **Builder / Executor** | Produce the core output of the product from the validated inputs. | validated inputs, the domain skill | candidate output + rationale |
@@ -45,6 +46,11 @@ Write each role to `.orbit/roles/<role>.md` in this shape so any model can adopt
 
 ## Outputs
 - (exact artifacts + where they go; what it reports back to the Orchestrator)
+
+## Proof / verification
+- (the CONCRETE evidence this role's output is correct — a command that exits 0, a metric
+  over a threshold, a checklist all-true, a rubric score. "Looks done" is not proof. Maps to
+  `loop.config.json` → `proof`.)
 
 ## Done / handoff criteria
 - (what must be true before this role hands off; which role gets it next)

@@ -74,6 +74,11 @@ the gist in one breath and name the few files that matter:
 > may never do). Everything else is detail you can ignore until you need it. Nothing runs
 > on its own and nothing risky happens without you — and you can undo all of it."
 
+**The shape of every loop (one line):** *trigger → action → proof → memory → stop.* What
+kicks it off, what it does, the **proof** it actually worked, what it remembers, and when it
+halts. If a loop is missing its "proof" or its "stop," it isn't done. Keep this in mind for
+every loop you set up.
+
 Five terms you'll use — gloss each the first time, in one line:
 - **loop** — one pass of: read state → do a small step → check it → write down what happened → decide whether to continue or stop.
 - **role / sub-agent** — a specialist with one job (gather inputs, build, check safety, review quality). Keeps each step focused.
@@ -133,22 +138,32 @@ Work in small, verifiable steps. After each phase, briefly tell the user what la
 and what's next. For any non-trivial architectural change, propose the plan before
 writing — don't silently restructure their orchestration.
 
-### Phase 0 — Orient and characterize the domain
+### Phase 0 — Orient and characterize the domain (infer first; ask only what you can't)
 
-1. Confirm the working directory and whether it's an existing product or greenfield.
-2. **Characterize the domain.** You can't fit a good system to a product you don't
-   understand. Read `references/profiles/generic.md` — it's the universal profile and it
-   tells you what to elicit. Mine the repo (README, configs, code) for answers first,
-   then ask the user only what you couldn't infer:
-   - What does the product do, and who is it for?
-   - What does a good cycle output look like — ideally something measurable?
-   - What's the most expensive mistake the system could make? (this defines the safety
-     gate and the human-approval checkpoints)
-   - What external systems does it touch? (these become tools and checkpoints)
-   If you set this skill up for the same kind of product repeatedly, capture its specifics
-   as a new file under `references/profiles/` and reuse it.
-3. Detect the stack (language, package manager, how the orchestrator and any external
-   APIs are currently called). You'll need this to wire the loop.
+Setup must feel like gstack: smooth, near-zero questions. **Inference is the default; asking
+is the fallback.** Interrogating the user with four questions is a failure mode.
+
+1. **If `.orbit/setup.json` exists**, read it and reuse those answers — don't re-ask on a
+   re-run. (Write it at the end of setup: the domain characterization + any choices.)
+2. **Mine the repo and INFER** product, goal, "most expensive mistake," and integrations
+   from README, package manifests (package.json, *.csproj, requirements.txt…), config, and
+   code. Read `references/profiles/generic.md` for what to look for.
+3. **Then decide:**
+   - **Existing product, enough inferred** → ask **nothing**. State your inferred
+     characterization in one short paragraph "I read the repo as: <…> — correct me if wrong"
+     and proceed. The user corrects only if needed.
+   - **Genuinely un-inferable dimension(s)** (usually only on a **fresh/greenfield** repo
+     with nothing to read) → ask the **one** missing thing, batched into a **single**
+     AskUserQuestion. Only **product-level** questions ("what does this do / what's a good
+     outcome"), never plumbing.
+   - **Non-interactive / headless / no answer** → proceed with the inferred characterization;
+     never hang.
+4. Detect the stack (language, package manager, how the orchestrator and any external APIs
+   are called) — purely by reading; this is never a question.
+
+The bar: a typical existing repo gets **0 questions**; a blank greenfield repo gets **1**.
+If you set Orbit up for the same kind of product repeatedly, capture it as a new file under
+`references/profiles/` and reuse it.
 
 ### Phase 1 — Audit the current state
 
@@ -172,8 +187,15 @@ pointer, success criteria, conventions, the agent roster, skills index, **stop
 conditions**, and the loop shape. If a `CLAUDE.md` already exists, merge — preserve the
 user's content, don't clobber it.
 
+**Always write §10 "Request Routing" into CLAUDE.md** — this is what makes Orbit a task
+router instead of a one-shot installer. It's the rule the model reads every session that
+sends *tasks* through the loop and answers *questions* directly. Without it, Orbit goes
+back to being invisible during normal work. (This routing is advisory — the model follows
+it; the only hard wall is the §8 safety hook. Be honest about that in the summary.)
+
 Also create `.orbit/STATE.md` from `references/state-template.md` and seed it with the
-open tasks you discovered in the audit.
+open tasks you discovered in the audit. At the end of setup, write `.orbit/setup.json`
+(the inferred characterization + any choices) so a re-run doesn't re-ask.
 
 ### Phase 3 — Define the sub-agent team
 
@@ -288,7 +310,13 @@ End every `/orbit` run with a short, beginner-readable summary — not a file du
    unit of work, dry-run, max 3 iterations, every checkpoint human).
 6. **How to undo** — `orbit-uninstall` from this repo removes everything Orbit added and
    leaves your CLAUDE.md alone.
-7. **A status line** — `DONE` / `DONE_WITH_CONCERNS (…)` / `BLOCKED (…)` so the true state
+7. **How routing now works** — say it plainly: *"From now on in this repo, a **task**
+   (build/fix/change something) routes through the loop — or run `/orbit-run <task>`; a
+   **question** is answered directly. The safety hook is: <on / off>."*
+8. **What binds vs. what's advisory** (don't oversell): routing is **advisory** — the model
+   follows the CLAUDE.md rule reliably, but Claude Code can't *force* it; the only hard wall
+   is the §8 PreToolUse safety hook. `loop.py`'s `dispatch()` is a stub until wired.
+9. **A status line** — `DONE` / `DONE_WITH_CONCERNS (…)` / `BLOCKED (…)` so the true state
    is unambiguous.
 
 Then update `.orbit/STATE.md` and `CLAUDE.md` to reflect what was built — close the loop on
@@ -331,3 +359,5 @@ your own work, the same way the system will.
 - `assets/` — copyable `loop.config.json`, `loop.py`, `activity.py`, `ralph_loop.sh`,
   `orbit-status`, `checks/guard.py`, `runners/inngest-loop.ts`, example subagent.
 - `scripts/scaffold.py` — lays down the deterministic skeleton.
+- `commands/orbit-run.md` — the `/orbit-run <task>` slash command: explicitly send a task
+  through the loop. (Auto-routing is the CLAUDE.md §10 rule; this is the manual target.)

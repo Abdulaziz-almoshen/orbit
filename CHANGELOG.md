@@ -3,6 +3,28 @@
 All notable changes to the `orbit` plugin are documented here. The version here
 must match `VERSION` and `.claude-plugin/plugin.json` — the update checker compares them.
 
+## 0.5.0
+
+Orbit becomes a task router with a smooth, self-answering install. Grounded in a deep study
+of gstack + Claude Code routing primitives + agent frameworks. Honest framing: no tool can
+*force* a workflow to run on a message (gstack's routing is advisory too) — so this is
+gstack-parity reliable-advisory routing; the only hard wall remains the safety hook.
+
+- **Task vs. question routing.** New `CLAUDE.md` §10 "Request Routing" (written on every
+  `/orbit` run): a *task* (build/fix/change) routes through the loop; a *question* is answered
+  directly; ambiguous → ask one. This is the "system prompts itself" behavior.
+- **`/orbit-run <task>` command.** The plugin's first `commands/` — a deterministic, user-
+  invoked target to send a task through the loop. Plus a **Dispatcher/Router** role.
+- **Smooth, infer-first install.** Phase 0 rewritten: infer the domain from the repo and ask
+  **0 questions** on an existing repo, **1** only on greenfield; headless → safe defaults,
+  never hang; choices persist in `.orbit/setup.json` so re-runs don't re-ask. (`/plugin`
+  install was already zero-prompt.)
+- **Library pedagogy adopted.** The 5-part mental model (**trigger → action → proof → memory
+  → stop**) up front; a first-class **`proof`** field in `loop.config.json` and a
+  **Proof/Verification** section in every role spec.
+- **Honesty pass.** README + Phase 7 state plainly what binds (the safety hook) vs. what's
+  advisory (routing); stale version badge fixed (0.2.0 → 0.5.0).
+
 ## 0.4.0
 
 Durable execution — the loop / skill / orchestrator model. Orbit owns the design + safety +
