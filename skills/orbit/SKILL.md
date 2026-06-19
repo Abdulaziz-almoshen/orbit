@@ -79,7 +79,13 @@ Five terms you'll use — gloss each the first time, in one line:
 - **role / sub-agent** — a specialist with one job (gather inputs, build, check safety, review quality). Keeps each step focused.
 - **gate** — a check the output must pass to count as progress (a quality bar; a safety OK).
 - **stop condition** — a hard brake: max steps, max spend, max time, or a forbidden action.
+- **step / checkpoint** — one recorded unit of work. Checkpointing it means a crash resumes from the last completed step instead of redoing (and re-paying for) everything.
 - **dispatch** — the one function in `loop.py` you'd wire to your own model (e.g. Gemini) to run the loop *off* Claude. Until you do, it's a stub.
+
+Note on the word **"skill"**: Orbit's `.orbit/skills/*.md` are **knowledge playbooks** — reference
+material a role loads. That's different from the industry's "durable skill" (a retryable
+*workflow* on an orchestrator). Orbit installs the playbooks; the durable workflows live on
+the execution engine. See `references/durable-execution.md`.
 
 ## What you produce (hybrid output)
 
@@ -97,7 +103,10 @@ job, a CI step):
   approval checkpoints, budgets.
 - `.orbit/loop.py` — a reference runner implementing read→act→evaluate→update→decide
   against `loop.config.json`. Model-agnostic; the dispatch function is a seam you wire
-  to the user's orchestrator (e.g. Gemini, or any model/runtime).
+  to the user's orchestrator (e.g. Gemini, or any model/runtime). It checkpoints steps
+  (`.orbit/steps.jsonl`) so `loop.py --resume` survives a restart. `ralph_loop.sh` is the
+  **dev** runner; for durable production, run on an engine — see
+  `references/durable-execution.md` + the template `assets/runners/inngest-loop.ts`.
 - `.orbit/activity.py` + `scripts/orbit-status` — the **observability layer**: every role
   emits "who's talking" events to `.orbit/activity.jsonl` and a checklist to
   `.orbit/tasks.json`, and `orbit-status --follow` renders a live dashboard (current
@@ -315,8 +324,10 @@ your own work, the same way the system will.
 - `references/hooks-and-tools.md` — hook events, tool wiring, CLI-first guidance.
 - `references/observability.md` — the "who's talking" event stream + live checklist
   (TodoWrite + the `orbit-status` dashboard).
+- `references/durable-execution.md` — what *runs* the loop: the loop/skill/orchestrator
+  model, step checkpointing, concurrency, and when to graduate to a durable engine.
 - `references/profiles/generic.md` — the universal profile: how to characterize any
   product and fit the system to it. Add your own profiles here for repeated setups.
 - `assets/` — copyable `loop.config.json`, `loop.py`, `activity.py`, `ralph_loop.sh`,
-  `orbit-status`, example subagent.
+  `orbit-status`, `checks/guard.py`, `runners/inngest-loop.ts`, example subagent.
 - `scripts/scaffold.py` — lays down the deterministic skeleton.

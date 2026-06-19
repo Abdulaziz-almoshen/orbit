@@ -3,6 +3,28 @@
 All notable changes to the `orbit` plugin are documented here. The version here
 must match `VERSION` and `.claude-plugin/plugin.json` — the update checker compares them.
 
+## 0.4.0
+
+Durable execution — the loop / skill / orchestrator model. Orbit owns the design + safety +
+onboarding layers; it now scaffolds *onto* a durable engine instead of pretending a shell
+`while True` is production.
+
+- **Step checkpointing + `--resume` in `loop.py`.** A `Steps` memo records each completed
+  step's output to `.orbit/steps.jsonl`; on restart, completed steps are skipped — no
+  re-fetch, no re-charged model call, no double side effect. Survives a crash instead of
+  starting over.
+- **Triggers + concurrency in `loop.config.json`.** New `trigger` (manual/cron/event) and
+  `concurrency.singleton_key` (one run per key — fixes the orphaned-background-loop class of
+  bug). New `paths.checkpoints`.
+- **Durable-backend reference runner.** `assets/runners/inngest-loop.ts` maps the loop onto
+  Inngest's `step.run`/`step.invoke`/retries/`onFailure`/concurrency (reference template,
+  grounded in inngest/utah + Inngest docs). `ralph_loop.sh` is now labeled the **dev** runner.
+- **Vocabulary fix.** Orbit's `.orbit/skills/*.md` are **knowledge playbooks**, not "durable
+  skills" (workflows on the engine) — clarified in the glossary, CLAUDE.md template, README.
+- **New guide `references/durable-execution.md`** — three layers, why durability is the
+  foundation, two runners, concurrency, step-level traces as the trust layer, and the
+  orchestration-aware self-extending agent as the north star.
+
 ## 0.3.0
 
 Real enforcement + beginner mode. Grounded in how gstack actually binds safety (real

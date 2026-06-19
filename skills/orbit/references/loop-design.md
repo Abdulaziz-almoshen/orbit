@@ -131,6 +131,25 @@ the agent writes to STATE.md. Use it for autonomous runs inside the Claude Code 
 Both honor the same `loop.config.json`. Pick the runner per where you're executing; the
 contract — and the safety — is identical.
 
+### Durability — survive a restart, don't start over
+
+A process will die (deploy, OOM, crash). A loop that re-runs from scratch on restart
+re-fetches data, re-calls the model (re-burning tokens), and can double-fire side effects.
+So the loop checkpoints **steps**: `loop.py`'s `Steps` memo records each completed step's
+output to `.orbit/steps.jsonl`; a fresh run starts clean, `loop.py --resume` skips completed
+steps and continues. Wrap the things you don't want repeated — fetches, model calls, side
+effects (so resume doesn't double-send). `ralph_loop.sh` is the **dev** runner and is *not*
+durable (a crash restarts the cycle); for unattended production, run on a durable engine
+(Inngest / Temporal / Vercel Workflow) where checkpointing, retries, `onFailure`, triggers,
+and concurrency are native. See `references/durable-execution.md` and the reference template
+`assets/runners/inngest-loop.ts`. **Don't build your own engine — integrate one.**
+
+### Concurrency — one run per key
+
+Set `concurrency.singleton_key` in `loop.config.json` so at most one run happens per key
+(per ticker / service / conversation / screen) — a scheduled run can't stomp a running one.
+A durable engine enforces this natively; the portable runner uses a lockfile.
+
 ## Recommending the first run
 
 Start small and boring on purpose. A good first loop:

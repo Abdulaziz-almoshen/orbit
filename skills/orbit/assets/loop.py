@@ -52,6 +52,45 @@ class Budget:
         return time.time() - self.started_at
 
 
+class Steps:
+    """Durable step memo (portable-path durability).
+
+    Each named step runs AT MOST ONCE: its result is checkpointed to disk, so a restart
+    (crash, deploy, OOM) resumes from the last completed step instead of re-running — and
+    re-paying for — fetches, LLM calls, and side effects. This is what turns a `while True`
+    into something that survives a restart. It mirrors a durable orchestrator's `step.run()`
+    semantics for the portable path; for production, run the loop on a real engine
+    (Inngest/Temporal/Workflow) instead of this file — see references/durable-execution.md.
+
+    Wrap exactly the things you don't want to repeat on resume: external fetches, model
+    calls, and side effects (so a restart doesn't double-send). Don't wrap "read current
+    state" — you want that fresh each cycle. Step outputs must be JSON-serializable."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        self.done: dict = {}
+        if path.exists():
+            for line in path.read_text().splitlines():
+                if line.strip():
+                    r = json.loads(line)
+                    self.done[r["name"]] = r
+
+    def run(self, name: str, fn):
+        if name in self.done:                       # already completed on an earlier run —
+            return self.done[name]["output"]        # skip and return the checkpointed result
+        t0 = time.time()
+        output = fn()
+        rec = {"name": name, "output": output, "status": "done",
+               "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+               "duration_ms": int((time.time() - t0) * 1000)}
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self.path.open("a") as f:              # append = the checkpoint (trace too)
+            f.write(json.dumps(rec) + "\n")
+        self.done[name] = rec
+        emit("step", "", "done", f"{name} ({rec['duration_ms']}ms)")
+        return output
+
+
 # ------------------------------------------------------------------------ the seams
 def dispatch(role: str, task: dict, context: str, cfg: dict) -> dict:
     """MODEL SEAM. Build the role's prompt from .orbit/roles/<role>.md + the relevant
@@ -149,10 +188,18 @@ def needs_human(action: str, cfg: dict, amount_usd: float = 0.0) -> bool:
 
 
 # ------------------------------------------------------------------------- the loop
-def run(cfg: dict):
+def run(cfg: dict, resume: bool = False):
     budget = Budget()
     cycle = 1
     fail_streak = 0
+
+    # Durable checkpoints: a fresh run starts clean; --resume keeps the prior checkpoints so
+    # completed steps are skipped (no re-fetch, no re-charged model calls, no double side
+    # effects). On a production engine this is the orchestrator's job; here it's a file.
+    ckpt = Path(cfg["paths"].get("checkpoints", ".orbit/steps.jsonl"))
+    if not resume and ckpt.exists():
+        ckpt.unlink()
+    steps = Steps(ckpt)
 
     while True:
         # DECIDE (pre-check): does any hard limit say stop before we even start?
@@ -173,7 +220,9 @@ def run(cfg: dict):
         emit("orchestrator", "plan", "info", "planning next action", cycle=cycle)
         task = {"goal": cfg.get("run_goal", "")}
         emit("orchestrator", "act", "start", "delegating to specialist(s)", cycle=cycle)
-        result = dispatch("orchestrator", task, context, cfg)
+        # Checkpointed: on resume, a completed act is NOT re-dispatched (no re-charged model
+        # call, no duplicate side effect) — its result is read back from the checkpoint.
+        result = steps.run(f"c{cycle}:act", lambda: dispatch("orchestrator", task, context, cfg))
         emit("orchestrator", "act", "done", result.get("summary", "(no summary)"), cycle=cycle)
         budget.tokens += result.get("tokens", 0)
         budget.cost_usd += result.get("cost_usd", 0.0)
@@ -185,9 +234,9 @@ def run(cfg: dict):
             on_run_end({"cfg": cfg, "budget": budget, "reason": "awaiting human"})
             return  # resume is a fresh invocation after the human acts
 
-        # EVALUATE — Safety (veto) + Reviewer (quality) gates.
+        # EVALUATE — Safety (veto) + Reviewer (quality) gates (also checkpointed).
         emit("reviewer", "evaluate", "start", "checking gates", cycle=cycle)
-        ev = evaluate_gates(result, cfg)
+        ev = steps.run(f"c{cycle}:evaluate", lambda: evaluate_gates(result, cfg))
         passed = ev["input"] and ev["quality"] and ev["safety"]
         fail_streak = 0 if passed else fail_streak + 1
         emit("reviewer", "evaluate", "done" if passed else "blocked", _g(ev), cycle=cycle)
@@ -217,12 +266,14 @@ def _goal_met(result: dict, cfg: dict) -> bool:
 def main():
     ap = argparse.ArgumentParser(description="Self-prompting loop runner")
     ap.add_argument("--config", default=".orbit/loop.config.json", type=Path)
+    ap.add_argument("--resume", action="store_true",
+                    help="resume from the last checkpoint instead of starting a fresh run")
     args = ap.parse_args()
     try:
         cfg = load_config(args.config)
     except FileNotFoundError:
         sys.exit(f"config not found: {args.config}")
-    run(cfg)
+    run(cfg, resume=args.resume)
 
 
 if __name__ == "__main__":

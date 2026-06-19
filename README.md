@@ -190,6 +190,24 @@ run — start small, dry-run, every checkpoint set to human, watch it stop on it
   You launch it deliberately when you want the system to run autonomously for N cycles — and
   it stops itself at the stop conditions.
 
+### Dev runner vs. durable production
+
+A loop that can't survive a restart isn't a loop — it re-fetches, re-calls the model
+(re-burning tokens), and can double-fire side effects. So be honest about the two runners:
+
+- **`scripts/ralph_loop.sh` — dev.** Fresh `claude -p` per cycle; great for building and
+  watching. **Not durable:** a crash restarts the cycle.
+- **A durable engine — production.** Run on Inngest / Temporal / Vercel Workflow for step
+  checkpointing, retries, `onFailure`, cron/event triggers, and concurrency. `loop.py` adds
+  portable checkpointing (`--resume`); the seam and a reference template
+  ([`assets/runners/inngest-loop.ts`](skills/orbit/assets/runners/inngest-loop.ts)) are
+  included. Orbit brings the **system design + safety + onboarding**; the engine brings the
+  **durability** — don't reinvent it. See
+  [`durable-execution.md`](skills/orbit/references/durable-execution.md).
+
+> Vocabulary note: Orbit's `.orbit/skills/*.md` are **knowledge playbooks** (reference a role
+> loads), distinct from a "durable skill" (a retryable workflow on the engine).
+
 ## Self-update
 
 Every time you run `/orbit`, a preamble quietly checks GitHub for a newer version (throttled

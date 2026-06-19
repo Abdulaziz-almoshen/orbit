@@ -75,9 +75,11 @@ several executors, one safety gate, one quality gate.)
 - Reviewer/Evaluator — quality gate; validates output vs §3 before "done".
 - Reporter — turns results into clear, decision-ready outputs/explanations.
 
-## 7. Skills Index
-(Each skill = packaged knowledge a role loads on demand. Path + when to use. Replace
-these with the knowledge your product re-derives every run.)
+## 7. Skills Index  (knowledge playbooks)
+(Each entry = a **knowledge playbook** — reference material a role loads on demand. Path +
+when to use. Replace these with the knowledge your product re-derives every run. Note: these
+are playbooks, not "durable skills" in the orchestration sense — those are workflows on your
+execution engine. See `references/durable-execution.md`.)
 - `.orbit/skills/<domain-knowledge>.md` — the core how-to of the product's main task.
 - `.orbit/skills/input-validation.md` — quality checks on inputs before use.
 - `.orbit/skills/quality-review.md` — the rubric/criteria the Reviewer applies.

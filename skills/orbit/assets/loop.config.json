@@ -3,6 +3,12 @@
 
   "run_goal": "Produce one validated output for <unit of work> that passes the quality and safety gates, fully explained.",
 
+  "_trigger_help": "What kicks off a run. 'manual' = a human starts it; 'cron' = on a schedule (set cron); 'event' = an external event/webhook (set event). The loop is a trigger + a decision-maker — the trigger is the heartbeat, the model is the decision.",
+  "trigger": { "kind": "manual", "cron": "", "event": "" },
+
+  "_concurrency_help": "Prevent collisions. singleton_key = run at most ONE instance per this key (e.g. per ticker/service/screen) so a scheduled run can't stomp a running one. Empty = no limit. A durable engine enforces this natively; the portable runner uses a lockfile.",
+  "concurrency": { "singleton_key": "", "max_parallel": 1 },
+
   "_hard_limits_help": "Absolute, judgment-free brakes. Checked before every cycle. The backstop that holds even if every other check is misconfigured.",
   "hard_limits": {
     "max_iterations": 3,
@@ -42,6 +48,7 @@
     "artifacts_dir": ".orbit/artifacts",
     "activity": ".orbit/activity.jsonl",
     "tasks": ".orbit/tasks.json",
+    "checkpoints": ".orbit/steps.jsonl",
     "stop_sentinel": ".orbit/STOP"
   }
 }
