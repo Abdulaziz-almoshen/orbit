@@ -119,7 +119,24 @@ counts as progress, and a **Reporter**. No single agent does everything.
 
 ## Install
 
-### Option A — Plugin marketplace (recommended)
+### Option A — Paste this prompt, let Claude install it (easiest)
+
+Copy this into any Claude Code session and send it — the agent does the rest:
+
+```text
+Install the "Orbit" Claude Code plugin from GitHub for me. Run these shell commands
+and show me the output of each:
+
+  claude plugin marketplace add Abdulaziz-almoshen/orbit
+  claude plugin install orbit@orbit
+  claude plugin list
+
+Confirm that "orbit@orbit" shows as enabled, then tell me to restart Claude Code so the
+/orbit and /orbit-upgrade commands load. Orbit is a self-prompting agentic-loop plugin
+(https://github.com/Abdulaziz-almoshen/orbit). Don't make any other changes.
+```
+
+### Option B — Run the commands yourself (marketplace)
 
 Inside Claude Code, run these two prompts:
 
@@ -128,9 +145,9 @@ Inside Claude Code, run these two prompts:
 /plugin install orbit@orbit
 ```
 
-That registers two commands: **`/orbit`** and **`/orbit-upgrade`**.
+Either way you get two commands: **`/orbit`** and **`/orbit-upgrade`**.
 
-### Option B — Clone (for hacking on it, or air-gapped installs)
+### Option C — Clone (for hacking on it, or air-gapped installs)
 
 ```bash
 git clone https://github.com/Abdulaziz-almoshen/orbit.git
