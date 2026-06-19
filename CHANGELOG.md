@@ -3,6 +3,21 @@
 All notable changes to the `orbit` plugin are documented here. The version here
 must match `VERSION` and `.claude-plugin/plugin.json` — the update checker compares them.
 
+## 0.7.1
+
+Docs: surface the Designer and Planning powers in the README. v0.7.0 shipped the capabilities
+but the README didn't name them as headline value — now it does.
+
+- **New "✨ Two powers people love" section** in the README, showcasing the **Planning power**
+  (clarify-first/infer-first, challenge weak assumptions, decision briefs + CEO/eng plan-review,
+  escalate-don't-guess) and the conditional **Designer** (Design Plan + token system + two-pass
+  plan→critique→build, rejects the 3 default AI aesthetics, Design Distinctiveness gate), each
+  pointing at the playbooks it loads from the skill library.
+- **Two new "Why you'll care" rows** — "plans like a senior" and "a real Designer, not slop".
+- **"The team" paragraph** now names the **Dispatcher** (clarify & challenge) and the
+  **Designer** (frontend repos). Framing kept honest: these are advisory/prompt-driven, like routing.
+
+
 ## 0.7.0
 
 A reusable role-skill library + a conditional Designer + planning rigor + a beginner-exciting README.

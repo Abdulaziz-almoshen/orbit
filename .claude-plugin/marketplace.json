@@ -3,7 +3,7 @@
   "owner": { "name": "Abdulaziz Almohsen" },
   "metadata": {
     "description": "Marketplace for the orbit plugin — install a self-prompting agentic loop system into any product repo.",
-    "version": "0.7.0"
+    "version": "0.7.1"
   },
   "plugins": [
     {

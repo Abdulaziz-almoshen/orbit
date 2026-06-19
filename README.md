@@ -12,7 +12,7 @@ One command sets it up. It runs on your own orchestrator. It updates itself.
 
 <br/>
 
-![version](https://img.shields.io/badge/version-0.7.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.7.1-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![self-updating](https://img.shields.io/badge/self--updating-yes-22863a)
@@ -42,7 +42,8 @@ sets it up — it reads your repo and asks almost nothing.
 | A wall of text; you're not sure what's happening | A **live checklist** of who's working, crossing itself off as it goes |
 | It free-edits, force-pushes, maybe breaks your DB | A guard **physically blocks** the catastrophic; irreversible actions are *proposed*, never done alone |
 | A crash → it starts over and re-burns tokens | **Checkpointed** — it resumes from the last finished step |
-| It does exactly what you typed, bugs and all | It's **smarter than the prompt** — clarifies, challenges weak assumptions, proposes a better approach |
+| It does exactly what you typed, bugs and all | It **plans like a senior** — clarifies, challenges weak assumptions, writes a decision brief, proposes a better approach |
+| Generic, templated UI that screams "AI made this" | On frontend repos a real **Designer** stands up — a distinctive, on-brand Design Plan, not slop |
 
 You ask for a **task** → it runs the loop. You ask a **question** → it just answers. That's
 the whole idea: *a system that prompts itself*, so you stop hand-holding and start shipping.
@@ -136,9 +137,55 @@ Run `/orbit` in a repo and it audits the project, then scaffolds two layers:
 - `scripts/ralph_loop.sh` — a fresh-context "Ralph loop" driving headless `claude -p`
 - **native TaskCreate/TaskUpdate checklist** — the pinned, auto-crossed-off list, role-tagged per item
 
-**The team** it stands up: an **Orchestrator** that plans and delegates, the **specialists**
-your domain needs, a **Safety gate** with veto power, a **Reviewer gate** that decides what
-counts as progress, and a **Reporter**. No single agent does everything.
+**The team** it stands up: a **Dispatcher** that clarifies and challenges the ask, an
+**Orchestrator** that plans and delegates, the **specialists** your domain needs (including a
+**Designer** on frontend repos), a **Safety gate** with veto power, a **Reviewer gate** that
+decides what counts as progress, and a **Reporter**. No single agent does everything.
+
+## ✨ Two powers people love
+
+These are what make Orbit feel like a senior teammate instead of an autocomplete — both
+provisioned from a reusable **skill library** (`references/playbooks/`) that the system
+loads into the right role on demand, and that grows over time.
+
+### 🧠 It plans — and pushes back
+
+Orbit doesn't execute your prompt literally. Before it builds, it acts like a thoughtful
+senior engineer + a sharp CEO in the same room:
+
+- **Clarifies first, infer-first.** It reads the repo to answer its own questions, surfaces
+  the premises it's assuming, and asks you **only the one gap it genuinely can't infer** —
+  never a wall of setup questions.
+- **Challenges weak assumptions.** If the ask is narrow, fragile, or about to paint you into
+  a corner, it says so — and **proposes 2–3 approaches** with trade-offs instead of quietly
+  doing the worse one. It's built to *surprise you* with something more accurate, stable, and
+  scalable than what you typed.
+- **Writes a decision brief** for real forks: stakes, a completeness score, a recommendation,
+  and the net call — then runs a **plan-review** (CEO + engineering lenses, blast-radius,
+  "don't boil the ocean") *before* a line of code is written.
+- **Escalates instead of guessing.** Hit an ambiguous, high-impact decision? It stops and
+  asks rather than improvising something irreversible.
+
+> Playbooks: `planning-and-decision-briefs.md` + `clarify-and-challenge.md`.
+
+### 🎨 It designs — distinctively, not generically
+
+When Orbit detects a **frontend/UI repo**, it stands up a dedicated **Designer** sub-agent
+(skipped entirely on backend/CLI/data projects — no bloat where you don't need it). The
+Designer is loaded with a real design methodology, so your UI doesn't come out looking like
+every other AI-generated app:
+
+- **Produces a Design Plan, not ad-hoc CSS** — a named token system (color, type, spacing),
+  layout, and **one signature element**, grounded in *your* product's world.
+- **Two-pass: plan → critique → build.** Before handing off, it runs a distinctiveness gate —
+  *"would a different brief have produced this exact look?"* — and revises until the answer is no.
+- **Actively rejects the 3 default "AI aesthetics"** (the warm-cream/serif look, the
+  near-black/acid-green look, the broadsheet/hairline look) via an anti-AI-aesthetics checklist.
+- **Hands the plan to the Builder; the Reviewer enforces a Design Distinctiveness gate** — the
+  shipped UI must match the plan and *not* read like a template.
+
+> Playbooks: `design-methodology.md` + `anti-ai-aesthetics.md`. Self-contained — no external
+> design skill required.
 
 ## Install
 
