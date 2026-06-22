@@ -3,6 +3,25 @@
 All notable changes to the `orbit` plugin are documented here. The version here
 must match `VERSION` and `.claude-plugin/plugin.json` — the update checker compares them.
 
+## 0.11.0
+
+Orbit now **controls the project** — a deterministic router decides routing, not the model. This
+is the real fix for "nothing triggers Orbit when I just talk to Claude."
+
+- **New `UserPromptSubmit` hook (`route.py`)** — the system's first actor on **every** message,
+  before the model responds. It classifies the prompt *in code* (task verbs → TASK, interrogatives →
+  QUESTION, else AMBIGUOUS) and injects the routing decision as a live instruction: a task routes
+  through the loop, a question is answered directly. The call is the **system's, not Claude's**, and
+  it's present every turn — routing is no longer a passive §10 rule the model may ignore. Best-effort
+  emits the decision to `.orbit/activity.jsonl` so the system "acts first" visibly. Fails open; never
+  blocks a prompt.
+- **`scaffold.py --install-hooks` now wires BOTH hooks** (idempotent, backed up, announced): the
+  router (`UserPromptSubmit` → route.py) and the safety wall (`PreToolUse` → guard.py).
+- **Honest reframe across SKILL.md / CLAUDE.md template / README:** routing is now *system-decided +
+  force-injected every message* (a real control layer), while the model still *executes* the loop (a
+  hook can't run the sub-agents). "Orbit controls the project" is now true at the decision layer, not
+  aspirational. `orbit-uninstall` already strips both hooks.
+
 ## 0.10.1
 
 Tighten the update check (it was advisory, silent, and easy to skip).

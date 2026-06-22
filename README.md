@@ -12,7 +12,7 @@ One command sets it up. It runs on your own orchestrator. It updates itself.
 
 <br/>
 
-![version](https://img.shields.io/badge/version-0.10.1-2b6cb0)
+![version](https://img.shields.io/badge/version-0.11.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![self-updating](https://img.shields.io/badge/self--updating-yes-22863a)
@@ -45,8 +45,10 @@ sets it up — it reads your repo and asks almost nothing.
 | It does exactly what you typed, bugs and all | It **plans like a senior** — clarifies, challenges weak assumptions, writes a decision brief, proposes a better approach |
 | Generic, templated UI that screams "AI made this" | On frontend repos a real **Designer** stands up — a distinctive, on-brand Design Plan, not slop |
 
-You ask for a **task** → it runs the loop. You ask a **question** → it just answers. That's
-the whole idea: *a system that prompts itself*, so you stop hand-holding and start shipping.
+You ask for a **task** → it runs the loop. You ask a **question** → it just answers. And that
+split isn't left to chance: a **router hook reads every message and decides** — the system, not
+the model. That's the whole idea: *a system that prompts itself*, so you stop hand-holding and
+start shipping.
 
 ## The loop
 
@@ -133,7 +135,7 @@ Run `/orbit` in a repo and it audits the project, then scaffolds two layers:
 
 **🔌 Claude Code adapter** — so the same system runs natively here:
 - `.claude/agents/*.md` — the roles as Claude Code subagents
-- `.claude/settings.json` hooks — automated validation on key events
+- `.claude/settings.json` hooks — a **router** (`UserPromptSubmit` → classifies every message: task→loop, question→direct) + a **safety wall** (`PreToolUse` → deny/ask on dangerous commands)
 - `scripts/ralph_loop.sh` — a fresh-context "Ralph loop" driving headless `claude -p`
 - **native TaskCreate/TaskUpdate checklist** — the pinned, auto-crossed-off list, role-tagged per item
 
@@ -303,22 +305,25 @@ Want it fully hands-off? Add `auto_upgrade=true` to `~/.orbit/config`.
 
 Be clear-eyed about where the guarantees are:
 
-- **Inside the loop** (`loop.py` / `ralph_loop.sh`): hard caps always apply (iterations,
-  tokens, cost, runtime), `move_money` is `FORBIDDEN`, and side effects route through
-  human-approval checkpoints. The loop proposes; a human disposes. This part is enforced by
-  the runner.
-- **Routing + roles are advisory.** The §10 routing rule and the roles are *guidance* the
-  model follows reliably (gstack-level), but no tool can *force* them — so they're discipline,
-  not a wall.
-- **The wall is the safety hook — and `/orbit` installs it by default.** The always-on
-  **`PreToolUse` hook** makes your non-negotiables (e.g. force-push, a schema migration,
-  pushing a secrets branch) bind on *every* command, loop or not — the harness runs it before
-  the tool and can `deny`. It's the one thing the agent can't talk its way around. `/orbit`
-  wires it as part of setup and **tells you exactly what it added** (it denies the
-  catastrophic, only *asks* on normal pushes, and **fails open** so it never bricks your
-  shell). Not silent, not opt-in-and-forgotten.
+- **Orbit controls the project — via a router hook, not a hope.** Once installed, a
+  **`UserPromptSubmit` hook** (`route.py`) runs on **every message before Claude responds** and —
+  *deterministically, in code* — classifies it: a **task** (build/fix/change) gets routed through
+  the loop; a **question** is answered directly. **The system makes that call, not the model.** So
+  routing is no longer "a rule the model might follow" — it's decided by Orbit and injected into
+  every turn. (Honest scope: the hook *decides and injects*; the model still *executes* the loop — a
+  hook can't run the sub-agents itself. But the decision layer is now the system's.)
+- **The safety wall is a second hook — also installed by default.** The always-on **`PreToolUse`
+  hook** (`guard.py`) makes your non-negotiables (force-push, a schema migration, pushing a secrets
+  branch) bind on *every* command, loop or not — the harness runs it before the tool and can `deny`.
+  It's the one thing the agent can't talk its way around.
+- **Inside the loop** (`loop.py` / `ralph_loop.sh`): hard caps always apply (iterations, tokens,
+  cost, runtime), `move_money` is `FORBIDDEN`, side effects route through human-approval checkpoints.
+- **What's still model-carried:** executing the loop and the role/gate ceremony. The hooks decide
+  routing and stop dangerous tools; the model does the work under those rails. Both hooks **fail
+  open** (a bug never bricks your shell or blocks a prompt).
 
-Everything Orbit adds — including the hook — is removable with `orbit-uninstall`.
+`/orbit` wires **both hooks** as part of setup and **tells you exactly what it added**. Everything
+Orbit adds — including the hooks — is removable with `orbit-uninstall`.
 
 ## Repo layout
 
@@ -339,7 +344,7 @@ orbit/                              ← this repo = the plugin
     │   ├── references/             # methodology, templates, roles, loop design,
     │   │                           #   observability, hooks/enforcement, profile
     │   ├── assets/                 # loop.py, loop.config.json, activity.py, ralph_loop.sh,
-    │   │                           #   orbit-status, checks/guard.py, example subagent
+    │   │                           #   orbit-status, checks/guard.py + route.py, example subagents
     │   ├── scripts/scaffold.py     # lays down the deterministic skeleton
     │   └── evals/                  # test cases (for contributors)
     └── orbit-upgrade/

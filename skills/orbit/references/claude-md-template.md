@@ -136,8 +136,10 @@ prompts itself *and* stays fast: most requests don't need ceremony, so don't pay
   that matter in **one** message (never one-at-a-time), then proceed.
 
 **Never silently edit a source-of-truth file**; if you act outside the loop, say so and add a
-`[decision]` line to `.orbit/STATE.md`. (Routing is a discipline the model follows — advisory,
-not enforced. The §8 safety hook is the one hard wall, and it binds in **every** lane.)
+`[decision]` line to `.orbit/STATE.md`. (A `UserPromptSubmit` hook — `.orbit/checks/route.py` —
+classifies **every** message *deterministically* and injects this routing decision before you
+respond: the call is the **system's**, not yours, and it's present every turn. You still execute the
+loop. The §8 safety hook is the hard wall that can stop a tool; it binds in every lane.)
 
 ## Maintenance
 Update §2 pointer line and `STATE.md` every cycle. Update §3/§4/§6/§7/§8 only when a

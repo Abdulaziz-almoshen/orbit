@@ -198,7 +198,7 @@ For a greenfield repo, say so plainly and scaffold fresh from the templates.
 ### Phase 2 — Lay the deterministic skeleton (ONE command — don't hand-build it)
 
 Run the scaffolder. It writes the whole identical-every-time skeleton in one shot — the engine
-(`loop.config.json`, `loop.py`, `activity.py`, `ralph_loop.sh`, `orbit-status`, `guard.py`),
+(`loop.config.json`, `loop.py`, `activity.py`, `ralph_loop.sh`, `orbit-status`, `guard.py`, `route.py`),
 `.orbit/STATE.md`, the skill-library playbooks into `.orbit/skills/`, and the **full standard
 team** to both `.claude/agents/*.md` (adapters) and `.orbit/roles/*.md` (specs):
 
@@ -271,41 +271,47 @@ Wire integration per `references/hooks-and-tools.md`:
   CLAUDE.md.
 - Prefer shelling out to existing, trusted CLIs over rebuilding them.
 
-### Phase 6a — Install the always-on safety hooks (the part that actually binds)
+### Phase 6a — Install the always-on hooks (the binding layer + the router)
 
-The most important phase, and the one most setups skip. Everything in CLAUDE.md, the roles,
-and the loop is **advisory** — a normal request goes to normal Claude, which can edit a file
-or run a command without any of it firing (this is the exact bypass the audit caught). The
-only thing that binds *regardless of whether anyone is "in a loop"* is a **PreToolUse hook**:
-Claude Code runs it before a tool call and, if it returns `deny`, the tool never executes.
-That is the line between a guarantee and a suggestion — see `references/hooks-and-tools.md`
-→ "Enforcement vs suggestion."
+The most important phase, and the one most setups skip. Hooks are the only Orbit layer that runs
+**regardless of what the model decides** — Claude Code runs them itself. Orbit installs **two**, by
+default, as part of setup:
 
-Install it **by default — no question — but never silently.** A safety floor the user has to
-opt into is a floor most users skip, and then Orbit's safety is fake. So wire it as part of
-setup and **announce exactly what you did**. (The original footgun wasn't "installed without
-a prompt" — it was "installed *silently* with no findable off-switch." Announce + an easy
-removal fixes that; default-on is correct for a safety floor.)
+- **`PreToolUse` → `.orbit/checks/guard.py`** — the **safety wall.** Runs before a tool call; if it
+  returns `deny`, the tool never executes. This is the line between a guarantee and a suggestion.
+- **`UserPromptSubmit` → `.orbit/checks/route.py`** — the **router.** Runs on **every user message**
+  before the model responds. *The system* classifies it (task → loop, question → answer) and injects
+  that decision as a live instruction. This is what makes Orbit **control the project** — routing is
+  no longer a passive §10 rule the model may ignore; the classification is the system's, and the
+  directive is forced into context every turn. (See `references/hooks-and-tools.md` → "Enforcement vs
+  suggestion.")
 
-1. Edit `.orbit/checks/guard.py` so its `RULES` match *this* repo's truly-dangerous actions
-   (parse argv precisely — never substring-match a command). `deny` only for irreversible/
-   forbidden actions (push a secrets branch, force-push, schema migration); `ask` for
-   reversible-but-risky ones (normal push, deploy, `rm -rf`).
-2. **Wire it by default** — run `python3 .orbit/scripts/.../scaffold.py --install-hooks`
-   (or, if scaffold isn't handy, back up `.claude/settings.json` and merge a `PreToolUse`
-   hook, matcher `Bash`, running `python3 "$CLAUDE_PROJECT_DIR/.orbit/checks/guard.py"`).
-   It backs up settings.json first and is idempotent (won't double-add).
-3. **Announce it, plainly:** "Installed an always-on safety hook — it **denies** <the deny
-   list> and **asks** before <the ask list>, on every command, in or out of the loop. It's
-   active on your **next command — no restart needed** (Claude Code reloads hooks live).
-   Remove anytime with `orbit-uninstall`." Print the exact JSON added.
-4. If `.orbit/setup.json` records that the user previously removed it, **don't re-add
-   silently** — mention it and let them decide.
+Install **both by default — no question — but never silently.** A floor the user opts into is a
+floor most users skip. Wire them as part of setup and **announce exactly what you did.** (The
+original footgun wasn't "installed without a prompt" — it was "installed *silently* with no findable
+off-switch." Announce + easy removal fixes that.)
 
-This makes Orbit's safety claims true: the non-negotiables hold even when the user is just
-chatting. The hook is the *only* binding layer; the role/gate/checklist ceremony and the §10
-routing stay advisory. The hook **fails open** (a guard bug never bricks the shell) and only
-denies the catastrophic, so default-on won't wreck anyone's workflow.
+1. Edit `.orbit/checks/guard.py` so its `RULES` match *this* repo's truly-dangerous actions (parse
+   argv precisely). `deny` only the irreversible/forbidden (force-push, secrets-branch push, schema
+   migration); `ask` for reversible-but-risky (normal push, deploy, `rm -rf`). `route.py` works out
+   of the box; tune its verb lists only if the domain has unusual phrasing.
+2. **Wire both by default** — run `python3 "$CLAUDE_PLUGIN_ROOT/skills/orbit/scripts/scaffold.py"
+   --target . --install-hooks` (or, in the same `scaffold.py` run from Phase 2, just pass
+   `--install-hooks` then). It backs up `.claude/settings.json`, merges each hook idempotently, and
+   prints the exact JSON.
+3. **Announce them, plainly:** "Installed two always-on hooks — a **safety wall** (denies <deny
+   list>, asks before <ask list>) and a **router** (classifies every message → task routes through
+   the loop, question is answered directly). Active on your **next message/command — no restart
+   needed**. Remove anytime with `orbit-uninstall`."
+4. If `.orbit/setup.json` records that the user previously removed a hook, **don't re-add silently** —
+   mention it and let them decide.
+
+This is what makes "Orbit controls the project" true rather than aspirational. **Honest scope:** the
+guard *binds* (it can stop a tool); the router *decides and injects* deterministically every turn (the
+system, not the model) — but the model still **executes** the loop, because a hook can't run the
+sub-agent team itself. So routing went from "advisory text" to "system-decided + force-injected each
+message," which is the real fix for triggering — short of the model literally being unable to ignore
+it. Both hooks **fail open** (a bug never bricks the shell or blocks a prompt).
 
 ### Phase 6.5 — Make the loop watchable (observability)
 
@@ -347,12 +353,15 @@ End every `/orbit` run with a short, beginner-readable summary — not a file du
    unit of work, dry-run, max 3 iterations, every checkpoint human).
 6. **How to undo** — `orbit-uninstall` from this repo removes everything Orbit added and
    leaves your CLAUDE.md alone.
-7. **How routing now works** — say it plainly: *"From now on in this repo, a **task**
-   (build/fix/change something) routes through the loop — or run `/orbit:orbit-run <task>`; a
-   **question** is answered directly. The safety hook is: <on / off>."*
-8. **What binds vs. what's advisory** (don't oversell): routing is **advisory** — the model
-   follows the CLAUDE.md rule reliably, but Claude Code can't *force* it; the only hard wall
-   is the §8 PreToolUse safety hook. `loop.py`'s `dispatch()` is a stub until wired.
+7. **How routing now works** — say it plainly: *"From now on in this repo, a **router hook** reads
+   **every** message before I respond and decides: a **task** (build/fix/change) routes through the
+   loop; a **question** is answered directly. The system makes that call, not me. Both always-on
+   hooks (router + safety) are: <on / off>."*
+8. **What binds vs. what's advisory** (don't oversell): the **router hook** decides routing
+   deterministically and injects it every message (the system's call, not the model's) — but the
+   model still *executes* the loop (a hook can't run the sub-agents). The **safety hook** is the hard
+   wall that can stop a tool. `loop.py`'s `dispatch()` is a stub until wired. So: routing is
+   system-decided + force-injected; execution and the role/gate ceremony are still model-carried.
 9. **A status line** — `DONE` / `DONE_WITH_CONCERNS (…)` / `BLOCKED (…)` so the true state
    is unambiguous.
 
@@ -408,8 +417,8 @@ your own work, the same way the system will.
   (Orchestrator), `clarify-and-challenge.md` (Dispatcher/Orchestrator), `technical-review.md`
   (Reviewer — the technical quality gate). Grow this over time.
 - `assets/` — copyable `loop.config.json`, `loop.py`, `activity.py`, `ralph_loop.sh`,
-  `orbit-status`, `checks/guard.py`, `runners/inngest-loop.ts`, example subagents (incl. designer,
-  reviewer, safety-gate).
+  `orbit-status`, `checks/guard.py` (safety) + `checks/route.py` (router), `runners/inngest-loop.ts`,
+  example subagents (incl. designer, reviewer, safety-gate).
 - `scripts/scaffold.py` — lays down the deterministic skeleton.
 - `commands/orbit-run.md` — the `/orbit:orbit-run <task>` slash command: explicitly send a task
   through the loop. (Auto-routing is the CLAUDE.md §10 rule; this is the manual target.)

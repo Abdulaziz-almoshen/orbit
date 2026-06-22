@@ -45,6 +45,7 @@ FILE_PLAN = [
     ("ralph_loop.sh",    "scripts/ralph_loop.sh",     0o755),
     ("orbit-status",     "scripts/orbit-status",      0o755),
     ("checks/guard.py",  ".orbit/checks/guard.py",    0o755),  # placed, NOT wired (see skill Phase 6a)
+    ("checks/route.py",  ".orbit/checks/route.py",    0o755),  # the UserPromptSubmit router (Phase 6a)
 ]
 
 # Reusable skill-library playbooks copied into .orbit/skills/ (the provisioning step).
@@ -61,7 +62,8 @@ DIRS = [
     ".orbit/artifacts", ".orbit/checks", ".claude/agents", "scripts",
 ]
 
-HOOK_CMD = 'python3 "$CLAUDE_PROJECT_DIR/.orbit/checks/guard.py"'
+GUARD_CMD = 'python3 "$CLAUDE_PROJECT_DIR/.orbit/checks/guard.py"'
+ROUTE_CMD = 'python3 "$CLAUDE_PROJECT_DIR/.orbit/checks/route.py"'
 
 
 def _strip_frontmatter(text: str) -> str:
@@ -89,11 +91,14 @@ def _place(src: Path, dst: Path, created, skipped, mode=None, transform=None):
 
 
 def install_hooks(target: Path) -> None:
-    """Wire .orbit/checks/guard.py as a PreToolUse(Bash) hook in .claude/settings.json.
+    """Wire Orbit's two always-on hooks into .claude/settings.json (default-on + announced):
 
-    Default-on + announced (skill Phase 6a): backs up settings.json first, merges the hook
-    idempotently (never double-adds), prints the exact JSON + the one-line removal. The hook
-    is the only layer that actually binds. Remove anytime with `orbit-uninstall`."""
+      • PreToolUse(Bash) → guard.py  — the binding safety wall (deny/ask on dangerous commands).
+      • UserPromptSubmit → route.py  — the deterministic router: the SYSTEM classifies every message
+        (task → loop, question → direct) and injects the decision, so Orbit controls the project.
+
+    Backs up settings.json first, merges each hook idempotently (never double-adds), prints what it
+    added + the one-line removal. Remove anytime with `orbit-uninstall`."""
     settings = target / ".claude" / "settings.json"
     settings.parent.mkdir(parents=True, exist_ok=True)
     data = {}
@@ -104,23 +109,32 @@ def install_hooks(target: Path) -> None:
         except Exception:
             data = {}
         settings.with_suffix(f".json.bak.{int(time.time())}").write_text(settings.read_text())
+
     hooks = data.setdefault("hooks", {})
+    added = []
+
     pre = hooks.setdefault("PreToolUse", [])
-    already = any(".orbit/" in json.dumps(e) for e in pre)
-    entry = {"matcher": "Bash", "hooks": [{"type": "command", "command": HOOK_CMD}]}
-    if not already:
-        pre.append(entry)
+    if not any("guard.py" in json.dumps(e) for e in pre):
+        pre.append({"matcher": "Bash", "hooks": [{"type": "command", "command": GUARD_CMD}]})
+        added.append("PreToolUse[matcher=Bash] → guard.py   (safety: deny/ask on dangerous commands)")
+
+    ups = hooks.setdefault("UserPromptSubmit", [])
+    if not any("route.py" in json.dumps(e) for e in ups):
+        ups.append({"hooks": [{"type": "command", "command": ROUTE_CMD}]})
+        added.append("UserPromptSubmit → route.py            (routing: classify task vs question)")
+
+    if added:
         tmp = settings.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(data, indent=2))
         tmp.replace(settings)
-        print("Installed always-on safety hook (announced, not silent):")
-        print("  + .claude/settings.json  →  hooks.PreToolUse[matcher=Bash]:")
-        print("      " + json.dumps(entry))
+        print("Installed Orbit's always-on hooks (announced, not silent):")
+        for a in added:
+            print("  + .claude/settings.json  →  hooks." + a)
         if backed_up:
             print("  (your previous settings.json was backed up alongside it)")
     else:
-        print("Safety hook already wired in .claude/settings.json — left as-is.")
-    print("  Remove anytime:  orbit-uninstall   (or delete that hook block)")
+        print("Orbit hooks already wired in .claude/settings.json — left as-is.")
+    print("  Remove anytime:  orbit-uninstall   (or delete those hook blocks)")
 
 
 def main():
