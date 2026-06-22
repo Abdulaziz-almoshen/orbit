@@ -3,6 +3,30 @@
 All notable changes to the `orbit` plugin are documented here. The version here
 must match `VERSION` and `.claude-plugin/plugin.json` — the update checker compares them.
 
+## 0.10.0
+
+Install drops from ~10 minutes to under a minute. Field feedback: a fresh `/orbit` took ~10 min
+because the model read ~14 reference docs and hand-authored ~20 scaffold files one at a time.
+Research confirmed every comparable tool (gstack, spec-kit, BMAD) lays its skeleton down with a
+deterministic script and uses the LLM only for the project-specific spec — Orbit was the anomaly.
+
+- **`scaffold.py` now lays down the ENTIRE deterministic skeleton in one run:** the engine files
+  (as before) **plus** `.orbit/STATE.md`, the skill-library playbooks copied into `.orbit/skills/`,
+  and the full standard team written to both `.claude/agents/*.md` (adapters, verbatim) and
+  `.orbit/roles/*.md` (specs, frontmatter-stripped). New `--frontend` flag stands up the Designer +
+  design playbooks; `--install-hooks` unchanged. Never overwrites; idempotent.
+- **Four new bundled role adapters** (`dispatcher`, `orchestrator`, `builder`, `reporter`) join the
+  existing `reviewer`, `safety-gate`, `designer` — so the scaffolder ships a complete working team.
+- **SKILL.md reworked around the fast path:** a new "the skeleton is a script, not an essay"
+  principle; Phase 2 is now a single `scaffold.py` run; Phases 3–5 shrink to "author the ONE bespoke
+  file (CLAUDE.md) + the one domain skill + tune thresholds — don't recreate what the script wrote."
+  Explicit instruction NOT to read the reference docs to build the scaffold. This is what removes the
+  ~14 sequential reads + ~20 hand-authored files.
+- Result: setup = one deterministic script + a couple of targeted edits, matching how gstack /
+  spec-kit / BMAD scaffold. The intelligence stays where it belongs — characterizing the repo and
+  writing the domain-specific CLAUDE.md.
+
+
 ## 0.9.0
 
 A real **technical-review** playbook for the Reviewer — the sub-agent responsible for technical

@@ -2,30 +2,42 @@
 """
 Scaffold the deterministic skeleton of the orbit system into a target repo.
 
-This handles the mechanical, identical-every-time part: create the .orbit/ and
-.claude/agents/ directories and drop in the static assets (loop.config.json, loop.py,
-ralph_loop.sh). It deliberately does NOT write the bespoke, audit-driven files
-(CLAUDE.md, STATE.md, role specs, skills) -- those are authored per-repo by the agent
-running the skill, from the templates in references/.
+This lays down the mechanical, identical-every-time part in ONE run — so /orbit setup is a
+script (seconds), not the model authoring ~20 files by hand (minutes). It creates the dirs and
+drops in: the engine files (loop.config.json, loop.py, activity.py, ralph_loop.sh, orbit-status,
+guard.py), the reusable skill-library playbooks, the working-state file, and the full standard
+sub-agent team (both the Claude Code adapters in .claude/agents/ and the model-agnostic specs in
+.orbit/roles/).
 
-Safety: never overwrites. If a target file exists, it is left untouched and reported, so
-your existing CLAUDE.md / config is never clobbered.
+It deliberately does NOT write the ONE genuinely bespoke file -- CLAUDE.md -- which the agent
+authors per-repo from references/claude-md-template.md after characterizing the project. That's
+the same split mature tools use (deterministic scaffold via CLI/templates; the LLM writes only
+the project-specific spec).
+
+Safety: never overwrites. If a target file exists it's left untouched and reported, so your
+existing files are never clobbered.
 
 Usage:
   python scaffold.py --target /path/to/repo      # default target: current directory
+  python scaffold.py --frontend                  # also stand up the Designer + design playbooks
+  python scaffold.py --install-hooks             # also wire the PreToolUse safety hook
 """
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import time
 from pathlib import Path
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
 ASSETS = SKILL_ROOT / "assets"
+REFERENCES = SKILL_ROOT / "references"
+PLAYBOOKS = REFERENCES / "playbooks"
+AGENTS = ASSETS / "claude-agents"
 
-# (source in assets, destination relative to target repo root, chmod)
+# Engine files: (source in assets, destination relative to target repo root, chmod)
 FILE_PLAN = [
     ("loop.config.json", ".orbit/loop.config.json", None),
     ("loop.py",          ".orbit/loop.py",          0o755),
@@ -33,16 +45,47 @@ FILE_PLAN = [
     ("ralph_loop.sh",    "scripts/ralph_loop.sh",     0o755),
     ("orbit-status",     "scripts/orbit-status",      0o755),
     ("checks/guard.py",  ".orbit/checks/guard.py",    0o755),  # placed, NOT wired (see skill Phase 6a)
-    ("claude-agents/safety-gate.md", ".claude/agents/safety-gate.md", None),
 ]
+
+# Reusable skill-library playbooks copied into .orbit/skills/ (the provisioning step).
+PLAYBOOKS_ALWAYS = ["clarify-and-challenge.md", "planning-and-decision-briefs.md", "technical-review.md"]
+PLAYBOOKS_FRONTEND = ["design-methodology.md", "anti-ai-aesthetics.md"]
+
+# Standard sub-agent team. Each is copied verbatim to .claude/agents/<role>.md (the adapter) and,
+# frontmatter-stripped, to .orbit/roles/<role>.md (the model-agnostic spec).
+ROLES_ALWAYS = ["dispatcher", "orchestrator", "builder", "reviewer", "reporter", "safety-gate"]
+ROLES_FRONTEND = ["designer"]
 
 DIRS = [
     ".orbit", ".orbit/roles", ".orbit/skills",
     ".orbit/artifacts", ".orbit/checks", ".claude/agents", "scripts",
 ]
 
-
 HOOK_CMD = 'python3 "$CLAUDE_PROJECT_DIR/.orbit/checks/guard.py"'
+
+
+def _strip_frontmatter(text: str) -> str:
+    """Remove a leading YAML frontmatter block (--- ... ---) for the portable role spec."""
+    return re.sub(r"\A---\n.*?\n---\n+", "", text, count=1, flags=re.DOTALL)
+
+
+def _place(src: Path, dst: Path, created, skipped, mode=None, transform=None):
+    """Copy src→dst, never overwriting; optionally transform the text first."""
+    rel = dst
+    if not src.exists():
+        skipped.append(f"{rel}  (MISSING SOURCE {src.name})")
+        return
+    if dst.exists():
+        skipped.append(f"{rel}  (exists -- left untouched)")
+        return
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if transform:
+        dst.write_text(transform(src.read_text()))
+    else:
+        shutil.copy2(src, dst)
+    if mode:
+        dst.chmod(mode)
+    created.append(str(rel))
 
 
 def install_hooks(target: Path) -> None:
@@ -50,8 +93,7 @@ def install_hooks(target: Path) -> None:
 
     Default-on + announced (skill Phase 6a): backs up settings.json first, merges the hook
     idempotently (never double-adds), prints the exact JSON + the one-line removal. The hook
-    is the only layer that actually binds; this makes Orbit's safety real out of the box.
-    Remove anytime with `orbit-uninstall`."""
+    is the only layer that actually binds. Remove anytime with `orbit-uninstall`."""
     settings = target / ".claude" / "settings.json"
     settings.parent.mkdir(parents=True, exist_ok=True)
     data = {}
@@ -64,7 +106,6 @@ def install_hooks(target: Path) -> None:
         settings.with_suffix(f".json.bak.{int(time.time())}").write_text(settings.read_text())
     hooks = data.setdefault("hooks", {})
     pre = hooks.setdefault("PreToolUse", [])
-    # idempotent: skip if an orbit guard hook is already wired
     already = any(".orbit/" in json.dumps(e) for e in pre)
     entry = {"matcher": "Bash", "hooks": [{"type": "command", "command": HOOK_CMD}]}
     if not already:
@@ -85,6 +126,8 @@ def install_hooks(target: Path) -> None:
 def main():
     ap = argparse.ArgumentParser(description="Scaffold the orbit skeleton")
     ap.add_argument("--target", default=".", type=Path, help="target repo root")
+    ap.add_argument("--frontend", action="store_true",
+                    help="also stand up the Designer role + design playbooks (frontend/UI repos)")
     ap.add_argument("--install-hooks", action="store_true",
                     help="also wire the always-on safety hook into .claude/settings.json")
     args = ap.parse_args()
@@ -98,22 +141,27 @@ def main():
     for d in DIRS:
         (target / d).mkdir(parents=True, exist_ok=True)
 
+    # 1. engine files
     for src_rel, dst_rel, mode in FILE_PLAN:
-        src = ASSETS / src_rel
-        dst = target / dst_rel
-        if not src.exists():
-            skipped.append(f"{dst_rel}  (MISSING SOURCE {src_rel})")
-            continue
-        if dst.exists():
-            skipped.append(f"{dst_rel}  (exists -- left untouched)")
-            continue
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dst)
-        if mode:
-            dst.chmod(mode)
-        created.append(dst_rel)
+        _place(ASSETS / src_rel, target / dst_rel, created, skipped, mode)
 
-    print("Scaffolded orbit skeleton into:", target)
+    # 2. working-state file (from the reference template)
+    _place(REFERENCES / "state-template.md", target / ".orbit/STATE.md", created, skipped)
+
+    # 3. skill-library playbooks -> .orbit/skills/
+    playbooks = PLAYBOOKS_ALWAYS + (PLAYBOOKS_FRONTEND if args.frontend else [])
+    for pb in playbooks:
+        _place(PLAYBOOKS / pb, target / ".orbit/skills" / pb, created, skipped)
+
+    # 4. the standard team -> .claude/agents/ (adapter, verbatim) + .orbit/roles/ (spec, no frontmatter)
+    roles = ROLES_ALWAYS + (ROLES_FRONTEND if args.frontend else [])
+    for role in roles:
+        src = AGENTS / f"{role}.md"
+        _place(src, target / ".claude/agents" / f"{role}.md", created, skipped)
+        _place(src, target / ".orbit/roles" / f"{role}.md", created, skipped, transform=_strip_frontmatter)
+
+    print("Scaffolded orbit skeleton into:", target,
+          "(frontend profile)" if args.frontend else "")
     print("\nCreated:")
     for c in created or ["(nothing new)"]:
         print("  +", c)
@@ -123,12 +171,13 @@ def main():
             print("  -", s)
 
     print(
-        "\nNext (authored by hand, per the skill's references/):\n"
-        "  * CLAUDE.md            -> references/claude-md-template.md\n"
-        "  * .orbit/STATE.md    -> references/state-template.md\n"
-        "  * .orbit/roles/*.md  -> references/roles.md (+ .claude/agents/*.md adapters)\n"
-        "  * .orbit/skills/*.md -> the active profile in references/profiles/\n"
-        "  * wire loop.py dispatch() to your orchestrator; fill loop.config.json thresholds"
+        "\nThe skeleton is down. The ONLY thing left to author by hand is the project-specific part:\n"
+        "  * CLAUDE.md  -> from references/claude-md-template.md: fill the project name, what it is,\n"
+        "                  §3 success criteria, §8 stop conditions, and §10 routing. (This is the one\n"
+        "                  file the model writes — everything above was deterministic.)\n"
+        "  * .orbit/skills/<domain>.md  -> the product's core domain how-to (one skill).\n"
+        "  * tailor role NAMES/scope only if the domain needs it; the default team works as-is.\n"
+        "  * wire loop.py dispatch() to your orchestrator; tune loop.config.json thresholds."
     )
     if args.install_hooks:
         print()
@@ -136,8 +185,7 @@ def main():
     else:
         print(
             "\nSafety guard: .orbit/checks/guard.py is PLACED but NOT wired (re-run with\n"
-            "--install-hooks to wire it, or let the skill do it by default in Phase 6a).\n"
-            "It does nothing until it's registered as a PreToolUse hook in .claude/settings.json."
+            "--install-hooks to wire it, or let the skill do it by default in Phase 6a)."
         )
     print(
         "\nTo undo everything later: run `orbit-uninstall` from this repo (lists, asks, then\n"

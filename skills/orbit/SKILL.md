@@ -138,6 +138,17 @@ Work in small, verifiable steps. After each phase, briefly tell the user what la
 and what's next. For any non-trivial architectural change, propose the plan before
 writing — don't silently restructure their orchestration.
 
+**Fast path — the skeleton is a script, not an essay.** Almost everything Orbit installs is
+*identical every time*, so a single `scaffold.py` run writes it (Phase 2) — you do **not**
+hand-author it file-by-file. Your only real work is the *project-specific* parts: characterizing
+the repo, authoring `CLAUDE.md`, and writing the one domain skill. **Do not read Orbit's reference
+docs to "build" the scaffold** — the script owns the structure. The only references you may need
+are `profiles/generic.md` (to infer the domain) and `claude-md-template.md` (to write CLAUDE.md);
+skip `methodology`/`roles`/`loop-design`/`observability`/`durable-execution` unless you're
+customizing that exact piece. This is what keeps setup **under a minute instead of ten** — and it
+matches how mature tools (gstack, spec-kit, BMAD) scaffold: a deterministic script for the
+skeleton, the model only for the project-specific spec.
+
 ### Phase 0 — Orient and characterize the domain (infer first; ask only what you can't)
 
 Setup must feel like gstack: smooth, near-zero questions. **Inference is the default; asking
@@ -180,75 +191,70 @@ the model are invoked, and any current state handling. Then summarize for the us
 
 For a greenfield repo, say so plainly and scaffold fresh from the templates.
 
-### Phase 2 — CLAUDE.md (highest priority)
+### Phase 2 — Lay the deterministic skeleton (ONE command — don't hand-build it)
 
-Create or heavily update `CLAUDE.md` in the repo root from `references/claude-md-template.md`.
-This is the file the whole system reads first. Required sections are listed in the
-template. Keep it focused and *updatable* — it is memory, not a manual. Push detailed,
-rarely-changing rules into skills and hooks; keep CLAUDE.md to overview, current state
-pointer, success criteria, conventions, the agent roster, skills index, **stop
-conditions**, and the loop shape. If a `CLAUDE.md` already exists, merge — preserve the
-user's content, don't clobber it.
+Run the scaffolder. It writes the whole identical-every-time skeleton in one shot — the engine
+(`loop.config.json`, `loop.py`, `activity.py`, `ralph_loop.sh`, `orbit-status`, `guard.py`),
+`.orbit/STATE.md`, the skill-library playbooks into `.orbit/skills/`, and the **full standard
+team** to both `.claude/agents/*.md` (adapters) and `.orbit/roles/*.md` (specs):
 
-**Always write §10 "Request Routing" into CLAUDE.md** — this is what makes Orbit a task
-router instead of a one-shot installer. It's the rule the model reads every session that
-sends *tasks* through the loop and answers *questions* directly. Without it, Orbit goes
-back to being invisible during normal work. (This routing is advisory — the model follows
-it; the only hard wall is the §8 safety hook. Be honest about that in the summary.)
+```bash
+python3 "$CLAUDE_PLUGIN_ROOT/skills/orbit/scripts/scaffold.py" --target . [--frontend] [--install-hooks]
+```
 
-Also create `.orbit/STATE.md` from `references/state-template.md` and seed it with the
-open tasks you discovered in the audit. At the end of setup, write `.orbit/setup.json`
-(the inferred characterization + any choices) so a re-run doesn't re-ask.
+- Add **`--frontend`** if Phase 0 detected a UI repo — it stands up the **Designer** + the design
+  playbooks. Omit it on backend/CLI/data projects.
+- Add **`--install-hooks`** to wire the safety hook now (or leave it for Phase 6a).
+- It **never overwrites** — existing files are left untouched and reported, so a re-run is safe.
 
-### Phase 3 — Define the sub-agent team (+ provision their skills)
+This replaces hand-authoring ~20 files (the old 10-minute path). The standard team
+(dispatcher, orchestrator, builder, reviewer, reporter, safety-gate — plus designer on
+`--frontend`) and its playbooks are now in place and working. **Don't re-author any of it.**
 
-Don't build one big agent. Decompose into specialized roles, following
-`references/roles.md`. Keep the *shape* — one planner, several executors, one safety
-gate, one quality gate — and rename/scope the roles to the product's real subtasks:
-Dispatcher, Orchestrator/PM, the specialists this domain needs, Safety/Compliance, Quality
-Reviewer/Evaluator, Reporter. **Add the conditional roles the repo calls for** — most
-importantly the **Designer** when this is a frontend/UI product (see `references/profiles/frontend.md`);
-plenty of products don't need one, so only stand it up when the signals are there.
+### Phase 3 — Author CLAUDE.md (the one bespoke file)
 
-For each role, write a model-agnostic spec to `.orbit/roles/<role>.md` **and** a Claude
-Code subagent to `.claude/agents/<role>.md` (the adapter — same responsibilities, Claude
-Code frontmatter). Document handoffs + shared-state rules per `references/roles.md`.
+This is the single file the model writes by hand — the project-specific spec the whole system
+reads first. Create or merge `CLAUDE.md` in the repo root from `references/claude-md-template.md`.
+Keep it focused and *updatable* — it's memory, not a manual: overview, current-state pointer,
+**§3 success criteria**, conventions, the agent roster (the scaffolded team), skills index,
+**§8 stop conditions**, the loop shape, and **§10 Request Routing**. If a `CLAUDE.md` already
+exists, **merge — preserve the user's content, don't clobber it.**
 
-**Provision each role its skills.** Orbit ships a reusable playbook library
-(`references/playbooks/` — see the "Skill library" section of `references/roles.md`). When
-you create a role, copy the playbooks it needs into `.orbit/skills/` and point the role's
-spec at them: the **Orchestrator** always gets `planning-and-decision-briefs`, the
-**Dispatcher/Orchestrator** get `clarify-and-challenge` (so tasks are understood and improved,
-not executed literally), the **Reviewer** always gets `technical-review` (the technical quality
-gate — severity×confidence, quote-the-line verification, blast-radius judgment; use
-`assets/claude-agents/reviewer.md` as the adapter), and the **Designer** gets `design-methodology`
-+ `anti-ai-aesthetics`. This is how the system grows — add playbooks to the library over time.
+**Always write §10 "Request Routing"** — it's what makes Orbit a task router (fast by default:
+small/clear/reversible → just do it; substantial/ambiguous/irreversible → the full loop) rather
+than a one-shot installer. (Advisory — the model follows it; the only hard wall is the §8 safety
+hook. Say so in the summary.)
 
-### Phase 4 — Create domain skills
+The scaffolder already wrote `.orbit/STATE.md` — seed it with the open tasks from your audit. At
+the end of setup, write `.orbit/setup.json` (the inferred characterization + any choices) so a
+re-run doesn't re-ask.
 
-Package 4–6 high-value, reusable skills into `.orbit/skills/`, drawn from what this
-product re-derives or re-explains every run. Ask "what knowledge do we keep re-pasting
-into prompts?" — that's a skill. Each skill is knowledge a role loads on demand — keep
-them focused. Reference every skill in CLAUDE.md's Skills Index so roles know when to
-reach for them.
+### Phase 4 — Customize, don't recreate
 
-### Phase 5 — The self-prompting loop + stop conditions
+The team and the library playbooks are already in place from Phase 2. Your only authoring here:
+- Write the product's **one** domain skill → `.orbit/skills/<domain>.md` (the core how-to this
+  product re-derives every run — "what do we keep re-pasting into prompts?"). Index it in
+  CLAUDE.md's §7 Skills Index. Add a second domain skill only if there's a clearly distinct body
+  of knowledge.
+- **Tailor role names/scope only if the domain needs it** — the default team works as-is. Add a
+  domain specialist (e.g. an Input/Research or Analyst role) only when the work genuinely needs
+  one; copy an existing adapter in `.claude/agents/` as the starting shape.
+- The Designer is already stood up iff you passed `--frontend`.
 
-Lay down the loop from `references/loop-design.md`:
-1. Copy `assets/loop.config.json` → `.orbit/loop.config.json` and fill in real
-   thresholds with the user (caps, eval gates, approval checkpoints).
-2. Copy `assets/loop.py` → `.orbit/loop.py` and wire its `dispatch()` seam to their
-   orchestrator. Keep it model-agnostic.
-3. Copy `assets/ralph_loop.sh` → `scripts/ralph_loop.sh` for the Claude Code path.
+### Phase 5 — Tune the loop config (already placed)
 
-The loop is **read → plan → act → evaluate → update → decide**. The non-negotiable part
-is the stop conditions — Daisy stressed these to avoid runaway cost and damage. Every
-loop ships with, at minimum: a max-iterations cap, a token/cost budget per cycle and per
-run, a max-runtime wall clock, eval gates that block progress unless inputs/quality/safety
-checks pass, an explicit done signal, and human-approval checkpoints for any high-impact
-or outward-facing action. **The system never takes an irreversible, financial, or
-outward-facing action on its own — it proposes; a human disposes.** This is baked into
-the config and the Safety role; see `references/loop-design.md`.
+The scaffolder placed `loop.config.json`, `loop.py`, and `ralph_loop.sh`. Your job is only to
+**fill real thresholds** in `.orbit/loop.config.json` with the user (caps, eval gates, approval
+checkpoints) and wire `loop.py`'s `dispatch()` seam to their orchestrator.
+
+The loop is **read → plan → act → evaluate → update → decide**. The non-negotiable part is the
+stop conditions — Daisy stressed these to avoid runaway cost and damage. Every loop ships with, at
+minimum: a max-iterations cap, a token/cost budget per cycle and per run, a max-runtime wall
+clock, eval gates that block progress unless inputs/quality/safety checks pass, an explicit done
+signal, and human-approval checkpoints for any high-impact or outward-facing action. **The system
+never takes an irreversible, financial, or outward-facing action on its own — it proposes; a human
+disposes.** This is baked into the config and the Safety role; see `references/loop-design.md` only
+if you're changing the loop's shape.
 
 ### Phase 6 — Tools and hooks
 
@@ -299,8 +305,9 @@ denies the catastrophic, so default-on won't wreck anyone's workflow.
 
 ### Phase 6.5 — Make the loop watchable (observability)
 
-A loop you can't watch is a loop nobody trusts. Lay down the live "who's talking + checklist"
-layer per `references/observability.md`. **Do two things every cycle — not one:**
+A loop you can't watch is a loop nobody trusts. The scaffolder already placed the observability
+layer (`.orbit/activity.py` + `scripts/orbit-status`) — you don't build it, you *use* it. **Do
+two things every cycle — not one:**
 
 1. **ALWAYS write `.orbit/tasks.json` + `.orbit/activity.jsonl`** (via `.orbit/activity.py`'s
    `set_tasks` / `update_task` / `emit`). This is the **guaranteed-visible** path: it feeds
