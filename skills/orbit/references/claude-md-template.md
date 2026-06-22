@@ -108,25 +108,34 @@ read `CLAUDE.md` + `STATE.md` → plan next action → act via sub-agent(s) → 
 `.orbit/loop.py` (portable, dispatch seam wired to the orchestrator) or
 `scripts/ralph_loop.sh` (Claude Code, fresh context per cycle). Config: §8 / loop.config.json.
 
-## 10. Request Routing — task vs. question  (read on EVERY user message)
-Classify each request before acting. This is how the system prompts itself instead of
-being prompted one message at a time:
+## 10. Request Routing — fast by default  (read on EVERY user message)
+Classify each request, then spend effort **in proportion to it**. This is how the system
+prompts itself *and* stays fast: most requests don't need ceremony, so don't pay for it.
 
 - **QUESTION** (status / explanation: "is it live?", "what does X do?", "why did Y fail?")
   → answer directly. No loop, no roles. Read `.orbit/STATE.md` if it helps.
-- **TASK** (changes the product: build, implement, add, fix, refactor, create, develop,
-  migrate, redesign, port…) → **do NOT free-edit.** Route it through the loop: read this
-  file + `.orbit/STATE.md`, append the task to STATE.md's queue, then run
-  read→plan→act→evaluate→update→decide via the roles in `.claude/agents/` (Dispatcher →
-  specialists → Safety → Reviewer → Reporter). Announce `[orchestrator] routing: <task>`
-  and drive the TaskCreate/TaskUpdate checklist. The user can also start one explicitly with
-  `/orbit:orbit-run <task>`.
-- **AMBIGUOUS** → ask exactly one clarifying question; don't guess.
+- **TASK** (changes the product: build, fix, add, refactor, migrate, redesign…) → route it
+  through the loop, but **size the loop to the task** — and never free-edit a source-of-truth
+  file outside it:
+  - **Small · clear · reversible** (a rename, a log line, a localized fix) → **just do it well,
+    now.** Reason internally, act, self-check against §3, log one line in STATE.md. No briefs,
+    no role hand-offs, no phase narration. *This is the default, and it's fast.*
+  - **Substantial · ambiguous · irreversible** (a new capability; anything touching
+    schema/data/security/payments; wide blast radius) → run the full loop, and run the
+    **thinking in parallel**: infer from the repo, generate 2–3 approaches, and scan risks
+    **concurrently**, then synthesize and act via the roles in `.claude/agents/` (Dispatcher →
+    specialists → Safety → Reviewer → Reporter). Drive the TaskCreate/TaskUpdate checklist.
+    Parallel beats serial here — same wall-clock as one pass, but sharper (more perspectives
+    at once). This is where the system is *smarter*, not slower.
 
-When in doubt, route to the loop. **Never silently edit a source-of-truth file outside the
-loop**; if you must act outside it, say so and add a `[decision]` line to `.orbit/STATE.md`.
-(This routing is a discipline the model follows — it is advisory, not enforced. The only
-hard wall is the §8 safety hook.)
+  You pick the lane by **judgment, not a command**. When genuinely unsure, take the heavier
+  lane for anything touching data/security/money or hard to undo; otherwise default to fast.
+- **AMBIGUOUS** → infer from the repo first; if a real blocker remains, ask the few questions
+  that matter in **one** message (never one-at-a-time), then proceed.
+
+**Never silently edit a source-of-truth file**; if you act outside the loop, say so and add a
+`[decision]` line to `.orbit/STATE.md`. (Routing is a discipline the model follows — advisory,
+not enforced. The §8 safety hook is the one hard wall, and it binds in **every** lane.)
 
 ## Maintenance
 Update §2 pointer line and `STATE.md` every cycle. Update §3/§4/§6/§7/§8 only when a

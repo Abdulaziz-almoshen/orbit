@@ -3,6 +3,12 @@
 Good planning is what makes the loop build the *right* thing, scalably — not just execute the
 literal ask. This packages the planning rigor every Orchestrator should apply.
 
+**Proportional and parallel.** Planning rigor is for **genuine forks**, not every task — a
+clear, reversible call needs no brief; just make it and log it. When a fork *is* real, generate
+the options **concurrently** (fan out), reason **internally**, and surface the decision — not a
+long transcript. Depth scales to stakes; the goal is the right call *fast*, never ceremony for
+its own sake.
+
 ## Decision briefs — how to frame a real fork
 When the plan hits a genuine choice (not a trivial one), don't bury it or guess. Frame it:
 

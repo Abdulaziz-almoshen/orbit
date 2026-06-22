@@ -3,6 +3,33 @@
 All notable changes to the `orbit` plugin are documented here. The version here
 must match `VERSION` and `.claude-plugin/plugin.json` — the update checker compares them.
 
+## 0.8.0
+
+Fast by default + no-restart install. Two pieces of field feedback drove this: "the thinking
+takes too long" and "installing forces me to close the session and start a new one."
+
+- **No-restart install (like gstack).** New `install.sh` installs Orbit as a Claude Code
+  **user skill** in `~/.claude/skills/` (one line: `curl … | bash`). Claude Code watches that
+  folder and discovers skills **live**, so `/orbit` works immediately — no restart. The
+  marketplace plugin stays as an alternative (it's the path that needs a restart, since
+  marketplace plugins resolve at startup). Verified against the docs: the PreToolUse safety
+  hook also reloads live (fires on the next command), so *nothing* in setup needs a restart —
+  messaging in SKILL.md Phase 6a/7 and the README updated to say so.
+- **`/orbit-upgrade` covers the new install:** a skills-dir install self-updates by re-running
+  the installer (re-fetch + overwrite, no restart); the plugin-cache path still defers to
+  `/plugin update`. `orbit-uninstall` now prints how to remove either install shape.
+- **Fast by default (no new command, no "fast mode", no lost rigor).** Routing (`§10`) gained a
+  proportional rule: a **small · clear · reversible** task is just *done* (reason internally,
+  act, self-check) while **substantial · ambiguous · irreversible** work runs the full loop —
+  the model picks the lane by judgment, not a command. The deliberation that *does* run now
+  goes **in parallel** (infer ∥ approaches ∥ risks), which is both faster and *smarter* (more
+  perspectives at once) than the old serial plan→brief→review chain. Clarify-and-challenge no
+  longer pings one question at a time — it infers first and batches the few that matter into
+  one message. Updated across `§10`, `clarify-and-challenge`, `planning-and-decision-briefs`,
+  `methodology`, `roles`, and SKILL.md. The intelligence (clarify, challenge, decision briefs,
+  Designer) is unchanged or sharper — it just stops taxing trivial work.
+
+
 ## 0.7.1
 
 Docs: surface the Designer and Planning powers in the README. v0.7.0 shipped the capabilities

@@ -12,7 +12,7 @@ One command sets it up. It runs on your own orchestrator. It updates itself.
 
 <br/>
 
-![version](https://img.shields.io/badge/version-0.7.1-2b6cb0)
+![version](https://img.shields.io/badge/version-0.8.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![self-updating](https://img.shields.io/badge/self--updating-yes-22863a)
@@ -189,48 +189,43 @@ every other AI-generated app:
 
 ## Install
 
-### Option A — Paste this prompt, let Claude install it (easiest)
+### Option A — One line, no restart (recommended)
 
-Open Claude Code and paste this:
+Paste into your terminal:
 
-```text
-Install the "Orbit" Claude Code plugin for me. Run these shell commands and show the output:
-
-  claude plugin marketplace add Abdulaziz-almoshen/orbit
-  claude plugin install orbit@orbit
-  claude plugin list
-
-Confirm "orbit@orbit" shows as enabled, then tell me to restart Claude Code so the /orbit
-and /orbit-upgrade commands load. Do NOT edit any project files and do NOT make any git
-commits — installation is user-scoped and self-contained.
+```bash
+curl -fsSL https://raw.githubusercontent.com/Abdulaziz-almoshen/orbit/main/install.sh | bash
 ```
 
-That's the whole install — it's user-scoped, so `/orbit` and `/orbit-upgrade` work in every
-project after a restart.
+This installs Orbit as a Claude Code **user skill** in `~/.claude/skills/`. Claude Code
+watches that folder and discovers skills **live** — so `/orbit` and `/orbit-upgrade` work
+**immediately, with no restart** (the same mechanism gstack uses). It's user-scoped, so they
+work in every project. Update anytime with `/orbit-upgrade`.
 
-**Want teammates to get it on a shared project too?** After installing, ask Claude:
-*"add Orbit to this project for teammates"*. It runs the install with `--scope project`,
-which writes `.claude/settings.json` — and then **you** review and commit that file. Orbit
-never commits to your repo for you.
+### Option B — Marketplace plugin
 
-### Option B — Run the commands yourself (marketplace)
-
-Inside Claude Code, run these two prompts:
+If you prefer the plugin manager, run these inside Claude Code:
 
 ```text
 /plugin marketplace add Abdulaziz-almoshen/orbit
 /plugin install orbit@orbit
 ```
 
-Either way you get two commands: **`/orbit`** and **`/orbit-upgrade`**.
+Marketplace plugins are loaded at startup, so this path **does need one restart** to pick up
+`/orbit`. (Option A doesn't — that's the whole point of it.)
+
+**Want teammates to get it on a shared project too?** After installing, ask Claude:
+*"add Orbit to this project for teammates"*. It writes `.claude/settings.json` — and then
+**you** review and commit that file. Orbit never commits to your repo for you.
 
 ### Option C — Clone (for hacking on it, or air-gapped installs)
 
 ```bash
 git clone https://github.com/Abdulaziz-almoshen/orbit.git
+cd orbit && ./install.sh          # installs from the clone — no restart
 ```
 
-Then point Claude Code at the local copy:
+Or point the plugin manager at the local copy instead:
 
 ```text
 /plugin marketplace add ./orbit
@@ -291,8 +286,8 @@ Every time you run `/orbit`, a preamble quietly checks GitHub for a newer versio
 to once a day). If there's one, it offers to upgrade and then continues. You can also:
 
 ```text
-/orbit-upgrade               # git pull + "what's new", with auto-upgrade / snooze options
-/plugin update orbit@orbit   # the platform's built-in updater
+/orbit-upgrade               # works for any install — fetches latest + "what's new", no restart
+/plugin update orbit@orbit   # only if you installed via the marketplace (Option B)
 ```
 
 Want it fully hands-off? Add `auto_upgrade=true` to `~/.orbit/config`.
@@ -327,6 +322,7 @@ Everything Orbit adds — including the hook — is removable with `orbit-uninst
 
 ```
 orbit/                              ← this repo = the plugin
+├── install.sh                      # one-line user-skill install (no restart; the gstack way)
 ├── .claude-plugin/
 │   ├── plugin.json                 # manifest (name, version)
 │   └── marketplace.json            # marketplace catalog

@@ -86,5 +86,7 @@ echo "Removed:"
 for r in "${REMOVED[@]:-}"; do [ -n "$r" ] && echo "  - $r"; done
 [ ${#REMOVED[@]} -eq 0 ] && echo "  (nothing — already clean)"
 echo
-echo "Done. CLAUDE.md left as-is. To remove the plugin too:"
-echo "  claude plugin uninstall orbit@orbit && claude plugin marketplace remove orbit"
+echo "Done. CLAUDE.md left as-is."
+echo "To remove Orbit itself too:"
+echo "  • skills-dir install:  rm -rf ~/.claude/skills/orbit ~/.claude/skills/orbit-upgrade"
+echo "  • marketplace plugin:  claude plugin uninstall orbit@orbit && claude plugin marketplace remove orbit"

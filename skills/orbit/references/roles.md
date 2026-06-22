@@ -130,9 +130,20 @@ Parallel roles must not corrupt shared state. The rules:
 
 ## Fan-out guidance for the Orchestrator
 
-- Parallelize only independent work (e.g. two independent analyses of the same input, or
-  the same analysis across many independent items). Anything with a data dependency runs
-  in sequence.
+- **Size the loop to the task first (fast by default).** A small, clear, reversible task gets
+  no fan-out at all — do it directly, self-check, log one line. Spin up the team only for
+  substantial, ambiguous, or irreversible work. Most tasks are the former; that's what keeps
+  the system quick (CLAUDE.md §10).
+- **Deliberate in parallel, not serially.** When work *is* substantial, fan out the *thinking*
+  too — infer-from-repo ∥ generate 2–3 approaches ∥ scan risks — then synthesize. Same
+  wall-clock as one pass, more perspectives = a sharper call. A serial plan→brief→review chain
+  is the slow path; avoid it.
+- Parallelize only independent work (two independent analyses of the same input, or the same
+  analysis across many independent items). Anything with a data dependency runs in sequence.
 - Give each spawned role only the context it needs (the relevant STATE.md slice + input
   paths), not the whole history — that's the point of decomposition.
+- **Load only the playbooks the lane needs.** Don't pull planning + clarify + design playbooks
+  for a one-line fix — lazy-load by task. Less context = faster reasoning, no loss of rigor.
+- Reason internally and **surface the decision, not the transcript** — narration is latency the
+  user feels; judgment is the value.
 - Collect all parallel results, then do a single STATE.md update. One writer, one write.

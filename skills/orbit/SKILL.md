@@ -284,8 +284,9 @@ removal fixes that; default-on is correct for a safety floor.)
    hook, matcher `Bash`, running `python3 "$CLAUDE_PROJECT_DIR/.orbit/checks/guard.py"`).
    It backs up settings.json first and is idempotent (won't double-add).
 3. **Announce it, plainly:** "Installed an always-on safety hook — it **denies** <the deny
-   list> and **asks** before <the ask list>, on every command, in or out of the loop. Remove
-   anytime with `orbit-uninstall`." Print the exact JSON added.
+   list> and **asks** before <the ask list>, on every command, in or out of the loop. It's
+   active on your **next command — no restart needed** (Claude Code reloads hooks live).
+   Remove anytime with `orbit-uninstall`." Print the exact JSON added.
 4. If `.orbit/setup.json` records that the user previously removed it, **don't re-add
    silently** — mention it and let them decide.
 
@@ -342,6 +343,9 @@ End every `/orbit` run with a short, beginner-readable summary — not a file du
 9. **A status line** — `DONE` / `DONE_WITH_CONCERNS (…)` / `BLOCKED (…)` so the true state
    is unambiguous.
 
+Nothing here needs a restart: the scaffolded files are read live, and the safety hook arms on
+the next command. The user can start working immediately.
+
 Then update `.orbit/STATE.md` and `CLAUDE.md` to reflect what was built — close the loop on
 your own work, the same way the system will.
 
@@ -349,6 +353,12 @@ your own work, the same way the system will.
 
 - **Stop conditions are not optional.** A loop without hard caps is a defect. If the
   user waves them off, install conservative defaults anyway and tell them where to relax.
+- **Fast by default; smart where it counts.** Depth scales to the task, automatically — no
+  mode, no extra command. A small, clear, reversible task is just done; the full team and
+  *parallel* deliberation are reserved for substantial, ambiguous, or irreversible work
+  (CLAUDE.md §10). When the system does deliberate, it fans out (approaches ∥ risks ∥ infer)
+  instead of a slow serial chain, and surfaces the decision, not a transcript. Don't build a
+  system that runs six phases of ceremony on a one-line fix — that's the latency users feel.
 - **Never wire auto-execution of irreversible or outward-facing actions.** Moving money,
   sending outbound messages, deploys, deleting data — these route through a human-approval
   checkpoint. The loop proposes; a human disposes.

@@ -100,7 +100,13 @@ git reset --hard "origin/$_BRANCH"
 echo "$_STASH" | grep -q "Saved working directory" && echo "NOTE: local changes were stashed — run 'git stash pop' in $INSTALL_DIR to restore."
 ```
 
-**Non-git install (`IS_GIT=no`, e.g. a plugin cache copy):** prefer the platform updater — tell the user to run `/plugin update orbit@orbit` (or `/plugin marketplace update orbit`), since Claude Code owns that cache. Do not git-clone over a managed cache.
+**Skills-dir install (`IS_GIT=no` and `$INSTALL_DIR/.install-method` says `method=skills-dir`, or `$INSTALL_DIR` is under `~/.claude/skills/`) — the default install:** re-run the installer, which re-downloads the latest and overwrites in place (no restart needed):
+```bash
+_BR="$(grep -E '^branch=' "$INSTALL_DIR/.install-method" 2>/dev/null | cut -d= -f2-)"; _BR="${_BR:-main}"
+ORBIT_BRANCH="$_BR" bash -c 'curl -fsSL "https://raw.githubusercontent.com/Abdulaziz-almoshen/orbit/'"$_BR"'/install.sh" | bash'
+```
+
+**Plugin-cache install (`IS_GIT=no` and `$INSTALL_DIR` is under `~/.claude/plugins/`):** prefer the platform updater — tell the user to run `/plugin update orbit@orbit` (or `/plugin marketplace update orbit`), since Claude Code owns that cache. Do not git-clone over a managed cache.
 
 ### Step 4: mark + clear caches
 

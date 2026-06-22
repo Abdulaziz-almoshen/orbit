@@ -31,7 +31,16 @@ Everything this skill installs exists to make that real, and to make it **safe**
    everything mediocrely and blows its context. A *team* — each role with a narrow remit,
    its own instructions, and its own context budget — does each thing well and in
    parallel. The Orchestrator plans and delegates; specialists execute; a Reviewer gates.
-   This mirrors a real SDLC org chart on purpose.
+   This mirrors a real SDLC org chart on purpose. **Fan out, don't queue:** independent
+   work — and independent *deliberation* (generating approaches, scanning risks, inferring
+   from the repo) — runs concurrently, then converges. Parallel is both faster *and* sharper
+   than a serial chain, because you get several perspectives at once instead of one.
+
+   **Fast by default.** Effort scales to the task, automatically — no mode, no command. A
+   small, clear, reversible task is just *done* (reason internally, act, self-check); the full
+   team + parallel deliberation is reserved for substantial, ambiguous, or irreversible work.
+   The system spends its thinking where the stakes are, so the common case stays quick and the
+   hard case stays smart. Surface decisions, not transcripts.
 
 3. **Skills as packaged knowledge.** Recurring domain expertise — the know-how the team
    would otherwise re-derive or re-paste into a prompt every run — shouldn't live in
