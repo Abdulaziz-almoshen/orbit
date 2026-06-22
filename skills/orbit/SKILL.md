@@ -18,31 +18,35 @@ description: >-
 
 # Orbit — install a self-prompting system into a repo
 
-## Preamble — run this first (update check)
+## Preamble — STEP 0, run this BEFORE anything else (update check)
 
-Before doing anything else, check whether a newer version of this plugin is available. Run:
+This is your **first action** the moment `/orbit` loads — before you read the repo, plan, respond,
+or run any other phase. **Do not skip it. Do not batch it after other work.** Run exactly this one
+block (it resolves the install location whether Orbit is a user skill or a marketplace plugin):
 
 ```bash
-_UPD=""
+_UPD=""; _DIR=""; _CC="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 for _p in "${CLAUDE_PLUGIN_ROOT:-}/bin/orbit-update-check" \
+          "$_CC/skills/orbit/bin/orbit-update-check" \
           "$HOME/.claude/skills/orbit/bin/orbit-update-check" \
           ".claude/skills/orbit/bin/orbit-update-check"; do
-  if [ -x "$_p" ]; then _UPD="$("$_p" 2>/dev/null || true)"; break; fi
+  if [ -x "$_p" ]; then _UPD="$("$_p" 2>/dev/null || true)"; _DIR="$(dirname "$(dirname "$_p")")"; break; fi
 done
-[ -n "$_UPD" ] && echo "$_UPD" || true
+_VER="$(tr -d '[:space:]' < "${_DIR:-.}/VERSION" 2>/dev/null || echo '?')"
+echo "${_UPD:-orbit v$_VER (up to date / not re-checked within 24h)}"
 ```
 
-Then:
-- If the output is `UPGRADE_AVAILABLE <old> <new>`: read `skills/orbit-upgrade/SKILL.md`
-  and follow its **Inline upgrade flow** (auto-upgrade if configured, otherwise ask with the
-  4 options, or snooze). When that finishes, **continue this skill** from the next section.
-- If the output is `JUST_UPGRADED <from> <to>`: say "Running orbit v{to} (just updated!)"
-  and continue.
-- If there's no output (up to date, throttled, snoozed, or offline): continue silently.
+Then act on the line it printed — and **always say one line back so the user can see the check ran**:
+- `UPGRADE_AVAILABLE <old> <new>` → read `skills/orbit-upgrade/SKILL.md` and follow its **Inline
+  upgrade flow** (auto-upgrade if configured, else ask the 4 options, or snooze). When done,
+  **continue this skill** from the next section.
+- `JUST_UPGRADED <from> <to>` → say "Running orbit v{to} (just updated!)" and continue.
+- `orbit v<x> …` (the fallback line) → say "Running orbit v{x}." once, then continue.
 
-The check is throttled to once per 24h and never blocks — if the script isn't found or the
-network is down, it prints nothing and you proceed normally. This preamble is the only
-"phone-home"; the rest of the skill is local.
+The script checks the latest **VERSION on GitHub** (`git fetch` if the install is a git clone, else
+a `curl` to raw GitHub), is throttled to **once / 24h**, and **never blocks** — offline / throttled /
+snoozed just yields the version line. Be honest in your one-liner: a fallback line means "running
+v{x}", not a guaranteed fresh check. This preamble is the only "phone-home"; the rest is local.
 
 ## The one idea everything serves
 

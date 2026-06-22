@@ -3,6 +3,22 @@
 All notable changes to the `orbit` plugin are documented here. The version here
 must match `VERSION` and `.claude-plugin/plugin.json` — the update checker compares them.
 
+## 0.10.1
+
+Tighten the update check (it was advisory, silent, and easy to skip).
+
+- **Mandatory + first:** the preamble is now "STEP 0 — run BEFORE anything else, do not skip,"
+  so the model reliably runs it the moment `/orbit` loads.
+- **Observable:** it now **always prints one line** (the running version, or the upgrade offer) —
+  silence can no longer hide a skipped or throttled check. The wording is honest: a fallback line
+  says "running v{x}", not a guaranteed fresh re-check.
+- **Robust paths:** resolves the install via `CLAUDE_CONFIG_DIR` too, so it finds the skills-dir
+  install (no `.git` → it checks the latest VERSION on GitHub via curl) and the marketplace plugin.
+- Clarified it checks **GitHub** (git fetch if a clone, else curl raw), throttled once/24h, never
+  blocks offline. Still prompt-driven (a skill can't force a run) — hard enforcement would need a
+  session hook; this is the right level short of that.
+
+
 ## 0.10.0
 
 Install drops from ~10 minutes to under a minute. Field feedback: a fresh `/orbit` took ~10 min

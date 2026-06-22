@@ -144,6 +144,7 @@ preamble, go back into that workflow. The upgrade is done.
 1. Force a fresh check (bypass the 24h throttle):
    ```bash
    for _p in "${CLAUDE_PLUGIN_ROOT:-}/bin/orbit-update-check" \
+             "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/orbit/bin/orbit-update-check" \
              "$HOME/.claude/skills/orbit/bin/orbit-update-check"; do
      [ -x "$_p" ] && { "$_p" --force; break; }
    done
