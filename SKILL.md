@@ -162,10 +162,14 @@ is the fallback.** Interrogating the user with four questions is a failure mode.
    re-run. (Write it at the end of setup: the domain characterization + any choices.)
 2. **Mine the repo and INFER** product, goal, "most expensive mistake," and integrations
    from README, package manifests (package.json, *.csproj, requirements.txt…), config, and
-   code. Read `references/profiles/generic.md` for what to look for. **Also detect whether
-   it's a frontend/UI repo** (React/Vue/Svelte/Next/Tailwind, `.tsx`/`.cshtml`/views, a
-   design file) — if so, load `references/profiles/frontend.md` too and plan to stand up the
-   **Designer** role. Don't add a Designer to a backend/CLI/data project.
+   code. Read `references/profiles/generic.md` for what to look for.
+   - **Detect the distinct technical SURFACES** — this sizes the team. Look for: a **web
+     frontend** (React/Vue/Svelte/Next/Tailwind, `.tsx`/views), a **mobile app** (React Native/
+     Expo, Swift/iOS, Kotlin/Android, Flutter), a **backend/API** (server framework, routes,
+     DB), a **data** layer (pipelines/ETL/notebooks). A repo can have several at once
+     (web + mobile + API). Phase 4 stands up **one engineer per surface** — name them by surface.
+   - **If there's a frontend/UI surface**, also load `references/profiles/frontend.md` and plan to
+     stand up the **Designer** role. Don't add a Designer to a pure backend/CLI/data project.
 3. **Then decide:**
    - **Existing product, enough inferred** → ask **nothing**. State your inferred
      characterization in one short paragraph "I read the repo as: <…> — correct me if wrong"
@@ -238,15 +242,18 @@ re-run doesn't re-ask.
 The standard team + library playbooks are already in place from Phase 2. Make them *fit the
 project* — quickly, not from scratch:
 
-- **Name the engineer to the stack.** Rename the generic **builder** to what it actually is:
-  `frontend-engineer` (React/Vue/Svelte…), `backend-engineer` (API/services), `data-engineer`
-  (pipelines/ETL), etc. Rename both files (`.claude/agents/<name>.md` + `.orbit/roles/<name>.md`)
-  and the `name:`/title inside, and point it at the right domain skill. One rename, not a rewrite.
-- **Keep only the roles this project needs; scale to size.** The Designer exists *iff* you passed
-  `--frontend` — there's none on a backend/CLI/data repo, by design. A small prototype runs on the
-  lean core (dispatcher, planner, engineer, reviewer, safety, reporter); a larger system earns one
-  extra specialist (e.g. an Input/Research or Analyst role — copy an existing adapter as the shape).
-  Don't add roles a one-person prototype won't use.
+- **One engineer per surface (this is the team).** For each technical surface Phase 0 detected,
+  stand up its own engineer — `frontend-engineer`, `mobile-developer`, `backend-engineer`,
+  `data-engineer`, etc. A web + mobile + API product gets **three** engineers; a single-surface
+  prototype gets **one**. Start from the scaffolded generic `builder`: rename it to the first
+  surface, then **copy that adapter** (`.claude/agents/<name>.md` + `.orbit/roles/<name>.md`, fix
+  the `name:`/title) once per additional surface, and point each at its own domain skill. They run
+  in **parallel** — the Planner fans work out to them; the handoff rules keep them from colliding.
+- **Keep only what the project needs; scale to size.** The Designer exists *iff* there's a UI
+  surface (you passed `--frontend`). A tiny prototype stays lean (dispatcher, planner, one engineer,
+  reviewer, safety, reporter); a bigger system earns the full bench (an engineer per surface, plus
+  an Input/Research or Analyst role when the work genuinely needs one). Don't provision roles a
+  one-person prototype won't use — match the team to the product, not a fixed template.
 - **Write the domain skills** — the core how-to this product re-derives every run ("what do we keep
   re-pasting into prompts?"). Start with the **one** that matters most; add others only for a
   genuinely distinct body of knowledge, and **author them concurrently** (fan out, don't write them
@@ -326,26 +333,33 @@ it. Both hooks **fail open** (a bug never bricks the shell or blocks a prompt).
 ### Phase 6.5 — Make the loop watchable (observability)
 
 A loop you can't watch is a loop nobody trusts. The scaffolder already placed the observability
-layer (`.orbit/activity.py` + `scripts/orbit-status`) — you don't build it, you *use* it. **Do
-two things every cycle — not one:**
+layer (`.orbit/activity.py` + `scripts/orbit-status`) — you *use* it. The pinned task list and the
+terminal dashboard are **surface-specific** (they show in the Claude Code IDE/CLI). In the **Claude
+desktop app and claude.ai web**, there's no pinned panel and no terminal — so the only thing the
+user sees is **what you print in chat.** Therefore **do THREE things every cycle:**
 
 1. **ALWAYS write `.orbit/tasks.json` + `.orbit/activity.jsonl`** (via `.orbit/activity.py`'s
-   `set_tasks` / `update_task` / `emit`). This is the **guaranteed-visible** path: it feeds
-   `scripts/orbit-status` and never depends on a tool being enabled. **Do this first** — a run
-   that only narrates `[role]` lines and skips these files leaves the user with *no* checklist
-   (the exact failure to avoid).
-2. **Also build the native checklist with `TaskCreate` / `TaskUpdate`** — role-prefixed items
-   (`[data] validate inputs`) flipped `in_progress`→`completed` as work happens. That's the
-   pinned, on-screen list in Claude Code. **Use the `Task*` tools, NOT `TodoWrite`** — TodoWrite
-   is off by default in current Claude Code (≥ v2.1.142). **Drive it from the MAIN orchestrator**
-   (a subagent's task calls don't surface to the user). It's best-effort (needs the model to
-   call it); that's why step 1 is the floor.
+   `set_tasks` / `update_task` / `emit`). The data floor — never depends on a UI being present.
+2. **ALWAYS render the "team board" inline in your reply** — this is the **universally visible**
+   path (desktop app, web, terminal, IDE — anywhere, because it's just text). A compact markdown
+   block with emoji role colors matching the dashboard, refreshed each cycle:
+   ```
+   🛰 Orbit · cycle 2
+   ✓ 🟣 planner — planned the change
+   ✓ 🟢 frontend-engineer — built the form
+   ▸ 🟡 reviewer — proving it (running tests)…
+   ○ 🔴 safety · ○ ⚪ reporter
+   ```
+   (🔵 dispatcher · 🟣 planner · 🟢 engineer · 🟪 designer · 🟡 reviewer · 🔴 safety · ⚪ reporter — same
+   colors as `orbit-status`.) Keep it short; it's the live "who's talking," not a log dump.
+3. **Also build the native `TaskCreate` / `TaskUpdate` checklist** — the pinned on-screen list in
+   the Claude Code IDE/CLI. **`Task*`, NOT `TodoWrite`** (off by default ≥ v2.1.142). Drive it from
+   the MAIN orchestrator. Best-effort and surface-specific — that's why steps 1–2 are the floor.
 
-Inside Claude Code the user watches the native checklist on screen (no second terminal). For a
-**headless / own-orchestrator** run (no chat UI), they run `scripts/orbit-status --follow`
-(press **Ctrl-C** to stop), which renders from the files in step 1. Each role "announces
-itself": `emit` a `start` on pickup and `done`/`blocked` on handoff, and open its report with
-`[role] …`.
+Per surface: **IDE/CLI** → the pinned native list (step 3) + the inline board; **desktop app / web**
+→ the inline board (step 2) is what's visible; **headless / own-orchestrator** → `scripts/orbit-status
+--follow` (Ctrl-C to stop) off the step-1 files. Each role announces itself: `emit` a `start` on
+pickup and `done`/`blocked` on handoff, and open its report with `[role] …`.
 
 ### Phase 7 — Report, in plain language, and recommend the first run
 

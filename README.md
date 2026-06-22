@@ -12,7 +12,7 @@ One command sets it up. It runs on your own orchestrator. It updates itself.
 
 <br/>
 
-![version](https://img.shields.io/badge/version-0.13.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.14.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![self-updating](https://img.shields.io/badge/self--updating-yes-22863a)
@@ -114,9 +114,13 @@ Thread (who said what)
   20:14:15 ▸ [analyst]      act: scoring 412 validated rows
 ```
 
-Both views read **one source of truth** — `.orbit/activity.jsonl` (the who·phase·what event
+**On the Claude desktop app / claude.ai web** — there's no pinned panel or terminal, so Orbit
+**renders the team board inline in chat every cycle** (a compact emoji-colored checklist + who's
+working now). It's the one view that shows up everywhere, so you're never staring at a black box.
+
+All three views read **one source of truth** — `.orbit/activity.jsonl` (the who·phase·what event
 stream) + `.orbit/tasks.json` (the checklist) — so a web panel or IDE view can plug into the
-same stream later with zero loop changes. And when the loop pauses for you, the dashboard
+same stream later with zero loop changes. And when the loop pauses for you, it
 says so loudly: `[human] awaiting approval: publish to CMS`.
 
 ## What you get

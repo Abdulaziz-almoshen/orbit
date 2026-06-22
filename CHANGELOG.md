@@ -3,6 +3,22 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.14.0
+
+A technical team sized to the project, and a live view that shows in the desktop/web app too.
+
+- **One engineer per surface.** Phase 0 now detects the distinct technical surfaces (web frontend,
+  mobile app, backend/API, data) and Phase 4 stands up **one engineer per surface** —
+  `frontend-engineer` + `mobile-developer` + `backend-engineer` as needed, each with its own skill,
+  running in parallel under the Planner. A single-surface prototype still gets one; a multi-surface
+  product gets the full bench. (Was: a single generic builder + "one extra specialist.")
+- **Visible everywhere — the desktop-app fix.** The pinned checklist (IDE) and `orbit-status`
+  (terminal) are surface-specific; in the **Claude desktop app / claude.ai web** there's no panel or
+  terminal. So the loop now **always renders a compact "team board" inline in chat each cycle** (emoji
+  role colors matching the dashboard) — the one renderer that works on every surface. Documented as
+  Renderer 0 in `observability.md`; Phase 6.5 now does three things (data files + inline board +
+  native list).
+
 ## 0.13.0
 
 The "meet your team" closing + per-project team tailoring — setup now ends like a capable team

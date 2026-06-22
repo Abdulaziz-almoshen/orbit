@@ -28,6 +28,25 @@ allows. Don't scatter ad-hoc prints — emit events, then render.
 `emit(role, phase, status, msg, cycle, task_id)`, `set_tasks(tasks)`,
 `update_task(id, status)`. They never raise into the caller.
 
+## Renderer 0 — inline in chat (universal: the desktop-app & web path)
+
+The pinned task list and the terminal dashboard below are **surface-specific** — they show in the
+Claude Code IDE/CLI. In the **Claude desktop app and claude.ai web** there is no pinned panel and no
+terminal, so the *only* thing the user sees is what the model prints. So **every cycle, render a
+compact "team board" inline** in the reply — this is the one renderer that works everywhere:
+
+```
+🛰 Orbit · cycle 2
+✓ 🟣 planner — planned the change
+✓ 🟢 frontend-engineer — built the form
+▸ 🟡 reviewer — proving it (running tests)…
+○ 🔴 safety · ○ ⚪ reporter
+```
+
+Emoji role colors match `orbit-status`: 🔵 dispatcher · 🟣 planner · 🟢 engineer · 🟪 designer ·
+🟡 reviewer · 🔴 safety · ⚪ reporter. Keep it short (live "who's talking," not a log). It reads from
+the same `.orbit/tasks.json` + `.orbit/activity.jsonl` as the other renderers, so it's always in sync.
+
 ## Renderer 1 — Claude Code native (the pinned task checklist)
 
 When the loop runs **inside Claude Code**, build the checklist with the built-in
