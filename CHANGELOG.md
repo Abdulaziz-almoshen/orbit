@@ -3,6 +3,28 @@
 All notable changes to the `orbit` plugin are documented here. The version here
 must match `VERSION` and `.claude-plugin/plugin.json` — the update checker compares them.
 
+## 0.9.0
+
+A real **technical-review** playbook for the Reviewer — the sub-agent responsible for technical
+quality. Distilled the transferable methodology from a mature pre-landing-review + QA + eng/DX
+review toolkit into one self-contained, vendor-neutral playbook (no external dependency).
+
+- **New playbook `technical-review.md`** (`references/playbooks/`), provisioned to the **Reviewer**
+  on any code/technical repo. It encodes: the **severity × confidence gate** with a **quote-the-line**
+  verification rule (you must cite `file:line` or the finding is unverified — kills the false-positive
+  class); the full inspection surface (correctness/enum-completeness, security, concurrency, data
+  migrations, tests, performance, API contract, maintainability, with security + migrations always
+  run); **prove-don't-assume** verification (run the tests, "code that *handles* a deliverable is not
+  the deliverable"); engineering-judgment lenses (blast radius, reversibility, boring-by-default,
+  essential-vs-accidental complexity, a **complexity tripwire** that escalates instead of proceeding);
+  auto-fix-vs-ask; the output format + cycle verdict; and an anti-nitpick / anti-rubber-stamp list.
+- **New Reviewer sub-agent adapter** `assets/claude-agents/reviewer.md` (loads the playbook; reviews,
+  never lands; gate power).
+- Wired through `roles.md` (Reviewer row + skill-library table), SKILL.md (Phase 3 provisioning +
+  reference map), and the scaffolded CLAUDE.md skills index (§7). Advisory like the other roles —
+  the binding wall remains the PreToolUse safety hook.
+
+
 ## 0.8.0
 
 Fast by default + no-restart install. Two pieces of field feedback drove this: "the thinking

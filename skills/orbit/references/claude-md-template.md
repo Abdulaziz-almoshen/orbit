@@ -83,7 +83,9 @@ are playbooks, not "durable skills" in the orchestration sense — those are wor
 execution engine. See `references/durable-execution.md`.)
 - `.orbit/skills/<domain-knowledge>.md` — the core how-to of the product's main task.
 - `.orbit/skills/input-validation.md` — quality checks on inputs before use.
-- `.orbit/skills/quality-review.md` — the rubric/criteria the Reviewer applies.
+- `.orbit/skills/technical-review.md` — the Reviewer's technical quality gate (severity×confidence,
+  quote-the-line verification, blast-radius judgment); provisioned from the library.
+- `.orbit/skills/quality-review.md` — the product-specific rubric/criteria the Reviewer applies.
 - `.orbit/skills/safety-rules.md` — what's forbidden, what needs a human.
 - `.orbit/skills/output-formatting.md` — clear, decision-ready outputs.
 

@@ -20,7 +20,7 @@ default; rename and re-scope each role to the real subtasks of the product you'r
 | **Designer** *(frontend repos only — see `profiles/frontend.md`)* | Turn a UI brief into a distinctive, production-grade **Design Plan** (tokens + layout + signature), grounded in the product's world, never a templated default. Loads `design-methodology` + `anti-ai-aesthetics`. | the brief, design source of truth | a Design Plan for the Builder |
 | **Analyst** | Derive, transform, or evaluate as the domain requires; add context the Builder needs. | inputs, prior outputs | analysis notes |
 | **Safety / Compliance** | Check the output is safe, permitted, and free of unreviewed side effects; block anything forbidden. **Veto power.** | candidate output, safety-rules skill | approved-or-rejected output + reason |
-| **Reviewer / Evaluator** | Quality gate before "done": check the output against §3 success criteria; catch errors/regressions. On UI work, also apply the **Design Distinctiveness** gate (matches the brief / design source of truth; doesn't read like a default). **Gate power.** | all outputs, success criteria | pass/fail + reasons |
+| **Reviewer / Evaluator** | Quality gate before "done": check the output against §3 success criteria and **prove** it (run tests/validators, not eyeball); catch errors/regressions across correctness, security, concurrency, migrations, performance, tests, API-contract, maintainability. Loads `technical-review` (severity×confidence gate, **quote-the-line** verification, blast-radius judgment). On UI work, also apply the **Design Distinctiveness** gate. **Gate power.** | all outputs, success criteria, the diff | pass/fail + evidence-backed findings |
 | **Reporter** | Turn results into clear, decision-ready outputs/explanations. | everything above, output-formatting skill | reports, summaries |
 
 Two roles hold special power and must always exist: **Safety/Compliance** can veto any
@@ -41,6 +41,7 @@ sub-agent, it **provisions the relevant playbooks** by copying them into the rep
 | `design-methodology.md`, `anti-ai-aesthetics.md` | **Designer** | frontend/UI repos (`profiles/frontend.md`) |
 | `planning-and-decision-briefs.md` | **Orchestrator** | always |
 | `clarify-and-challenge.md` | **Dispatcher / Orchestrator** | always (the task path) |
+| `technical-review.md` | **Reviewer / Evaluator** | always (any code/technical repo) |
 
 Add new playbooks here as the system grows (e.g. data-validation, backtesting, fact-checking
 for other domains). A role's spec just says "load `<playbook>`"; the substance lives once, in

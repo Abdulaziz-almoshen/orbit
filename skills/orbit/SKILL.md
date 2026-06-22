@@ -219,8 +219,10 @@ Code frontmatter). Document handoffs + shared-state rules per `references/roles.
 you create a role, copy the playbooks it needs into `.orbit/skills/` and point the role's
 spec at them: the **Orchestrator** always gets `planning-and-decision-briefs`, the
 **Dispatcher/Orchestrator** get `clarify-and-challenge` (so tasks are understood and improved,
-not executed literally), and the **Designer** gets `design-methodology` + `anti-ai-aesthetics`.
-This is how the system grows — add playbooks to the library over time.
+not executed literally), the **Reviewer** always gets `technical-review` (the technical quality
+gate — severity×confidence, quote-the-line verification, blast-radius judgment; use
+`assets/claude-agents/reviewer.md` as the adapter), and the **Designer** gets `design-methodology`
++ `anti-ai-aesthetics`. This is how the system grows — add playbooks to the library over time.
 
 ### Phase 4 — Create domain skills
 
@@ -392,9 +394,11 @@ your own work, the same way the system will.
   **Designer**. Add your own profiles here for repeated setups.
 - `references/playbooks/` — the reusable **role-skill library** provisioned to sub-agents:
   `design-methodology.md` + `anti-ai-aesthetics.md` (Designer), `planning-and-decision-briefs.md`
-  (Orchestrator), `clarify-and-challenge.md` (Dispatcher/Orchestrator). Grow this over time.
+  (Orchestrator), `clarify-and-challenge.md` (Dispatcher/Orchestrator), `technical-review.md`
+  (Reviewer — the technical quality gate). Grow this over time.
 - `assets/` — copyable `loop.config.json`, `loop.py`, `activity.py`, `ralph_loop.sh`,
-  `orbit-status`, `checks/guard.py`, `runners/inngest-loop.ts`, example subagents (incl. designer).
+  `orbit-status`, `checks/guard.py`, `runners/inngest-loop.ts`, example subagents (incl. designer,
+  reviewer, safety-gate).
 - `scripts/scaffold.py` — lays down the deterministic skeleton.
 - `commands/orbit-run.md` — the `/orbit:orbit-run <task>` slash command: explicitly send a task
   through the loop. (Auto-routing is the CLAUDE.md §10 rule; this is the manual target.)

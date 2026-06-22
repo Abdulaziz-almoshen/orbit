@@ -12,7 +12,7 @@ One command sets it up. It runs on your own orchestrator. It updates itself.
 
 <br/>
 
-![version](https://img.shields.io/badge/version-0.8.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.9.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![self-updating](https://img.shields.io/badge/self--updating-yes-22863a)
@@ -140,7 +140,9 @@ Run `/orbit` in a repo and it audits the project, then scaffolds two layers:
 **The team** it stands up: a **Dispatcher** that clarifies and challenges the ask, an
 **Orchestrator** that plans and delegates, the **specialists** your domain needs (including a
 **Designer** on frontend repos), a **Safety gate** with veto power, a **Reviewer gate** that
-decides what counts as progress, and a **Reporter**. No single agent does everything.
+reviews like a senior engineer — correctness, security, concurrency, migrations, tests,
+blast-radius — and **proves** the work (runs the tests, quotes the line) before it counts as
+progress, and a **Reporter**. No single agent does everything.
 
 ## ✨ Two powers people love
 
