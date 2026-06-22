@@ -26,9 +26,11 @@ ACTIVITY = ORBIT_DIR / "activity.jsonl"
 
 DIM = "\033[2m"; B = "\033[1m"; RST = "\033[0m"
 ROLE_COLORS = {
-    "orchestrator": "\033[35m", "pm": "\033[35m",
+    "dispatcher": "\033[96m", "router": "\033[96m",
+    "orchestrator": "\033[35m", "pm": "\033[35m", "planner": "\033[35m",
     "data": "\033[36m", "input": "\033[36m", "research": "\033[36m",
-    "builder": "\033[32m", "executor": "\033[32m", "writer": "\033[32m",
+    "builder": "\033[32m", "executor": "\033[32m", "writer": "\033[32m", "engineer": "\033[32m",
+    "designer": "\033[95m",
     "analyst": "\033[34m", "technical": "\033[34m",
     "safety": "\033[31m", "compliance": "\033[31m", "risk": "\033[31m",
     "reviewer": "\033[33m", "evaluator": "\033[33m", "editor": "\033[33m",

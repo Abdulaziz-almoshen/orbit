@@ -233,17 +233,27 @@ The scaffolder already wrote `.orbit/STATE.md` — seed it with the open tasks f
 the end of setup, write `.orbit/setup.json` (the inferred characterization + any choices) so a
 re-run doesn't re-ask.
 
-### Phase 4 — Customize, don't recreate
+### Phase 4 — Customize the team to THIS project (don't recreate)
 
-The team and the library playbooks are already in place from Phase 2. Your only authoring here:
-- Write the product's **one** domain skill → `.orbit/skills/<domain>.md` (the core how-to this
-  product re-derives every run — "what do we keep re-pasting into prompts?"). Index it in
-  CLAUDE.md's §7 Skills Index. Add a second domain skill only if there's a clearly distinct body
-  of knowledge.
-- **Tailor role names/scope only if the domain needs it** — the default team works as-is. Add a
-  domain specialist (e.g. an Input/Research or Analyst role) only when the work genuinely needs
-  one; copy an existing adapter in `.claude/agents/` as the starting shape.
-- The Designer is already stood up iff you passed `--frontend`.
+The standard team + library playbooks are already in place from Phase 2. Make them *fit the
+project* — quickly, not from scratch:
+
+- **Name the engineer to the stack.** Rename the generic **builder** to what it actually is:
+  `frontend-engineer` (React/Vue/Svelte…), `backend-engineer` (API/services), `data-engineer`
+  (pipelines/ETL), etc. Rename both files (`.claude/agents/<name>.md` + `.orbit/roles/<name>.md`)
+  and the `name:`/title inside, and point it at the right domain skill. One rename, not a rewrite.
+- **Keep only the roles this project needs; scale to size.** The Designer exists *iff* you passed
+  `--frontend` — there's none on a backend/CLI/data repo, by design. A small prototype runs on the
+  lean core (dispatcher, planner, engineer, reviewer, safety, reporter); a larger system earns one
+  extra specialist (e.g. an Input/Research or Analyst role — copy an existing adapter as the shape).
+  Don't add roles a one-person prototype won't use.
+- **Write the domain skills** — the core how-to this product re-derives every run ("what do we keep
+  re-pasting into prompts?"). Start with the **one** that matters most; add others only for a
+  genuinely distinct body of knowledge, and **author them concurrently** (fan out, don't write them
+  one after another) so setup stays fast. Index each in CLAUDE.md's §7.
+
+Record the final roster (each agent's project-specific name + what it's for + which skill it loads) —
+Phase 7 introduces them to the user.
 
 ### Phase 5 — Tune the loop config (already placed)
 
@@ -368,8 +378,29 @@ End every `/orbit` run with a short, beginner-readable summary — not a file du
 Nothing here needs a restart: the scaffolded files are read live, and the safety hook arms on
 the next command. The user can start working immediately.
 
-Then update `.orbit/STATE.md` and `CLAUDE.md` to reflect what was built — close the loop on
-your own work, the same way the system will.
+Then, internally, update `.orbit/STATE.md` and `CLAUDE.md` to reflect what was built — close the
+loop on your own work, the same way the system will.
+
+### The closing — "meet your team" (make it warm and motivating)
+
+This is the **last thing the user sees**, and it should feel like a capable team reporting for duty —
+not a file manifest. Introduce **only the roles you actually stood up for this project**, by their
+project-specific names, each with the skill that backs it and its **live-view color** (so the intro
+matches the dashboard they'll watch). Use the real colors:
+
+- 🔵 **Dispatcher** *(cyan)* — reads every message first; routes tasks into the loop, answers questions directly.
+- 🟣 **Planner / Orchestrator** *(magenta)* — plans it, writes the decision brief, challenges weak assumptions. *Skills: planning-and-decision-briefs, clarify-and-challenge.*
+- 🟢 **&lt;Frontend / Backend / Data&gt; Engineer** *(green)* — builds the work. *Skill: &lt;the domain skill&gt;.*
+- 🟪 **Designer** *(violet — frontend only)* — distinctive, on-brand UI, not templated slop. *Skills: design-methodology, anti-ai-aesthetics.*
+- 🟡 **Reviewer** *(yellow)* — proves the work (runs tests, quotes the line) before it counts as done. *Skill: technical-review.*
+- 🔴 **Safety** *(red)* — can veto or stop a dangerous action. The hard wall.
+- ⚪ **Reporter** *(grey)* — turns results into clear, decision-ready updates.
+
+Close with a genuine, encouraging line in your own words — e.g. *"Your team's assembled, and every
+one of them comes with the skills to do this right. I'm ready — what's the first task?"* Then, when
+they send it, the **router** picks the lane, the **Planner** opens with a quick negotiation to kill
+the rabbit holes, and the **live checklist** shows each teammate (in their color) working it down to
+done. Make the user feel they just hired a team, and it's eager to start.
 
 ## Guardrails for you, the builder
 

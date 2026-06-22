@@ -3,6 +3,22 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.13.0
+
+The "meet your team" closing + per-project team tailoring — setup now ends like a capable team
+reporting for duty, with agents named to the stack.
+
+- **"Meet your team" closing message (Phase 7):** setup now ends by introducing *only the roles it
+  actually stood up*, by their project-specific names, each with its skill and its **live-view color**
+  (cyan dispatcher, magenta planner, green engineer, violet designer, yellow reviewer, red safety,
+  grey reporter) — then an encouraging "I'm ready, what's the first task?" Warm, not a file manifest.
+- **Per-project tailoring (Phase 4):** the generic *builder* is renamed to the stack —
+  `frontend-engineer` / `backend-engineer` / `data-engineer`; roles the project doesn't need are
+  dropped (no Designer on a backend/CLI/data repo); team scales to project size. Domain skills are
+  authored **concurrently** to keep setup fast.
+- **Dashboard colors:** added `dispatcher` (cyan) and `designer` (violet) to `orbit-status` so the
+  team intro matches the live checklist exactly.
+
 ## 0.12.0
 
 True gstack-style install: clone into the skills dir + `./setup`, with `git pull` updates.
