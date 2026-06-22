@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+#
+# setup — finish an Orbit install after cloning into ~/.claude/skills/orbit (the gstack way).
+#
+#   git clone --single-branch --depth 1 https://github.com/Abdulaziz-almoshen/orbit.git \
+#       ~/.claude/skills/orbit && cd ~/.claude/skills/orbit && ./setup
+#
+# The clone IS the skill dir, so there's nothing to copy — setup just makes the helpers
+# executable, exposes the orbit-upgrade sub-skill at the top level so /orbit-upgrade resolves,
+# and prints what landed. No restart: Claude Code discovers skills live. Updates are `git pull`
+# (via /orbit-upgrade). Idempotent and safe to re-run.
+#
+set -euo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd -P)"
+SKILLS_DIR="$(dirname "$HERE")"          # parent of the orbit dir = ~/.claude/skills
+
+# 1. make the helpers executable (clone doesn't always preserve the +x bit)
+chmod +x "$HERE"/bin/* 2>/dev/null || true
+chmod +x "$HERE"/scripts/*.py 2>/dev/null || true
+chmod +x "$HERE"/assets/checks/*.py 2>/dev/null || true
+
+# 2. expose sub-skills at the top level so they're invocable as /orbit-upgrade
+if [ -d "$HERE/orbit-upgrade" ]; then
+  ln -sfn "$HERE/orbit-upgrade" "$SKILLS_DIR/orbit-upgrade" 2>/dev/null \
+    || cp -R "$HERE/orbit-upgrade" "$SKILLS_DIR/orbit-upgrade" 2>/dev/null || true
+fi
+
+VER="$(tr -d '[:space:]' < "$HERE/VERSION" 2>/dev/null || echo '?')"
+
+# 3. report
+printf '\n'
+_expect="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills"
+_expect="$(cd "$_expect" 2>/dev/null && pwd -P || echo "$_expect")"   # resolve symlinks (e.g. /tmp→/private/tmp)
+if [ "$SKILLS_DIR" = "$_expect" ] && [ "$(basename "$HERE")" = "orbit" ]; then
+  printf '✅ Orbit v%s installed → %s\n' "$VER" "$HERE"
+  printf '   Run /orbit in any repo. No restart — Claude Code discovers skills live.\n'
+else
+  printf '⚠️  Orbit v%s is at %s\n' "$VER" "$HERE"
+  printf '   For /orbit to load, this must be at %s/skills/orbit. Re-clone there.\n' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+fi
+printf '   Update: /orbit-upgrade (git pull).  Remove: rm -rf "%s" "%s/orbit-upgrade"\n' "$HERE" "$SKILLS_DIR"

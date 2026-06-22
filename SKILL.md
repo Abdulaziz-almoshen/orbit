@@ -203,7 +203,7 @@ Run the scaffolder. It writes the whole identical-every-time skeleton in one sho
 team** to both `.claude/agents/*.md` (adapters) and `.orbit/roles/*.md` (specs):
 
 ```bash
-python3 "$CLAUDE_PLUGIN_ROOT/skills/orbit/scripts/scaffold.py" --target . [--frontend] [--install-hooks]
+python3 "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/orbit/scripts/scaffold.py" --target . [--frontend] [--install-hooks]
 ```
 
 - Add **`--frontend`** if Phase 0 detected a UI repo — it stands up the **Designer** + the design
@@ -295,7 +295,7 @@ off-switch." Announce + easy removal fixes that.)
    argv precisely). `deny` only the irreversible/forbidden (force-push, secrets-branch push, schema
    migration); `ask` for reversible-but-risky (normal push, deploy, `rm -rf`). `route.py` works out
    of the box; tune its verb lists only if the domain has unusual phrasing.
-2. **Wire both by default** — run `python3 "$CLAUDE_PLUGIN_ROOT/skills/orbit/scripts/scaffold.py"
+2. **Wire both by default** — run `python3 "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/orbit/scripts/scaffold.py"
    --target . --install-hooks` (or, in the same `scaffold.py` run from Phase 2, just pass
    `--install-hooks` then). It backs up `.claude/settings.json`, merges each hook idempotently, and
    prints the exact JSON.

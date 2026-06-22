@@ -12,7 +12,7 @@ One command sets it up. It runs on your own orchestrator. It updates itself.
 
 <br/>
 
-![version](https://img.shields.io/badge/version-0.11.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.12.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![self-updating](https://img.shields.io/badge/self--updating-yes-22863a)
@@ -193,47 +193,30 @@ every other AI-generated app:
 
 ## Install
 
-### Option A — One line, no restart (recommended)
+Orbit installs as a Claude Code **user skill** — cloned into `~/.claude/skills/orbit`, the same
+way gstack does it. Claude Code watches that folder and discovers skills **live**, so `/orbit`
+and `/orbit-upgrade` work **immediately, no restart**. Updates are a fast `git pull` (`/orbit-upgrade`).
 
-Paste into your terminal:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/Abdulaziz-almoshen/orbit/main/install.sh | bash
-```
-
-This installs Orbit as a Claude Code **user skill** in `~/.claude/skills/`. Claude Code
-watches that folder and discovers skills **live** — so `/orbit` and `/orbit-upgrade` work
-**immediately, with no restart** (the same mechanism gstack uses). It's user-scoped, so they
-work in every project. Update anytime with `/orbit-upgrade`.
-
-### Option B — Marketplace plugin
-
-If you prefer the plugin manager, run these inside Claude Code:
-
-```text
-/plugin marketplace add Abdulaziz-almoshen/orbit
-/plugin install orbit@orbit
-```
-
-Marketplace plugins are loaded at startup, so this path **does need one restart** to pick up
-`/orbit`. (Option A doesn't — that's the whole point of it.)
-
-**Want teammates to get it on a shared project too?** After installing, ask Claude:
-*"add Orbit to this project for teammates"*. It writes `.claude/settings.json` — and then
-**you** review and commit that file. Orbit never commits to your repo for you.
-
-### Option C — Clone (for hacking on it, or air-gapped installs)
+### One command
 
 ```bash
-git clone https://github.com/Abdulaziz-almoshen/orbit.git
-cd orbit && ./install.sh          # installs from the clone — no restart
+git clone --single-branch --depth 1 https://github.com/Abdulaziz-almoshen/orbit.git \
+  ~/.claude/skills/orbit && cd ~/.claude/skills/orbit && ./setup
 ```
 
-Or point the plugin manager at the local copy instead:
+That's it — `/orbit` is available right away. (Prefer `curl`? `curl -fsSL
+https://raw.githubusercontent.com/Abdulaziz-almoshen/orbit/main/install.sh | bash` does the exact
+same clone + `./setup`.)
+
+### Or let Claude do it — paste this prompt
 
 ```text
-/plugin marketplace add ./orbit
-/plugin install orbit@orbit
+Install Orbit: run
+
+  git clone --single-branch --depth 1 https://github.com/Abdulaziz-almoshen/orbit.git ~/.claude/skills/orbit && cd ~/.claude/skills/orbit && ./setup
+
+Confirm /orbit is available (no restart — it's a user skill). Then ask me whether to set Orbit
+up in this project; if yes, run /orbit. Don't commit anything to my repo without showing me.
 ```
 
 ## Use
@@ -328,37 +311,30 @@ Orbit adds — including the hooks — is removable with `orbit-uninstall`.
 ## Repo layout
 
 ```
-orbit/                              ← this repo = the plugin
-├── install.sh                      # one-line user-skill install (no restart; the gstack way)
-├── .claude-plugin/
-│   ├── plugin.json                 # manifest (name, version)
-│   └── marketplace.json            # marketplace catalog
-├── VERSION                         # single source of truth for the version
-├── CHANGELOG.md                    # what "what's new" reads from
+orbit/                          ← this repo == the skill dir (clones to ~/.claude/skills/orbit)
+├── SKILL.md                    # the /orbit skill (at the root, the gstack way)
+├── setup                       # post-clone finisher (chmod + expose sub-skills)
+├── install.sh                  # curl wrapper: clones + runs ./setup
+├── VERSION                     # single source of truth for the version
+├── CHANGELOG.md                # what "what's new" reads from
 ├── bin/
-│   ├── orbit-update-check          # prints UPGRADE_AVAILABLE / JUST_UPGRADED / nothing
-│   └── orbit-uninstall             # removes the Orbit scaffold from a product repo
-└── skills/
-    ├── orbit/                      # the main skill
-    │   ├── SKILL.md
-    │   ├── references/             # methodology, templates, roles, loop design,
-    │   │                           #   observability, hooks/enforcement, profile
-    │   ├── assets/                 # loop.py, loop.config.json, activity.py, ralph_loop.sh,
-    │   │                           #   orbit-status, checks/guard.py + route.py, example subagents
-    │   ├── scripts/scaffold.py     # lays down the deterministic skeleton
-    │   └── evals/                  # test cases (for contributors)
-    └── orbit-upgrade/
-        └── SKILL.md                # the self-update flow
+│   ├── orbit-update-check      # prints UPGRADE_AVAILABLE / JUST_UPGRADED / nothing
+│   └── orbit-uninstall         # removes the Orbit scaffold from a product repo
+├── references/                 # methodology, templates, roles, loop design, observability,
+│                               #   hooks/enforcement, profiles, playbooks (the skill library)
+├── assets/                     # loop.py, loop.config.json, activity.py, ralph_loop.sh,
+│                               #   orbit-status, checks/guard.py + route.py, role adapters
+├── scripts/scaffold.py         # lays down the deterministic skeleton (Phase 2)
+├── orbit-upgrade/SKILL.md      # the self-update flow (git pull)
+└── evals/                      # test cases (for contributors)
 ```
 
 ## Releasing a new version
 
-1. Make changes under `skills/`.
-2. Bump the version in **both** `VERSION` and `.claude-plugin/plugin.json` (keep them equal —
-   the update checker compares `VERSION`).
-3. Add a `CHANGELOG.md` entry.
-4. `git push` to `main`. Installed users get the offer on their next `/orbit`, or immediately
-   via `/orbit-upgrade`.
+1. Make changes, bump `VERSION` (the update checker compares it against GitHub), add a
+   `CHANGELOG.md` entry.
+2. `git push` to `main`. Installed users get the offer on their next `/orbit`, or immediately
+   via `/orbit-upgrade` (a `git pull`).
 
 ## License
 

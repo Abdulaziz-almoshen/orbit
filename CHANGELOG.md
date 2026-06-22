@@ -1,7 +1,25 @@
 # Changelog
 
-All notable changes to the `orbit` plugin are documented here. The version here
-must match `VERSION` and `.claude-plugin/plugin.json` — the update checker compares them.
+All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
+truth — the update checker compares it against GitHub.
+
+## 0.12.0
+
+True gstack-style install: clone into the skills dir + `./setup`, with `git pull` updates.
+
+- **The repo is now the skill dir.** Moved `SKILL.md` + `references/`, `assets/`, `scripts/`,
+  `evals/`, and `orbit-upgrade/` to the repo **root** (history preserved via `git mv`), so the
+  canonical install is exactly gstack's:
+  `git clone --single-branch --depth 1 …/orbit.git ~/.claude/skills/orbit && cd ~/.claude/skills/orbit && ./setup`.
+- **New `./setup`** entrypoint — chmods the helpers and symlinks the `orbit-upgrade` sub-skill to
+  the top level so `/orbit-upgrade` resolves. **`install.sh` is now a thin curl wrapper** that does
+  the same clone + `./setup`.
+- **Updates are `git pull`** — the install dir is a real git checkout, so `/orbit-upgrade` does a
+  fast incremental fetch/reset (no re-download), exactly like gstack.
+- **Dropped the marketplace plugin** (`.claude-plugin/`) — a root-level skill can't also be a
+  marketplace plugin, and the marketplace path was what caused the restart problem. One model now:
+  clone → live discovery → no restart.
+- Fixed the internal `scaffold.py` path refs (now `~/.claude/skills/orbit/scripts/scaffold.py`).
 
 ## 0.11.0
 
