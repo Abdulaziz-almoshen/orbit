@@ -17,10 +17,10 @@ default; rename and re-scope each role to the real subtasks of the product you'r
 | **Orchestrator / PM** | Plan, decompose, delegate, control the loop, own STATE.md, check stop conditions. Frames real forks as **decision briefs** and runs a **plan-review** (CEO + eng lenses) before building. Loads `planning-and-decision-briefs`. | CLAUDE.md, STATE.md | STATE.md, decision briefs |
 | **Input / Research Specialist** | Gather, clean, and validate the inputs the work needs; guarantee they're complete and fresh before anyone uses them. | external sources, input-validation skill | validated inputs + a quality report |
 | **Builder / Executor** | Produce the core output of the product from the validated inputs. (On a frontend repo, implements the Designer's Design Plan.) | validated inputs, the domain skill, design-plan | candidate output + rationale |
-| **Designer** *(frontend repos only — see `profiles/frontend.md`)* | Turn a UI brief into a distinctive, production-grade **Design Plan** (tokens + layout + signature), grounded in the product's world, never a templated default. Loads `design-methodology` + `anti-ai-aesthetics`. | the brief, design source of truth | a Design Plan for the Builder |
+| **Designer** *(frontend repos only — see `profiles/frontend.md`)* | On any UI request, **first** run the mandatory **style-prototype gate**: shortlist 2–4 of the 67 styles, build a standalone HTML prototype of each, open them, let the user **pick** — then turn the chosen style into a distinctive, production-grade **Design Plan** (tokens + layout + signature) grounded in the product's world. Loads `design-methodology` + `design-styles` (the 67-style catalog) + `anti-ai-aesthetics`. | the brief, design source of truth | HTML prototypes → a Design Plan for the Builder |
 | **Analyst** | Derive, transform, or evaluate as the domain requires; add context the Builder needs. | inputs, prior outputs | analysis notes |
 | **Safety / Compliance** | Check the output is safe, permitted, and free of unreviewed side effects; block anything forbidden. **Veto power.** | candidate output, safety-rules skill | approved-or-rejected output + reason |
-| **Reviewer / Evaluator** | Quality gate before "done": check the output against §3 success criteria and **prove** it (run tests/validators, not eyeball); catch errors/regressions across correctness, security, concurrency, migrations, performance, tests, API-contract, maintainability. Loads `technical-review` (severity×confidence gate, **quote-the-line** verification, blast-radius judgment). On UI work, also apply the **Design Distinctiveness** gate. **Gate power.** | all outputs, success criteria, the diff | pass/fail + evidence-backed findings |
+| **Reviewer / Evaluator** | Quality gate before "done": check the output against §3 success criteria and **prove** it (run tests/validators, not eyeball); catch errors/regressions across correctness, security, concurrency, migrations, performance, tests, API-contract, maintainability. Loads `technical-review` (severity×confidence gate, **quote-the-line** verification, blast-radius judgment). On UI work, also apply the **Design Distinctiveness** gate — *and confirm the mandatory style-prototype selection happened* (a UI change with no user-picked style + previews doesn't pass). **Gate power.** | all outputs, success criteria, the diff | pass/fail + evidence-backed findings |
 | **Reporter** | Turn results into clear, decision-ready outputs/explanations. | everything above, output-formatting skill | reports, summaries |
 
 Two roles hold special power and must always exist: **Safety/Compliance** can veto any
@@ -38,7 +38,7 @@ sub-agent, it **provisions the relevant playbooks** by copying them into the rep
 
 | Playbook | Provisioned to | When |
 |----------|----------------|------|
-| `design-methodology.md`, `anti-ai-aesthetics.md` | **Designer** | frontend/UI repos (`profiles/frontend.md`) |
+| `design-methodology.md`, `anti-ai-aesthetics.md`, `design-styles.md` + `design-styles/` (67 styles) | **Designer** | frontend/UI repos (`profiles/frontend.md`) |
 | `planning-and-decision-briefs.md` | **Orchestrator** | always |
 | `clarify-and-challenge.md` | **Dispatcher / Orchestrator** | always (the task path) |
 | `technical-review.md` | **Reviewer / Evaluator** | always (any code/technical repo) |

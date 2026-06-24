@@ -15,10 +15,16 @@ job, don't.
 - Add the **Designer** role (see `references/roles.md`) to this repo's roster, as a spec in
   `.orbit/roles/designer.md` + an adapter in `.claude/agents/designer.md`.
 - **Provision its skills** — copy the design playbooks into `.orbit/skills/`:
-  `references/playbooks/design-methodology.md` and `references/playbooks/anti-ai-aesthetics.md`.
-  (This is the "provide skills to the sub-agent" pattern — the role loads them on demand.)
-- Give the Reviewer the **Design Distinctiveness** gate (the ported/built UI must not read
-  like a default, and must match the design source of truth if one exists).
+  `design-methodology.md`, `anti-ai-aesthetics.md`, `design-styles.md`, **and the whole
+  `design-styles/` directory (the 67-style catalog)**. The scaffolder does this automatically with
+  `--frontend`. (This is the "provide skills to the sub-agent" pattern — the role loads them on demand.)
+- **The mandatory style-prototype gate.** On every new component/module/screen, the Designer must
+  shortlist 2–4 styles from `design-styles.md`, build a **standalone HTML prototype of each**, open
+  them for the user, and let the user **pick one** before any production build. The user chooses the
+  look from real prototypes — this is non-negotiable for design work (see `design-methodology.md`).
+- Give the Reviewer the **Design Distinctiveness** gate (the ported/built UI must not read like a
+  default, must match the design source of truth if one exists, **and a style must have been
+  selected from prototypes** — a UI change with no recorded style choice doesn't pass).
 - If the repo has a **design source of truth** (e.g. `design-concept.html`, a tokens file),
   name it in CLAUDE.md §4 and treat it as the fidelity reference + a human-approval checkpoint
   for direct edits.

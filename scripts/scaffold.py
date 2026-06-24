@@ -50,7 +50,7 @@ FILE_PLAN = [
 
 # Reusable skill-library playbooks copied into .orbit/skills/ (the provisioning step).
 PLAYBOOKS_ALWAYS = ["clarify-and-challenge.md", "planning-and-decision-briefs.md", "technical-review.md"]
-PLAYBOOKS_FRONTEND = ["design-methodology.md", "anti-ai-aesthetics.md"]
+PLAYBOOKS_FRONTEND = ["design-methodology.md", "anti-ai-aesthetics.md", "design-styles.md"]
 
 # Standard sub-agent team. Each is copied verbatim to .claude/agents/<role>.md (the adapter) and,
 # frontmatter-stripped, to .orbit/roles/<role>.md (the model-agnostic spec).
@@ -166,6 +166,16 @@ def main():
     playbooks = PLAYBOOKS_ALWAYS + (PLAYBOOKS_FRONTEND if args.frontend else [])
     for pb in playbooks:
         _place(PLAYBOOKS / pb, target / ".orbit/skills" / pb, created, skipped)
+
+    # 3b. the 67-style design catalog (frontend only) -> .orbit/skills/design-styles/
+    styles_src = PLAYBOOKS / "design-styles"
+    if args.frontend and styles_src.is_dir():
+        styles_dst = target / ".orbit/skills/design-styles"
+        if styles_dst.exists():
+            skipped.append(".orbit/skills/design-styles/  (exists -- left untouched)")
+        else:
+            shutil.copytree(styles_src, styles_dst)
+            created.append(f".orbit/skills/design-styles/  ({len(list(styles_dst.glob('*.md')))} styles)")
 
     # 4. the standard team -> .claude/agents/ (adapter, verbatim) + .orbit/roles/ (spec, no frontmatter)
     roles = ROLES_ALWAYS + (ROLES_FRONTEND if args.frontend else [])

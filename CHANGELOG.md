@@ -3,6 +3,28 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.15.0
+
+The Designer now offers **67 real styles** and **lets the user pick from openable HTML prototypes** —
+mandatory on every design request.
+
+- **67-style palette folded into the Designer** (not bolted on): bundled
+  `references/playbooks/design-styles/` (67 token-systems — minimal, brutalism, glassmorphism,
+  editorial, luxury, retro, neon, …) + an auto-generated catalog `design-styles.md` (families + a
+  full table with each style's vibe + colors). Adapted from **bergside/awesome-design-skills** (MIT,
+  attributed in `CREDITS.md` + the bundled LICENSE). It's integrated with `design-methodology.md`
+  (the *how*), not separated.
+- **Mandatory style-prototype selection gate.** On any new component/module/screen the Designer must
+  shortlist 2–4 fitting styles, build a **standalone HTML prototype of each** (same component, real
+  content) under `.orbit/artifacts/<cycle>/previews/`, **open them for the user**, and the user
+  **picks one** before any production build. Wired through `design-methodology.md`, the Designer
+  role/adapter, `profiles/frontend.md`, and the **Reviewer** (a UI change with no recorded style
+  selection doesn't pass).
+- **Scaffolder** (`--frontend`) now provisions the whole catalog (`design-styles.md` + the 67-style
+  `design-styles/` dir) into `.orbit/skills/`; backend/CLI/data repos don't get it.
+- **`CREDITS.md`** added — proper attribution for awesome-design-skills (MIT), the frontend-design
+  methodology (Apache-2.0), and the gstack-inspired technical-review (distilled, MIT).
+
 ## 0.14.0
 
 A technical team sized to the project, and a live view that shows in the desktop/web app too.

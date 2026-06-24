@@ -9,8 +9,36 @@ mistaken for anyone else's. Every choice is deliberate, opinionated, and grounde
 **subject's own world** — its materials, instruments, artifacts, vernacular. Templated
 defaults are the enemy of that.
 
+## The style palette (67 ready-made styles)
+You have a catalog of **67 selectable style token-systems** in `design-styles.md` (full specs in
+`design-styles/<name>.md`) — minimal, brutalist, glassmorphism, editorial, luxury, retro, neon,
+and more. These are the *menu*; this methodology is the *how*. The user picks the style from real
+prototypes (gate below); you then apply it with the rigor here (grounding, signature, anti-AI
+checklist, quality floor) so it's distinctive, not a templated drop-in.
+
+## Style-prototype selection gate — MANDATORY on every new design request
+**Never jump straight to building one look.** For any new component, module, screen, or visual
+change, do this *first*, every time:
+1. **Shortlist 2–4 styles** from `design-styles.md` that genuinely fit the brief — use the families
+   to narrow (e.g. a fintech dashboard → `clean` / `corporate` / `sleek`; a kids' app → `doodle` /
+   `colorful` / `friendly`; a launch page → `bold` / `editorial` / `cosmic`). Show the relevant few,
+   never all 67.
+2. **Build a standalone HTML prototype of each** — one self-contained `.html` file per style (inline
+   CSS, **the same component with real content from the brief** so they're directly comparable),
+   using that style's tokens from `design-styles/<name>.md`. Write them to
+   `.orbit/artifacts/<cycle>/previews/<style>.html`.
+3. **Open them for the user** to compare side by side (`open` each file, or serve the folder), with a
+   one-line pitch per style ("Brutalist — raw, high-contrast, unmissable"; "Clean — calm, trustworthy").
+4. **The user picks one.** Only then proceed to the token system + build below, using the chosen
+   style as the base and grounding it in the subject.
+
+This gate is **mandatory for all design-related requests** — the user chooses the look from real,
+openable prototypes, not from a description. (The Reviewer enforces it: a UI change with no recorded
+style selection doesn't pass.)
+
 ## The two-pass process — plan before you code, critique twice
-1. **Brainstorm / explore** the subject's world for the visual language.
+1. **Start from the chosen style** (the prototype the user picked) and explore the subject's world to
+   adapt it — don't discard their choice, *ground* it.
 2. **Plan a token system** (below) in writing — no code yet.
 3. **Critique the plan against the brief** (the hard gate — see below).
 4. **Build** to the plan.
