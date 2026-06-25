@@ -55,11 +55,29 @@ PLAYBOOKS_ALWAYS = ["clarify-and-challenge.md", "planning-and-decision-briefs.md
                     "product-discovery.md", "market-and-competitive-research.md"]
 PLAYBOOKS_FRONTEND = ["design-methodology.md", "anti-ai-aesthetics.md", "design-styles.md"]
 
-# Standard sub-agent team. Each is copied verbatim to .claude/agents/<role>.md (the adapter) and,
-# frontmatter-stripped, to .orbit/roles/<role>.md (the model-agnostic spec).
-ROLES_ALWAYS = ["dispatcher", "orchestrator", "product-discovery", "market-researcher", "planner",
-                "builder", "reviewer", "reporter", "safety-gate"]
-ROLES_FRONTEND = ["designer"]
+# The UNIVERSAL spine — every project gets these (routing, planning, gates, reporting). Copied
+# verbatim to .claude/agents/<role>.md and, frontmatter-stripped, to .orbit/roles/<role>.md.
+ROLES_CORE = ["dispatcher", "orchestrator", "product-discovery", "market-researcher", "planner",
+              "reviewer", "reporter", "safety-gate"]
+
+# The PROJECT-SPECIFIC specialists — provisioned from the detected surfaces, NOT a fixed template.
+# surface keyword -> (engineer filename, display name, what it owns). One engineer per surface;
+# duplicates (web+frontend) collapse to one. Generated from builder.md with the name substituted.
+SURFACE_ENGINEERS = {
+    "web":      ("frontend-engineer", "Frontend Engineer", "the web UI"),
+    "frontend": ("frontend-engineer", "Frontend Engineer", "the web UI"),
+    "ui":       ("frontend-engineer", "Frontend Engineer", "the web UI"),
+    "mobile":   ("mobile-developer",  "Mobile Developer",  "the mobile app"),
+    "ios":      ("mobile-developer",  "Mobile Developer",  "the mobile app"),
+    "android":  ("mobile-developer",  "Mobile Developer",  "the mobile app"),
+    "api":      ("backend-engineer",  "Backend Engineer",  "the API / services"),
+    "backend":  ("backend-engineer",  "Backend Engineer",  "the API / services"),
+    "server":   ("backend-engineer",  "Backend Engineer",  "the API / services"),
+    "data":     ("data-engineer",     "Data Engineer",     "data pipelines / ETL / ML"),
+    "ml":       ("data-engineer",     "Data Engineer",     "data pipelines / ETL / ML"),
+    "cli":      ("cli-engineer",      "CLI Engineer",      "the command-line tool"),
+}
+UI_SURFACES = {"web", "frontend", "ui", "mobile", "ios", "android"}  # → stand up the Designer
 
 DIRS = [
     ".orbit", ".orbit/roles", ".orbit/skills",
@@ -92,6 +110,43 @@ def _place(src: Path, dst: Path, created, skipped, mode=None, transform=None):
     if mode:
         dst.chmod(mode)
     created.append(str(rel))
+
+
+def _emit(dst: Path, text: str, created, skipped):
+    """Write generated text to dst, never overwriting."""
+    if dst.exists():
+        skipped.append(f"{dst}  (exists -- left untouched)")
+        return
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_text(text)
+    created.append(str(dst))
+
+
+def _engineer_text(builder: str, name: str, display: str, scope: str) -> str:
+    """Generate a per-surface engineer adapter from the generic builder.md template."""
+    t = builder.replace("name: builder", f"name: {name}", 1)
+    t = t.replace(
+        "The executor. Use to produce the core output of the product",
+        f"The {display} — owns {scope}. Use to produce/implement that surface",
+    )
+    t = t.replace("# Role: Builder / Executor (Claude Code subagent)",
+                  f"# Role: {display} (Claude Code subagent)")
+    t = t.replace("Mirrors `.orbit/roles/builder.md`", f"Mirrors `.orbit/roles/{name}.md`")
+    return t
+
+
+def resolve_engineers(surfaces):
+    """surfaces (list of keywords) -> {filename: (display, scope)} + has_ui. One engineer per
+    surface, duplicates collapsed. Empty/unknown → a single generic 'builder'."""
+    eng = {}
+    for s in surfaces:
+        if s in SURFACE_ENGINEERS:
+            fn, disp, scope = SURFACE_ENGINEERS[s]
+            eng.setdefault(fn, (disp, scope))
+    if not eng:
+        eng["builder"] = ("Builder / Executor", "the product's output")
+    has_ui = any(s in UI_SURFACES for s in surfaces)
+    return eng, has_ui
 
 
 def install_hooks(target: Path) -> None:
@@ -144,8 +199,12 @@ def install_hooks(target: Path) -> None:
 def main():
     ap = argparse.ArgumentParser(description="Scaffold the orbit skeleton")
     ap.add_argument("--target", default=".", type=Path, help="target repo root")
+    ap.add_argument("--surfaces", default="",
+                    help="comma-separated technical surfaces detected from the repo "
+                         "(web,mobile,api,backend,data,cli) — provisions one engineer per surface "
+                         "+ the Designer if any UI surface. Empty → a single generic builder.")
     ap.add_argument("--frontend", action="store_true",
-                    help="also stand up the Designer role + design playbooks (frontend/UI repos)")
+                    help="back-compat alias: implies a web surface (Designer + design playbooks)")
     ap.add_argument("--install-hooks", action="store_true",
                     help="also wire the always-on safety hook into .claude/settings.json")
     args = ap.parse_args()
@@ -153,6 +212,12 @@ def main():
 
     if not target.is_dir():
         raise SystemExit(f"target is not a directory: {target}")
+
+    # resolve the project's surfaces → the specialist roster (engineers + whether a Designer)
+    surfaces = [s.strip().lower() for s in args.surfaces.split(",") if s.strip()]
+    if args.frontend and not any(s in UI_SURFACES for s in surfaces):
+        surfaces.append("web")
+    engineers, has_ui = resolve_engineers(surfaces)
 
     created, skipped = [], []
 
@@ -166,14 +231,14 @@ def main():
     # 2. working-state file (from the reference template)
     _place(REFERENCES / "state-template.md", target / ".orbit/STATE.md", created, skipped)
 
-    # 3. skill-library playbooks -> .orbit/skills/
-    playbooks = PLAYBOOKS_ALWAYS + (PLAYBOOKS_FRONTEND if args.frontend else [])
+    # 3. skill-library playbooks -> .orbit/skills/ (design playbooks only when there's a UI surface)
+    playbooks = PLAYBOOKS_ALWAYS + (PLAYBOOKS_FRONTEND if has_ui else [])
     for pb in playbooks:
         _place(PLAYBOOKS / pb, target / ".orbit/skills" / pb, created, skipped)
 
-    # 3b. the 67-style design catalog (frontend only) -> .orbit/skills/design-styles/
+    # 3b. the 67-style design catalog (UI surfaces only) -> .orbit/skills/design-styles/
     styles_src = PLAYBOOKS / "design-styles"
-    if args.frontend and styles_src.is_dir():
+    if has_ui and styles_src.is_dir():
         styles_dst = target / ".orbit/skills/design-styles"
         if styles_dst.exists():
             skipped.append(".orbit/skills/design-styles/  (exists -- left untouched)")
@@ -181,15 +246,33 @@ def main():
             shutil.copytree(styles_src, styles_dst)
             created.append(f".orbit/skills/design-styles/  ({len(list(styles_dst.glob('*.md')))} styles)")
 
-    # 4. the standard team -> .claude/agents/ (adapter, verbatim) + .orbit/roles/ (spec, no frontmatter)
-    roles = ROLES_ALWAYS + (ROLES_FRONTEND if args.frontend else [])
-    for role in roles:
+    # 4a. the universal spine -> .claude/agents/ (verbatim) + .orbit/roles/ (frontmatter-stripped)
+    for role in ROLES_CORE:
         src = AGENTS / f"{role}.md"
         _place(src, target / ".claude/agents" / f"{role}.md", created, skipped)
         _place(src, target / ".orbit/roles" / f"{role}.md", created, skipped, transform=_strip_frontmatter)
 
-    print("Scaffolded orbit skeleton into:", target,
-          "(frontend profile)" if args.frontend else "")
+    # 4b. the Designer — only if the project has a UI surface
+    if has_ui:
+        src = AGENTS / "designer.md"
+        _place(src, target / ".claude/agents/designer.md", created, skipped)
+        _place(src, target / ".orbit/roles/designer.md", created, skipped, transform=_strip_frontmatter)
+
+    # 4c. the specialists — ONE ENGINEER PER DETECTED SURFACE (generated from builder.md)
+    builder_text = (AGENTS / "builder.md").read_text()
+    for fn, (disp, scope) in engineers.items():
+        if fn == "builder":                       # generic fallback (no surfaces detected)
+            _place(AGENTS / "builder.md", target / ".claude/agents/builder.md", created, skipped)
+            _place(AGENTS / "builder.md", target / ".orbit/roles/builder.md", created, skipped,
+                   transform=_strip_frontmatter)
+        else:
+            adapter = _engineer_text(builder_text, fn, disp, scope)
+            _emit(target / ".claude/agents" / f"{fn}.md", adapter, created, skipped)
+            _emit(target / ".orbit/roles" / f"{fn}.md", _strip_frontmatter(adapter), created, skipped)
+
+    _team = ", ".join(sorted(engineers.keys())) + (" + designer" if has_ui else "")
+    print(f"Scaffolded orbit skeleton into: {target}")
+    print(f"Specialists for this project (from surfaces {surfaces or '[none → generic builder]'}): {_team}")
     print("\nCreated:")
     for c in created or ["(nothing new)"]:
         print("  +", c)
@@ -204,7 +287,7 @@ def main():
         "                  §3 success criteria, §8 stop conditions, and §10 routing. (This is the one\n"
         "                  file the model writes — everything above was deterministic.)\n"
         "  * .orbit/skills/<domain>.md  -> the product's core domain how-to (one skill).\n"
-        "  * tailor role NAMES/scope only if the domain needs it; the default team works as-is.\n"
+        "  * the engineers are already named per detected surface; add a specialist only if needed.\n"
         "  * wire loop.py dispatch() to your orchestrator; tune loop.config.json thresholds."
     )
     if args.install_hooks:

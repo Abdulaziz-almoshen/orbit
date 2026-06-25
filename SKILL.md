@@ -163,13 +163,14 @@ is the fallback.** Interrogating the user with four questions is a failure mode.
 2. **Mine the repo and INFER** product, goal, "most expensive mistake," and integrations
    from README, package manifests (package.json, *.csproj, requirements.txt…), config, and
    code. Read `references/profiles/generic.md` for what to look for.
-   - **Detect the distinct technical SURFACES** — this sizes the team. Look for: a **web
-     frontend** (React/Vue/Svelte/Next/Tailwind, `.tsx`/views), a **mobile app** (React Native/
-     Expo, Swift/iOS, Kotlin/Android, Flutter), a **backend/API** (server framework, routes,
-     DB), a **data** layer (pipelines/ETL/notebooks). A repo can have several at once
-     (web + mobile + API). Phase 4 stands up **one engineer per surface** — name them by surface.
-   - **If there's a frontend/UI surface**, also load `references/profiles/frontend.md` and plan to
-     stand up the **Designer** role. Don't add a Designer to a pure backend/CLI/data project.
+   - **Detect the distinct technical SURFACES — this determines the team, deterministically.** Look
+     for: a **web frontend** (React/Vue/Svelte/Next/Tailwind, `.tsx`/views), a **mobile app** (React
+     Native/Expo, Swift/iOS, Kotlin/Android, Flutter), a **backend/api** (server framework, routes,
+     DB), a **data** layer (pipelines/ETL/notebooks), a **cli**. A repo can have several at once.
+     **Pass exactly what you find to `scaffold.py --surfaces <list>`** (Phase 2) — it provisions one
+     engineer per surface (`frontend-engineer`/`mobile-developer`/`backend-engineer`/`data-engineer`)
+     and the **Designer only if a UI surface (web/mobile)** is present. This is what makes the roster
+     fit the project rather than a fixed template. (No surface detected → a single generic `builder`.)
 3. **Then decide:**
    - **Existing product, enough inferred** → ask **nothing**. State your inferred
      characterization in one short paragraph "I read the repo as: <…> — correct me if wrong"
@@ -207,17 +208,24 @@ Run the scaffolder. It writes the whole identical-every-time skeleton in one sho
 team** to both `.claude/agents/*.md` (adapters) and `.orbit/roles/*.md` (specs):
 
 ```bash
-python3 "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/orbit/scripts/scaffold.py" --target . [--frontend] [--install-hooks]
+python3 "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/orbit/scripts/scaffold.py" --target . --surfaces <detected> [--install-hooks]
 ```
 
-- Add **`--frontend`** if Phase 0 detected a UI repo — it stands up the **Designer** + the design
-  playbooks. Omit it on backend/CLI/data projects.
-- Add **`--install-hooks`** to wire the safety hook now (or leave it for Phase 6a).
+- **`--surfaces`** is the key flag — pass the surfaces **you detected in Phase 0** (comma-separated:
+  `web`, `mobile`, `api`/`backend`, `data`, `cli`). The scaffolder then provisions the **team that fits
+  this project, deterministically**: **one engineer per surface** (`frontend-engineer`,
+  `mobile-developer`, `backend-engineer`, `data-engineer`) **and the Designer + design playbooks only if
+  there's a UI surface** (web/mobile). A backend API repo → `--surfaces api` → a `backend-engineer`, no
+  designer. A web+mobile+API product → `--surfaces web,mobile,api` → three engineers + designer. No
+  surfaces detected → a single generic `builder`. (Empty `--surfaces` is allowed; `--frontend` still
+  works as an alias for `--surfaces web`.)
+- Add **`--install-hooks`** to wire the safety hooks now (or leave it for Phase 6a).
 - It **never overwrites** — existing files are left untouched and reported, so a re-run is safe.
 
-This replaces hand-authoring ~20 files (the old 10-minute path). The standard team
-(dispatcher, orchestrator, builder, reviewer, reporter, safety-gate — plus designer on
-`--frontend`) and its playbooks are now in place and working. **Don't re-author any of it.**
+This replaces hand-authoring ~20 files. The **universal spine** (dispatcher, orchestrator,
+product-discovery, market-researcher, planner, reviewer, reporter, safety-gate) is the same every
+project; the **specialists vary by the code** (the per-surface engineers + the conditional Designer).
+Everything is in place and working — **don't re-author any of it.**
 
 ### Phase 3 — Author CLAUDE.md (the one bespoke file)
 
@@ -242,15 +250,14 @@ re-run doesn't re-ask.
 The standard team + library playbooks are already in place from Phase 2. Make them *fit the
 project* — quickly, not from scratch:
 
-- **One engineer per surface (this is the team).** For each technical surface Phase 0 detected,
-  stand up its own engineer — `frontend-engineer`, `mobile-developer`, `backend-engineer`,
-  `data-engineer`, etc. A web + mobile + API product gets **three** engineers; a single-surface
-  prototype gets **one**. Start from the scaffolded generic `builder`: rename it to the first
-  surface, then **copy that adapter** (`.claude/agents/<name>.md` + `.orbit/roles/<name>.md`, fix
-  the `name:`/title) once per additional surface, and point each at its own domain skill. They run
-  in **parallel** — the Planner fans work out to them; the handoff rules keep them from colliding.
+- **Engineers are already provisioned per surface (deterministically, from `--surfaces`).** The
+  scaffolder wrote one engineer per detected surface (`frontend-engineer` / `mobile-developer` /
+  `backend-engineer` / `data-engineer`) and the Designer iff a UI surface — so the roster already fits
+  the project, not a template. Your only job: **verify they match the repo** (add one if a surface was
+  missed; you forgot a `--surfaces` value → just re-run with it, it won't overwrite) and **point each
+  engineer at its domain skill**. They run in **parallel** — the Planner fans work out to them.
 - **Keep only what the project needs; scale to size.** The Designer exists *iff* there's a UI
-  surface (you passed `--frontend`). A tiny prototype stays lean (dispatcher, planner, one engineer,
+  surface (a web/mobile `--surfaces`). A tiny prototype stays lean (dispatcher, planner, one engineer,
   reviewer, safety, reporter); a bigger system earns the full bench (an engineer per surface, plus
   an Input/Research or Analyst role when the work genuinely needs one). Don't provision roles a
   one-person prototype won't use — match the team to the product, not a fixed template.

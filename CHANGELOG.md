@@ -3,6 +3,26 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.19.0
+
+The team is now **provisioned from the project's code**, deterministically — not a fixed template +
+a hopeful rename. Closes the gap that two different projects got the same agents.
+
+- **`scaffold.py --surfaces <web,mobile,api,data,cli>`**: Phase 0 detects the repo's technical
+  surfaces and passes them in; the scaffolder writes **one engineer per surface**
+  (`frontend-engineer` / `mobile-developer` / `backend-engineer` / `data-engineer`, generated from the
+  builder template with the name/title/scope substituted) and the **Designer + design playbooks +
+  67-style catalog only when a UI surface (web/mobile) is present**. A backend API repo → just a
+  `backend-engineer`, no designer; web+mobile+api → three engineers + designer; unknown stack → a
+  single generic `builder`. `--frontend` kept as an alias for `--surfaces web`.
+- **Universal spine vs project specialists** made explicit: the spine (dispatcher, orchestrator,
+  product-discovery, market-researcher, planner, reviewer, reporter, safety-gate) is the same every
+  project (those are needed everywhere); the **specialists vary by the code** (the per-surface engineers
+  + the conditional Designer). The old Phase-4 "rename the generic builder" model step is gone — it's
+  deterministic now.
+- Wired through Phase 0 (detect → `--surfaces`), Phase 2 (the scaffold command), and Phase 4 (verify,
+  don't recreate). Verified across api / web,api / web,mobile,api / data / none.
+
 ## 0.18.0
 
 The planning phase becomes a real **discovery team**. Grounded in a study of product discovery
