@@ -36,16 +36,47 @@ terminal, so the *only* thing the user sees is what the model prints. So **every
 compact "team board" inline** in the reply — this is the one renderer that works everywhere:
 
 ```
-🛰 Orbit · cycle 2
-✓ 🟣 planner — planned the change
+🛰 Orbit · cycle 2 — building the suggestion card
+
+💡 Why this matters: nail the accept/reject flow and issuance drops to ~15s, 94% acceptance —
+   the screen that makes the whole demo land.
+
+✓ 🟣 planner — picked the safest approach
 ✓ 🟢 frontend-engineer — built the form
 ▸ 🟡 reviewer — proving it (running tests)…
 ○ 🔴 safety · ○ ⚪ reporter
+
+🤝 Your team's heads-down on this behind the scenes — 3 of 5 done, almost there. Sit tight.
 ```
 
 Emoji role colors match `orbit-status`: 🔵 dispatcher · 🟣 planner · 🟢 engineer · 🟪 designer ·
-🟡 reviewer · 🔴 safety · ⚪ reporter. Keep it short (live "who's talking," not a log). It reads from
-the same `.orbit/tasks.json` + `.orbit/activity.jsonl` as the other renderers, so it's always in sync.
+🟡 reviewer · 🔴 safety · ⚪ reporter. It reads from the same `.orbit/tasks.json` +
+`.orbit/activity.jsonl` as the other renderers, so it's always in sync.
+
+### The team voice (mandatory — the wait should never feel empty)
+
+The user can't see the sub-agents working, so the board must *speak for the team*. Every render
+includes **three motivational beats** — short, genuine, never filler:
+
+1. **Kickoff — "why this is a great task."** One honest line on what the task *unlocks* (pull it from
+   CLAUDE.md §3 success criteria / the goal): the X/Y/Z it enables, why it's worth doing well. Makes
+   the work feel purposeful, not mechanical.
+2. **During the pause — a team line.** When the team goes heads-down (sub-agents running), say so and
+   make it **progress-aware**: "3 of 5 done — almost there, sit tight." The silence becomes "your team's
+   on it," not a blank wait.
+3. **On completion — an earned close.** Who did what + the impact, then "what's next?" — e.g. *"Done —
+   the engineer built it, the reviewer proved it against the governance rules, safety cleared it.
+   Highest-impact screen in the product, shipped. 🚀"*
+
+**Guardrails so it stays classy, not cringe:**
+- **Calibrate the tone to the task.** A playful feature can be upbeat ("let's go 💪"); a
+  **governance / security / medical / money** task stays warm-but-serious — *"this keeps every
+  initiative from advancing unscored — worth getting exactly right"* — never confetti on something
+  sensitive.
+- **Vary it.** Never repeat the same sentence cycle after cycle; tie "almost there" to the real
+  done/total count.
+- **Keep it short and honest.** Two lines, not a speech. Don't claim progress that didn't happen, and
+  don't over-hype a small task. Motivation, not noise.
 
 ## Renderer 1 — Claude Code native (the pinned task checklist)
 

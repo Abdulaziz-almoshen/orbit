@@ -3,6 +3,20 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.16.0
+
+The team gets a voice — the wait behind the scenes is never empty anymore.
+
+- **Motivational team voice on the live board (mandatory).** Every cycle's inline "team board" now
+  carries three genuine beats: (1) a one-line **"why this task matters"** at kickoff (what it unlocks,
+  pulled from §3 success criteria), (2) a progress-aware **"your team's heads-down — N of M done,
+  almost there, sit tight"** during the pause while sub-agents work, and (3) an **earned close** on
+  completion (who did what + the impact, then "what's next?").
+- **Guardrails:** tone calibrates to the task (upbeat for a playful feature; warm-but-serious for
+  governance/security/money/medical — never confetti on something sensitive), lines vary cycle to
+  cycle, stay short and honest (no claimed-but-unreal progress). Documented in `observability.md` →
+  "The team voice"; enforced via SKILL.md Phase 6.5.
+
 ## 0.15.0
 
 The Designer now offers **67 real styles** and **lets the user pick from openable HTML prototypes** —

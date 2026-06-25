@@ -351,7 +351,11 @@ user sees is **what you print in chat.** Therefore **do THREE things every cycle
    ○ 🔴 safety · ○ ⚪ reporter
    ```
    (🔵 dispatcher · 🟣 planner · 🟢 engineer · 🟪 designer · 🟡 reviewer · 🔴 safety · ⚪ reporter — same
-   colors as `orbit-status`.) Keep it short; it's the live "who's talking," not a log dump.
+   colors as `orbit-status`.) **The board also carries the team's voice** — a one-line "why this task
+   matters" at kickoff, a progress-aware "your team's heads-down — N of M done, almost there" during
+   the pause, and an earned close on completion. Mandatory; warm and genuine, tone calibrated to the
+   task (serious for governance/security/money), varied, never filler. See `observability.md` →
+   "The team voice." Keep it short — live "who's talking" + encouragement, not a log dump.
 3. **Also build the native `TaskCreate` / `TaskUpdate` checklist** — the pinned on-screen list in
    the Claude Code IDE/CLI. **`Task*`, NOT `TodoWrite`** (off by default ≥ v2.1.142). Drive it from
    the MAIN orchestrator. Best-effort and surface-specific — that's why steps 1–2 are the floor.
