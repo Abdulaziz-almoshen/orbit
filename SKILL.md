@@ -212,7 +212,9 @@ Run the scaffolder. It writes the whole identical-every-time skeleton in one sho
 team** to both `.claude/agents/*.md` (adapters) and `.orbit/roles/*.md` (specs):
 
 ```bash
-python3 "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/orbit/scripts/scaffold.py" --target . --surfaces <detected> [--install-hooks]
+# resolve Orbit's root whether it's a marketplace plugin or a skills-dir clone:
+ORBIT="${CLAUDE_PLUGIN_ROOT:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/orbit}"
+python3 "$ORBIT/scripts/scaffold.py" --target . --surfaces <detected> [--install-hooks]
 ```
 
 - **`--surfaces`** is the key flag — pass the surfaces **you detected in Phase 0** (comma-separated:
@@ -329,8 +331,8 @@ off-switch." Announce + easy removal fixes that.)
    argv precisely). `deny` only the irreversible/forbidden (force-push, secrets-branch push, schema
    migration); `ask` for reversible-but-risky (normal push, deploy, `rm -rf`). `route.py` works out
    of the box; tune its verb lists only if the domain has unusual phrasing.
-2. **Wire both by default** — run `python3 "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/orbit/scripts/scaffold.py"
-   --target . --install-hooks` (or, in the same `scaffold.py` run from Phase 2, just pass
+2. **Wire both by default** — run `python3 "$ORBIT/scripts/scaffold.py" --target . --install-hooks`
+   (with `ORBIT` resolved as in Phase 2; or, in the same `scaffold.py` run from Phase 2, just pass
    `--install-hooks` then). It backs up `.claude/settings.json`, merges each hook idempotently, and
    prints the exact JSON.
 3. **Announce them, plainly:** "Installed two always-on hooks — a **safety wall** (denies <deny

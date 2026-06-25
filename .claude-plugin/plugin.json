@@ -1,0 +1,14 @@
+{
+  "name": "orbit",
+  "displayName": "Orbit",
+  "version": "0.21.0",
+  "description": "Turn any repo into a self-prompting agentic loop — a governed, project-fitted sub-agent team with persistent memory, a task/question router, hard safety brakes, a live team board, and active learning.",
+  "author": {
+    "name": "Abdulaziz Almohsen",
+    "url": "https://github.com/Abdulaziz-almoshen"
+  },
+  "homepage": "https://github.com/Abdulaziz-almoshen/orbit",
+  "repository": "https://github.com/Abdulaziz-almoshen/orbit",
+  "license": "MIT",
+  "keywords": ["agentic", "agent-loop", "orchestration", "self-prompting", "automation", "discovery", "planning"]
+}

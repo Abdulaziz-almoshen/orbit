@@ -3,6 +3,23 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.21.0
+
+Listable in the Claude plugin directory — without losing the no-restart clone install. Per the docs,
+Claude Code v2.1.142+ auto-discovers a root `SKILL.md` as a single-skill plugin, so adding two
+manifests (no files moved) makes the *same* repo installable BOTH ways and submittable to the
+official directory.
+
+- Added `.claude-plugin/plugin.json` + `.claude-plugin/marketplace.json` (`source: "./"`).
+  `claude plugin validate` passes. The root `SKILL.md` (with its `name:` frontmatter) is the plugin's
+  single skill — no `skills/` subdir, no duplication.
+- **Two install paths now:** (1) clone into `~/.claude/skills/orbit` + `./setup` — **no restart**,
+  unchanged; (2) `/plugin marketplace add Abdulaziz-almoshen/orbit` → `/plugin install orbit@orbit` —
+  one-time restart, and discoverable in the directory.
+- `scaffold.py` path in SKILL.md now resolves `$CLAUDE_PLUGIN_ROOT` (plugin) **or**
+  `~/.claude/skills/orbit` (clone), so setup works for both.
+- Maintenance: keep `VERSION`, `plugin.json`, and `marketplace.json` (×2) in sync on each bump.
+
 ## 0.20.0
 
 The goal gets genuinely **negotiated** before building — the gstack office-hours feel, done honestly.
