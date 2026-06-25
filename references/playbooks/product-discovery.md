@@ -6,6 +6,12 @@ de-risked *bet* — an outcome, the user's job, the opportunity, the riskiest as
 cheapest test of it — so the loop never confidently builds the wrong thing. Discovery **de-risks**;
 it doesn't block delivery. (Extends clarify-and-challenge with evidence; don't re-ask its 5 gates.)
 
+**The surprise rule:** if your discovery turns up something material — the goal rests on a wrong
+premise, there's a better/more scalable bet, a real risk, or it already exists (reuse) — you **must**
+surface it to the user with the evidence ("here's what we found, here's why your goal is better as
+X"). That's the value. If the bet is genuinely sound, say so in a line and hand to the Planner — don't
+invent objections.
+
 ## Proportional — the anti-theater rule (read first)
 Discovery scales to stakes. **Small · clear · reversible → skip it entirely** (Builder just does it).
 **Medium → a collapsed 3–6 line note** (outcome + riskiest assumption + one cheap check). **Full

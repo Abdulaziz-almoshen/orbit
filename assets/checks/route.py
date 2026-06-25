@@ -45,12 +45,19 @@ QUESTION_PAT = re.compile(
 )
 
 TASK_CTX = (
-    "[orbit] SYSTEM ROUTING DECISION — this message is a TASK. Orbit controls this project: route "
-    "it through the loop now. Read CLAUDE.md + .orbit/STATE.md, append it to the queue, announce "
-    "'[orchestrator] routing: <task>', and run read→plan→act→evaluate→update→decide via the roles "
-    "in .claude/agents/ (fast-by-default for small/clear/reversible; full parallel loop for "
-    "substantial/ambiguous/irreversible). Drive the TaskCreate/TaskUpdate checklist and write "
-    ".orbit/tasks.json + .orbit/activity.jsonl. Do NOT free-edit a source-of-truth file outside the loop."
+    "[orbit] SYSTEM ROUTING DECISION — this message is a TASK. Route it through the loop. "
+    "**If it's a substantial goal/feature, the planning team reviews it as experts FIRST, before "
+    "building.** Understand the real intent, then bring the team's knowledge to bear (discovery: is "
+    "this the right bet?; prior-art/market: does it already exist, or is there a better/reusable way?; "
+    "technical judgment: risks, blast radius, a simpler path). **If that knowledge reveals something "
+    "material — a wrong premise, a better/more scalable approach, a real risk, a reuse-over-build, or "
+    "a missing requirement — you MUST surface it to the user, backed by evidence (the 'surprise': be "
+    "smarter than the ask).** If the goal and the plan are genuinely sound and you have nothing "
+    "material to add, say so in ONE line and proceed — never manufacture friction, never rubber-stamp "
+    "when you do have a better read. Then run read→plan→act→evaluate→update→decide via the roles in "
+    ".claude/agents/. Small/clear/reversible → just do it (no review theater). Drive the "
+    "TaskCreate/TaskUpdate checklist + write .orbit/tasks.json + .orbit/activity.jsonl. Do NOT "
+    "free-edit a source-of-truth file outside the loop."
 )
 QUESTION_CTX = (
     "[orbit] SYSTEM ROUTING DECISION — this message is a QUESTION. Answer it directly: no loop, no "

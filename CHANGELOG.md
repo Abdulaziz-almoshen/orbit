@@ -3,6 +3,24 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.20.0
+
+The goal gets genuinely **negotiated** before building — the gstack office-hours feel, done honestly.
+A substantial goal now triggers the planning team's expert review FIRST, and the rule is calibrated:
+**speak up only when you genuinely have something — then you MUST; if the goal's sound, proceed**
+(no manufactured friction). Fixes "it doesn't negotiate or challenge the goal."
+
+- **Router directive rewritten** (`route.py` TASK injection): on a substantial goal, run the planning
+  team's expert pass before building — understand intent, bring discovery + prior-art/market +
+  technical judgment to bear, and **if that reveals a wrong premise / a better or more scalable
+  approach / a real risk / a reuse-over-build / a missing requirement, you MUST surface it with
+  evidence (the "surprise: be smarter than the ask")**. If sound, say so in one line and proceed.
+  Small/clear → just do it.
+- **The surprise rule** added to `clarify-and-challenge.md` and `product-discovery.md`: the bar to
+  speak up = "would a sharp senior engineer + PM who know this codebase genuinely flag this?" — if
+  yes you must (with evidence), if no proceed. Never rubber-stamp a goal you can improve; never grill
+  for ceremony. This reconciles "fast by default" (small tasks) with real negotiation (goals).
+
 ## 0.19.1
 
 Empty / greenfield repo handling for the surface-driven team. On a repo with no code, surface
