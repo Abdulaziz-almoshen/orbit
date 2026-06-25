@@ -3,6 +3,15 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.19.1
+
+Empty / greenfield repo handling for the surface-driven team. On a repo with no code, surface
+detection finds nothing — so Phase 0 now: asks the one product question, **derives the surfaces from
+the answer + chosen stack**, and passes them to `--surfaces` (e.g. "a recipe app for iPhone with a sync
+backend" → `mobile,api` → mobile-developer + backend-engineer + Designer). The team comes from *intent*,
+not the empty code. Only when intent is truly unknown (headless / no answer) does it fall back to a
+single generic `builder` (no Designer), which a later `/orbit` re-run upgrades non-destructively.
+
 ## 0.19.0
 
 The team is now **provisioned from the project's code**, deterministically — not a fixed template +

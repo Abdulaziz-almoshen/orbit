@@ -175,12 +175,16 @@ is the fallback.** Interrogating the user with four questions is a failure mode.
    - **Existing product, enough inferred** → ask **nothing**. State your inferred
      characterization in one short paragraph "I read the repo as: <…> — correct me if wrong"
      and proceed. The user corrects only if needed.
-   - **Genuinely un-inferable dimension(s)** (usually only on a **fresh/greenfield** repo
-     with nothing to read) → ask the **one** missing thing, batched into a **single**
-     AskUserQuestion. Only **product-level** questions ("what does this do / what's a good
-     outcome"), never plumbing.
-   - **Non-interactive / headless / no answer** → proceed with the inferred characterization;
-     never hang.
+   - **Greenfield / EMPTY repo** (nothing to read) → ask the **one** product question ("what are
+     you building / what's a good outcome"), batched into a **single** AskUserQuestion. Then
+     **derive the surfaces from the answer + the stack they pick** and pass them to `--surfaces` —
+     the team comes from *intent*, not the (empty) code. E.g. "a recipe app for iPhone with a sync
+     backend" → `--surfaces mobile,api` → `mobile-developer` + `backend-engineer` (+ Designer for the
+     mobile UI). "An internal dashboard" → `--surfaces web,api`. Don't ask plumbing questions; infer
+     the surfaces from the product answer.
+   - **Non-interactive / headless / no answer / truly unknown** → scaffold with **empty `--surfaces`**
+     (a single generic `builder`, no Designer) and proceed — never hang. The user can re-run `/orbit`
+     with the real surfaces once the product is known; it won't overwrite.
 4. Detect the stack (language, package manager, how the orchestrator and any external APIs
    are called) — purely by reading; this is never a question.
 
