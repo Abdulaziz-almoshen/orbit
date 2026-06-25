@@ -42,6 +42,7 @@ sub-agent, it **provisions the relevant playbooks** by copying them into the rep
 | `planning-and-decision-briefs.md` | **Orchestrator** | always |
 | `clarify-and-challenge.md` | **Dispatcher / Orchestrator** | always (the task path) |
 | `technical-review.md` | **Reviewer / Evaluator** | always (any code/technical repo) |
+| `active-learning.md` | **Orchestrator** (the loop's UPDATE phase) | always — silently learns from corrections + major changes |
 
 Add new playbooks here as the system grows (e.g. data-validation, backtesting, fact-checking
 for other domains). A role's spec just says "load `<playbook>`"; the substance lives once, in

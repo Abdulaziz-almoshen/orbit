@@ -462,9 +462,10 @@ done. Make the user feel they just hired a team, and it's eager to start.
   product. `references/profiles/frontend.md` — the frontend/UI profile that activates the
   **Designer**. Add your own profiles here for repeated setups.
 - `references/playbooks/` — the reusable **role-skill library** provisioned to sub-agents:
-  `design-methodology.md` + `anti-ai-aesthetics.md` (Designer), `planning-and-decision-briefs.md`
-  (Orchestrator), `clarify-and-challenge.md` (Dispatcher/Orchestrator), `technical-review.md`
-  (Reviewer — the technical quality gate). Grow this over time.
+  `design-methodology.md` + `anti-ai-aesthetics.md` + `design-styles.md` (Designer),
+  `planning-and-decision-briefs.md` (Orchestrator), `clarify-and-challenge.md` (Dispatcher/Orchestrator),
+  `technical-review.md` (Reviewer — the technical quality gate), `active-learning.md` (the Orchestrator's
+  silent learn-gate in the UPDATE phase — the system sharpens from corrections + major changes). Grow this over time.
 - `assets/` — copyable `loop.config.json`, `loop.py`, `activity.py`, `ralph_loop.sh`,
   `orbit-status`, `checks/guard.py` (safety) + `checks/route.py` (router), `runners/inngest-loop.ts`,
   example subagents (incl. designer, reviewer, safety-gate).

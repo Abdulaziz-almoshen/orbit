@@ -25,7 +25,10 @@ Everything this skill installs exists to make that real, and to make it **safe**
    disk, a fresh agent with zero conversation history can pick up exactly where the last
    one stopped. This is what makes the "Ralph loop" (fresh context each iteration)
    possible — and fresh context is a feature, not a limitation: it prevents context rot
-   and keeps each cycle sharp.
+   and keeps each cycle sharp. **And the memory improves itself:** a user correction or a
+   major change runs the **active-learning** gate (silently, in the UPDATE phase) and updates
+   `CLAUDE.md` / the skills / the decision log — so the system gets sharper on this codebase
+   the more it's used. See `playbooks/active-learning.md`.
 
 2. **Decomposition into specialized sub-agents.** One agent asked to do everything does
    everything mediocrely and blows its context. A *team* — each role with a narrow remit,

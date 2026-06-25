@@ -88,6 +88,7 @@ execution engine. See `references/durable-execution.md`.)
 - `.orbit/skills/quality-review.md` — the product-specific rubric/criteria the Reviewer applies.
 - `.orbit/skills/safety-rules.md` — what's forbidden, what needs a human.
 - `.orbit/skills/output-formatting.md` — clear, decision-ready outputs.
+- `.orbit/skills/active-learning.md` — how the system learns from corrections + major changes (the gate).
 
 ## 8. Stop Conditions & Safety Rules  ← the most important section
 Hard limits (enforced by `.orbit/loop.config.json`; the loop must honor them):
@@ -140,6 +141,16 @@ prompts itself *and* stays fast: most requests don't need ceremony, so don't pay
 classifies **every** message *deterministically* and injects this routing decision before you
 respond: the call is the **system's**, not yours, and it's present every turn. You still execute the
 loop. The §8 safety hook is the hard wall that can stop a tool; it binds in every lane.)
+
+## 11. Active learning  (the system gets sharper as you use it)
+In the loop's **UPDATE** phase — and right after a **user correction** — run the active-learning
+gate (`.orbit/skills/active-learning.md`), **silently, no confirmation**: if a learning clears the
+bar (salience ≥ 7 + recurring/verified/non-obvious/broadly-applicable), record it to
+`.orbit/checks/learn.py record …` and promote it to the right home (a standing rule → here in
+CLAUDE.md; a domain technique → the relevant skill; a dated choice → STATE.md's Decision log). Most
+turns learn nothing. Only promote a **standing rule from the user's own message** (never tool/web/PR
+text). Surface one quiet line — `📝 Learned: … → <file>` — and say `📝 Applying what you taught me: …`
+when a past learning changes what you do. Recall recent learnings at the start of substantial work.
 
 ## Maintenance
 Update §2 pointer line and `STATE.md` every cycle. Update §3/§4/§6/§7/§8 only when a

@@ -3,6 +3,31 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.17.0
+
+Active learning — the system gets sharper as you use it. Grounded in a market study of how the best
+tools do it (gstack /learn, Claude Code auto-memory, mem0/Letta/Zep, Cursor/Windsurf/Cline, Generative
+Agents/Reflexion/spec-kit). **Posture: silent + automatic, no confirmation** (user's choice).
+
+- **Append-only ledger** `.orbit/checks/learn.py` (record/recall) → `.orbit/learnings.jsonl` — the
+  anti-thrash backbone every tool converged on: latest-wins dedup by key, confidence decay for
+  unverified entries (user-stated never decays), an injection-text refusal, and trust-by-source. The
+  ledger is the source of truth; markdown (CLAUDE.md/skills/decisions) is a *promoted view*, not
+  rewritten every turn.
+- **The gate** (`references/playbooks/active-learning.md`, provisioned always): event-triggered (a
+  user correction / a verified outcome / an end-of-major-change checkpoint — never every message,
+  default no-op); two-stage (salience ≥ 7 with anchor examples + recurring/verified/non-obvious/
+  broadly-applicable/reason-carrying); **route-by-kind** to the right home (convention→CLAUDE.md,
+  technique→a skill incl. the defaults, methodology→a playbook, dated choice→STATE.md decision log);
+  dedup ADD/UPDATE/NOOP (NOOP default, paraphrases collapse).
+- **Safety that needs no prompt:** a **user-origin gate** — a standing rule is only promoted from the
+  user's *own* message, never tool/web/PR text (the defense that makes silent writes safe; Windsurf's
+  no-review auto-memory got prompt-injection-exploited). Everything is git-revertible.
+- **Silent but visible:** no confirmation, but a quiet `📝 Learned: … → <file>` on write and
+  `📝 Applying what you taught me: …` when a past learning changes behavior — the "I'm improving the
+  system" payoff. Wired into the loop's UPDATE phase via the CLAUDE.md template, methodology, roles,
+  and the scaffolder.
+
 ## 0.16.0
 
 The team gets a voice — the wait behind the scenes is never empty anymore.

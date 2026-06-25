@@ -46,10 +46,12 @@ FILE_PLAN = [
     ("orbit-status",     "scripts/orbit-status",      0o755),
     ("checks/guard.py",  ".orbit/checks/guard.py",    0o755),  # placed, NOT wired (see skill Phase 6a)
     ("checks/route.py",  ".orbit/checks/route.py",    0o755),  # the UserPromptSubmit router (Phase 6a)
+    ("checks/learn.py",  ".orbit/checks/learn.py",    0o755),  # the active-learning ledger helper
 ]
 
 # Reusable skill-library playbooks copied into .orbit/skills/ (the provisioning step).
-PLAYBOOKS_ALWAYS = ["clarify-and-challenge.md", "planning-and-decision-briefs.md", "technical-review.md"]
+PLAYBOOKS_ALWAYS = ["clarify-and-challenge.md", "planning-and-decision-briefs.md",
+                    "technical-review.md", "active-learning.md"]
 PLAYBOOKS_FRONTEND = ["design-methodology.md", "anti-ai-aesthetics.md", "design-styles.md"]
 
 # Standard sub-agent team. Each is copied verbatim to .claude/agents/<role>.md (the adapter) and,
