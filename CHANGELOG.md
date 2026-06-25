@@ -3,6 +3,16 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.17.1
+
+Auto-upgrade is now the **default** — installs stay current hands-off.
+
+- `/orbit-upgrade` Step 1 defaults `auto_upgrade=true`: when the preamble finds a newer version it
+  pulls it (`git pull`), **announces** it + shows what's new, and continues — no prompt. Opt out with
+  `auto_upgrade=false` in `~/.orbit/config` (then `/orbit` just notifies and waits for a manual
+  `/orbit-upgrade`). Preamble + README updated; also fixed a stale `skills/orbit-upgrade` path left
+  over from the v0.12 root restructure.
+
 ## 0.17.0
 
 Active learning — the system gets sharper as you use it. Grounded in a market study of how the best

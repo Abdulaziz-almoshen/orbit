@@ -37,9 +37,9 @@ echo "${_UPD:-orbit v$_VER (up to date / not re-checked within 24h)}"
 ```
 
 Then act on the line it printed — and **always say one line back so the user can see the check ran**:
-- `UPGRADE_AVAILABLE <old> <new>` → read `skills/orbit-upgrade/SKILL.md` and follow its **Inline
-  upgrade flow** (auto-upgrade if configured, else ask the 4 options, or snooze). When done,
-  **continue this skill** from the next section.
+- `UPGRADE_AVAILABLE <old> <new>` → read `orbit-upgrade/SKILL.md` and follow its **Inline upgrade
+  flow** — **auto-upgrade is the default** (announced, then continue), unless the user set
+  `auto_upgrade=false`. When done, **continue this skill** from the next section.
 - `JUST_UPGRADED <from> <to>` → say "Running orbit v{to} (just updated!)" and continue.
 - `orbit v<x> …` (the fallback line) → say "Running orbit v{x}." once, then continue.
 

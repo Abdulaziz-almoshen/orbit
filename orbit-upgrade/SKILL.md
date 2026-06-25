@@ -47,33 +47,27 @@ echo "INSTALL_DIR=$INSTALL_DIR"
 echo "IS_GIT=$([ -d "$INSTALL_DIR/.git" ] && echo yes || echo no)"
 ```
 
-### Step 1: auto-upgrade, or ask
+### Step 1: auto-upgrade by default (opt-out, not opt-in)
+
+**Auto-upgrade is the DEFAULT** — installs stay current hands-off. A user only avoids it by
+explicitly setting `auto_upgrade=false`.
 
 ```bash
 STATE_DIR="${ORBIT_HOME:-$HOME/.orbit}"; mkdir -p "$STATE_DIR" 2>/dev/null || true
-_auto=""
+_auto="$(grep -E '^auto_upgrade=' "$STATE_DIR/config" 2>/dev/null | tail -1 | cut -d= -f2-)"
 [ "${ORBIT_AUTO_UPGRADE:-}" = "1" ] && _auto="true"
-[ -z "$_auto" ] && _auto="$(grep -E '^auto_upgrade=' "$STATE_DIR/config" 2>/dev/null | tail -1 | cut -d= -f2-)"
+[ "${ORBIT_AUTO_UPGRADE:-}" = "0" ] && _auto="false"
+[ -z "$_auto" ] && _auto="true"   # DEFAULT: auto-upgrade unless the user opted out
 echo "AUTO_UPGRADE=$_auto"
 ```
 
-**If `AUTO_UPGRADE=true`:** skip the question. Say "Auto-upgrading orbit v{old} → v{new}…" and go to Step 2.
+**If `AUTO_UPGRADE=true` (the default):** skip the question entirely. Say "⬆️ Auto-upgrading orbit
+v{old} → v{new}…" and go to Step 2. (It's announced + shows what's new in Step 5 — auto, never silent.
+The user can opt out anytime with `auto_upgrade=false`.)
 
-**Otherwise**, ask with AskUserQuestion — "orbit **v{new}** is available (you're on v{old}). Upgrade now?" — four options:
-
-- **Yes, upgrade now** → Step 2.
-- **Always keep me up to date** → write `auto_upgrade=true` to `$STATE_DIR/config`, say "Auto-upgrade enabled.", then Step 2.
-- **Not now** → write an escalating snooze (1st = 24h, 2nd = 48h, 3rd+ = 1 week) and continue the original skill without upgrading:
-  ```bash
-  _SNOOZE="$STATE_DIR/update-snoozed"; _REMOTE="{new}"; _LVL=0
-  if [ -f "$_SNOOZE" ] && [ "$(awk '{print $1}' "$_SNOOZE")" = "$_REMOTE" ]; then
-    _LVL="$(awk '{print $2}' "$_SNOOZE")"; case "$_LVL" in *[!0-9]*) _LVL=0 ;; esac
-  fi
-  _LVL=$(( _LVL + 1 )); [ "$_LVL" -gt 3 ] && _LVL=3
-  echo "$_REMOTE $_LVL $(date +%s)" > "$_SNOOZE"
-  ```
-  Tell the user the next reminder window (24h / 48h / 1 week). Tip: set `auto_upgrade=true` in `$STATE_DIR/config` for hands-off upgrades.
-- **Never ask again** → write `update_check=false` to `$STATE_DIR/config`; say it can be re-enabled by removing that line. Continue the original skill.
+**If `AUTO_UPGRADE=false` (the user opted out):** don't upgrade and don't nag — just one line:
+"orbit **v{new}** is available (you're on v{old}). Run `/orbit-upgrade` when you want it." Then continue
+the original skill.
 
 To write a config key (create the file if missing):
 ```bash

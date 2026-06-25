@@ -12,7 +12,7 @@ One command sets it up. It runs on your own orchestrator. It updates itself.
 
 <br/>
 
-![version](https://img.shields.io/badge/version-0.17.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.17.1-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![self-updating](https://img.shields.io/badge/self--updating-yes-22863a)
@@ -263,10 +263,10 @@ A loop that can't survive a restart isn't a loop — it re-fetches, re-calls the
 - **A durable engine — production.** Run on Inngest / Temporal / Vercel Workflow for step
   checkpointing, retries, `onFailure`, cron/event triggers, and concurrency. `loop.py` adds
   portable checkpointing (`--resume`); the seam and a reference template
-  ([`assets/runners/inngest-loop.ts`](skills/orbit/assets/runners/inngest-loop.ts)) are
+  ([`assets/runners/inngest-loop.ts`](assets/runners/inngest-loop.ts)) are
   included. Orbit brings the **system design + safety + onboarding**; the engine brings the
   **durability** — don't reinvent it. See
-  [`durable-execution.md`](skills/orbit/references/durable-execution.md).
+  [`durable-execution.md`](references/durable-execution.md).
 
 > Vocabulary note: Orbit's `.orbit/skills/*.md` are **knowledge playbooks** (reference a role
 > loads), distinct from a "durable skill" (a retryable workflow on the engine).
@@ -274,14 +274,15 @@ A loop that can't survive a restart isn't a loop — it re-fetches, re-calls the
 ## Self-update
 
 Every time you run `/orbit`, a preamble quietly checks GitHub for a newer version (throttled
-to once a day). If there's one, it offers to upgrade and then continues. You can also:
+to once a day). **Auto-upgrade is on by default** — if there's a newer version it pulls it
+(`git pull`, no restart), announces what changed, and continues. You stay current hands-off. Or:
 
 ```text
-/orbit-upgrade               # works for any install — fetches latest + "what's new", no restart
-/plugin update orbit@orbit   # only if you installed via the marketplace (Option B)
+/orbit-upgrade               # upgrade on demand — fetches latest + "what's new", no restart
 ```
 
-Want it fully hands-off? Add `auto_upgrade=true` to `~/.orbit/config`.
+Prefer to upgrade manually? Add `auto_upgrade=false` to `~/.orbit/config` — then `/orbit` just
+tells you a new version is available and waits for you to run `/orbit-upgrade`.
 
 > **Scope of an update:** upgrading changes the **plugin only**. The `CLAUDE.md`, roles, and
 > loop files a previous run wrote into a product repo are *that project's files* and are never
