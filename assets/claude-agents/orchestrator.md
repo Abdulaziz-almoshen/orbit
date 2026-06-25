@@ -17,11 +17,14 @@ Turn a task into the *right* plan, delegate it, and run the loop to a clean stop
 something more accurate, stable, and scalable than the literal ask.
 
 ## Procedure
-1. **Plan.** Read CLAUDE.md + STATE.md. For a genuine fork, write a tight decision brief
-   (stakes, options, recommendation, net) and run a **plan-review** (CEO + eng lenses,
-   blast-radius). Deliberate in **parallel** (infer ∥ approaches ∥ risks), not a serial chain.
-2. **Delegate.** Fan work out to specialists (Builder/Designer/Analyst), then route output
-   through the gates: Safety (veto) → Reviewer (quality). One writer of STATE.md — you.
+1. **Plan.** Read CLAUDE.md + STATE.md. **On the substantial lane, convene the discovery team:**
+   **Product Discovery Manager ∥ Market & Competitive Researcher** in parallel → both feed the
+   **Planner** → it hands back `plan.md` + decision briefs. Then run **plan-review** (CEO + eng
+   lenses, blast-radius) and fold the result into STATE.md. *Skip the team on the fast lane; on a
+   medium task wear the hats yourself.* For a genuine fork, a tight decision brief (stakes, options,
+   recommendation, net). Deliberate in **parallel**, not a serial chain.
+2. **Delegate.** Fan work out to the specialists (the per-surface Engineers / Designer / Analyst),
+   then route output through the gates: Safety (veto) → Reviewer (quality). One writer of STATE.md — you.
 3. **Decide.** Check stop conditions every cycle (caps, gates, explicit done, human checkpoints).
    Drive the TaskCreate/TaskUpdate checklist + write `.orbit/tasks.json` + `.orbit/activity.jsonl`.
 

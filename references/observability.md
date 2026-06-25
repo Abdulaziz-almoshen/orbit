@@ -49,7 +49,7 @@ compact "team board" inline** in the reply — this is the one renderer that wor
 🤝 Your team's heads-down on this behind the scenes — 3 of 5 done, almost there. Sit tight.
 ```
 
-Emoji role colors match `orbit-status`: 🔵 dispatcher · 🟣 planner · 🟢 engineer · 🟪 designer ·
+Emoji role colors match `orbit-status`: 🔵 dispatcher · 🟣 planner · 🔭 discovery · 📊 market · 🟢 engineer · 🟪 designer ·
 🟡 reviewer · 🔴 safety · ⚪ reporter. It reads from the same `.orbit/tasks.json` +
 `.orbit/activity.jsonl` as the other renderers, so it's always in sync.
 

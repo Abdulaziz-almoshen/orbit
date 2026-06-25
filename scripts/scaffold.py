@@ -51,12 +51,14 @@ FILE_PLAN = [
 
 # Reusable skill-library playbooks copied into .orbit/skills/ (the provisioning step).
 PLAYBOOKS_ALWAYS = ["clarify-and-challenge.md", "planning-and-decision-briefs.md",
-                    "technical-review.md", "active-learning.md"]
+                    "technical-review.md", "active-learning.md",
+                    "product-discovery.md", "market-and-competitive-research.md"]
 PLAYBOOKS_FRONTEND = ["design-methodology.md", "anti-ai-aesthetics.md", "design-styles.md"]
 
 # Standard sub-agent team. Each is copied verbatim to .claude/agents/<role>.md (the adapter) and,
 # frontmatter-stripped, to .orbit/roles/<role>.md (the model-agnostic spec).
-ROLES_ALWAYS = ["dispatcher", "orchestrator", "builder", "reviewer", "reporter", "safety-gate"]
+ROLES_ALWAYS = ["dispatcher", "orchestrator", "product-discovery", "market-researcher", "planner",
+                "builder", "reviewer", "reporter", "safety-gate"]
 ROLES_FRONTEND = ["designer"]
 
 DIRS = [

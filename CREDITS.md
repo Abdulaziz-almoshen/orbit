@@ -25,6 +25,13 @@ where required by their licenses (retained notices + a note of changes).
   verification, prove-don't-assume, engineering-judgment lenses) is **distilled and rewritten,
   vendor-neutral** — no files copied.
 
+## Planning / discovery methodology — `references/playbooks/product-discovery.md` + `market-and-competitive-research.md`
+- **Concepts (public frameworks, adapted — no code copied):** Marty Cagan / SVPG (the four big
+  risks; discovery vs delivery), Teresa Torres (opportunity solution tree, assumption mapping,
+  riskiest-assumption test), Jobs-To-Be-Done, April Dunford (positioning sequence), and the
+  multi-agent **planning-team relay** pattern (Analyst → PM → Architect → PO) from
+  [BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD) (MIT) and GitHub spec-kit.
+
 ## Methodology
 - Orbit's core "build a system that prompts itself" loop is based on **Daisy Hollman's** talk
   "Beyond the basics with Claude Code."

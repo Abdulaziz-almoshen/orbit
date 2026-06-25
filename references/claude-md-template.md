@@ -68,9 +68,12 @@ to your domain:)
 Rename and scope these to your product's real subtasks; keep the shape — one planner,
 several executors, one safety gate, one quality gate.)
 - Dispatcher/Router — classifies each request (task vs question) per §10 and routes it.
-- Orchestrator/PM — plans, decomposes, controls the loop, owns STATE.md.
-- Input/Research Specialist — gather, clean, and validate the inputs the work needs.
-- Builder/Executor — produce the core output of the product.
+- Orchestrator/PM — conducts the loop, convenes the discovery team on the substantial lane, owns STATE.md.
+- Product Discovery Manager — *(planning, substantial lane)* de-risks the bet (outcome, opportunity, riskiest assumption).
+- Market & Competitive Researcher — *(planning, substantial lane)* what exists / reuse-vs-build / the gap.
+- Planner — *(planning, substantial lane)* turns the de-risked bet into the sliced, sequenced plan.
+- Input/Research Specialist — gather, clean, and validate the data inputs the work consumes.
+- Builder/Executor — produce the core output of the product (one engineer per surface).
 - Analyst — derive, transform, or evaluate as the domain requires.
 - Safety/Compliance — checks the output is safe and permitted; **veto power**.
 - Reviewer/Evaluator — quality gate; validates output vs §3 before "done".
@@ -89,6 +92,8 @@ execution engine. See `references/durable-execution.md`.)
 - `.orbit/skills/safety-rules.md` — what's forbidden, what needs a human.
 - `.orbit/skills/output-formatting.md` — clear, decision-ready outputs.
 - `.orbit/skills/active-learning.md` — how the system learns from corrections + major changes (the gate).
+- `.orbit/skills/product-discovery.md` — de-risk the bet before building (outcome, opportunity tree, four risks).
+- `.orbit/skills/market-and-competitive-research.md` — what exists / reuse-vs-build / the gap (timeboxed, cited).
 
 ## 8. Stop Conditions & Safety Rules  ← the most important section
 Hard limits (enforced by `.orbit/loop.config.json`; the loop must honor them):

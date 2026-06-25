@@ -3,6 +3,32 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.18.0
+
+The planning phase becomes a real **discovery team**. Grounded in a study of product discovery
+(Cagan's four risks, Torres's opportunity solution tree, JTBD), market/competitive research
+(don't-reinvent prior-art, Dunford positioning), and multi-agent planning (BMAD's Analyst/PM/Architect
+relay, spec-kit, plan-and-execute). The single Orchestrator/PM box is split into a relay.
+
+- **Three new advisor sub-agents**, convened by the Orchestrator on the **substantial planning lane**
+  (skipped on the fast lane; folded back into the Orchestrator on small/medium work):
+  - **Product Discovery Manager** (`product-discovery`) — de-risks the *bet*: outcome + the user's job
+    (JTBD), opportunity-solution tree, the four big risks, the riskiest assumption + its cheapest test.
+    → `discovery-brief.md`.
+  - **Market & Competitive Researcher** (`market-researcher`) — what exists / what they'd use instead /
+    where the gap is, a **reuse-vs-build verdict**, graded feature matrix, Dunford positioning. Runs in
+    **parallel** with discovery, timeboxed + cited. → `market-brief.md`.
+  - **Planner** (`planner`) — turns the de-risked bet into the plan of record (thin vertical slices,
+    sequenced by dependency + risk, proof bar per slice); reuses the decision-brief format. → `plan.md`.
+- **Two new playbooks** (`product-discovery.md`, `market-and-competitive-research.md`) + the Planner
+  reuses `planning-and-decision-briefs.md`. The Orchestrator stays the conductor + sole STATE.md writer
+  and runs plan-review as the closing critic gate.
+- Wired through roles.md (roster + relay + skill-library), the Orchestrator adapter, scaffolder
+  (ROLES_ALWAYS + PLAYBOOKS_ALWAYS), CLAUDE.md template (§6/§7), SKILL.md (Phase 4 + reference map +
+  "meet your team" + board legend), and `orbit-status` colors (🔭 discovery, 📊 market).
+- **Proportional by design** (the anti-BMAD-bloat guard): full relay only for new/ambiguous work; lite
+  artifacts; parallel not serial; reuse over reinvent. Attribution in CREDITS.md.
+
 ## 0.17.1
 
 Auto-upgrade is now the **default** — installs stay current hands-off.

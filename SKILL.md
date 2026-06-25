@@ -254,6 +254,12 @@ project* — quickly, not from scratch:
   reviewer, safety, reporter); a bigger system earns the full bench (an engineer per surface, plus
   an Input/Research or Analyst role when the work genuinely needs one). Don't provision roles a
   one-person prototype won't use — match the team to the product, not a fixed template.
+- **The discovery team** (Product Discovery Manager · Market & Competitive Researcher · Planner) is
+  scaffolded as part of the standard roster, but it's **convened only on the substantial planning
+  lane** — the Orchestrator spins it up for new/ambiguous/value-uncertain work and **folds it back
+  into itself** on a small/medium task. So it costs nothing on routine work but is there when a real
+  bet needs de-risking. On a tiny throwaway prototype you may drop the trio and let the Orchestrator
+  plan directly.
 - **Write the domain skills** — the core how-to this product re-derives every run ("what do we keep
   re-pasting into prompts?"). Start with the **one** that matters most; add others only for a
   genuinely distinct body of knowledge, and **author them concurrently** (fan out, don't write them
@@ -350,7 +356,7 @@ user sees is **what you print in chat.** Therefore **do THREE things every cycle
    ▸ 🟡 reviewer — proving it (running tests)…
    ○ 🔴 safety · ○ ⚪ reporter
    ```
-   (🔵 dispatcher · 🟣 planner · 🟢 engineer · 🟪 designer · 🟡 reviewer · 🔴 safety · ⚪ reporter — same
+   (🔵 dispatcher · 🟣 planner · 🔭 discovery · 📊 market · 🟢 engineer · 🟪 designer · 🟡 reviewer · 🔴 safety · ⚪ reporter — same
    colors as `orbit-status`.) **The board also carries the team's voice** — a one-line "why this task
    matters" at kickoff, a progress-aware "your team's heads-down — N of M done, almost there" during
    the pause, and an earned close on completion. Mandatory; warm and genuine, tone calibrated to the
@@ -407,7 +413,9 @@ project-specific names, each with the skill that backs it and its **live-view co
 matches the dashboard they'll watch). Use the real colors:
 
 - 🔵 **Dispatcher** *(cyan)* — reads every message first; routes tasks into the loop, answers questions directly.
-- 🟣 **Planner / Orchestrator** *(magenta)* — plans it, writes the decision brief, challenges weak assumptions. *Skills: planning-and-decision-briefs, clarify-and-challenge.*
+- 🟣 **Orchestrator / Planner** *(magenta)* — conducts the loop; the Planner turns the de-risked bet into the sliced, sequenced plan. *Skills: planning-and-decision-briefs, clarify-and-challenge.*
+- 🔭 **Product Discovery Manager** *(blue — on substantial work)* — frames the outcome + the user's job, kills the four risks, names the riskiest assumption. *Skill: product-discovery.*
+- 📊 **Market & Competitive Researcher** *(cyan — on substantial work)* — what exists, reuse-vs-build, where the gap is. *Skill: market-and-competitive-research.*
 - 🟢 **&lt;Frontend / Backend / Data&gt; Engineer** *(green)* — builds the work. *Skill: &lt;the domain skill&gt;.*
 - 🟪 **Designer** *(violet — frontend only)* — distinctive, on-brand UI, not templated slop. *Skills: design-methodology, anti-ai-aesthetics.*
 - 🟡 **Reviewer** *(yellow)* — proves the work (runs tests, quotes the line) before it counts as done. *Skill: technical-review.*
@@ -465,7 +473,9 @@ done. Make the user feel they just hired a team, and it's eager to start.
   `design-methodology.md` + `anti-ai-aesthetics.md` + `design-styles.md` (Designer),
   `planning-and-decision-briefs.md` (Orchestrator), `clarify-and-challenge.md` (Dispatcher/Orchestrator),
   `technical-review.md` (Reviewer — the technical quality gate), `active-learning.md` (the Orchestrator's
-  silent learn-gate in the UPDATE phase — the system sharpens from corrections + major changes). Grow this over time.
+  silent learn-gate in the UPDATE phase), `product-discovery.md` + `market-and-competitive-research.md`
+  (the planning-phase **discovery team** — Product Discovery Manager + Market Researcher → Planner).
+  Grow this over time.
 - `assets/` — copyable `loop.config.json`, `loop.py`, `activity.py`, `ralph_loop.sh`,
   `orbit-status`, `checks/guard.py` (safety) + `checks/route.py` (router), `runners/inngest-loop.ts`,
   example subagents (incl. designer, reviewer, safety-gate).

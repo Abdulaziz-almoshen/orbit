@@ -14,8 +14,11 @@ default; rename and re-scope each role to the real subtasks of the product you'r
 | Role | Remit | Reads | Writes |
 |------|-------|-------|--------|
 | **Dispatcher / Router** | Classify each request: **question** → answer directly (no loop); **task** → first **clarify & challenge** (infer from the repo, surface premises, ask only the gap), then hand to the Orchestrator to route through the loop (CLAUDE.md §10). Loads `clarify-and-challenge`. No edit tools. | the user request, CLAUDE.md §10 | a routing decision + clarified intent |
-| **Orchestrator / PM** | Plan, decompose, delegate, control the loop, own STATE.md, check stop conditions. Frames real forks as **decision briefs** and runs a **plan-review** (CEO + eng lenses) before building. Loads `planning-and-decision-briefs`. | CLAUDE.md, STATE.md | STATE.md, decision briefs |
-| **Input / Research Specialist** | Gather, clean, and validate the inputs the work needs; guarantee they're complete and fresh before anyone uses them. | external sources, input-validation skill | validated inputs + a quality report |
+| **Orchestrator / PM** | **Conducts** the loop: on the substantial lane, convenes the **discovery team** (below) in the PLAN phase, runs **plan-review** (CEO + eng lenses), owns STATE.md (sole writer), checks stop conditions. Folds the team's artifacts into the plan; doesn't do the discovery itself. Loads `planning-and-decision-briefs`. | CLAUDE.md, STATE.md, the team's briefs | STATE.md, ratified plan |
+| **Product Discovery Manager** *(planning phase, substantial lane)* | De-risk the *bet* before building: frame the **outcome** + the user's **job**, map opportunities from evidence, kill the four risks (value/usability/feasibility/viability), name the **riskiest assumption + cheapest test**. Extends clarify-and-challenge with evidence. Loads `product-discovery`. | clarified intent, repo/analytics, market brief | `discovery-brief.md` |
+| **Market & Competitive Researcher** *(planning phase, substantial lane)* | What already exists, what the user would use instead, where the gap is — a **reuse-vs-build verdict**, graded feature matrix, positioning. Timeboxed, cited. Runs in **parallel** with discovery. Loads `market-and-competitive-research`. Distinct from Input/Research below. | the JTBD/intent, the web, deps | `market-brief.md` |
+| **Planner** *(planning phase, substantial lane)* | Turn the validated, de-risked bet into the **plan of record** — thin vertical slices, sequenced by dependency + risk, a proof bar per slice, hand-off specs. Emits **decision briefs** in the standard format up to the Orchestrator. Loads `planning-and-decision-briefs`. | discovery + market briefs, §3 criteria | `plan.md` + decision briefs |
+| **Input / Research Specialist** | Gather, clean, and validate the **data inputs** the work consumes; guarantee they're complete and fresh. (Supply-side data — *not* the demand-side Market Researcher above.) | external sources, input-validation skill | validated inputs + a quality report |
 | **Builder / Executor** | Produce the core output of the product from the validated inputs. (On a frontend repo, implements the Designer's Design Plan.) | validated inputs, the domain skill, design-plan | candidate output + rationale |
 | **Designer** *(frontend repos only — see `profiles/frontend.md`)* | On any UI request, **first** run the mandatory **style-prototype gate**: shortlist 2–4 of the 67 styles, build a standalone HTML prototype of each, open them, let the user **pick** — then turn the chosen style into a distinctive, production-grade **Design Plan** (tokens + layout + signature) grounded in the product's world. Loads `design-methodology` + `design-styles` (the 67-style catalog) + `anti-ai-aesthetics`. | the brief, design source of truth | HTML prototypes → a Design Plan for the Builder |
 | **Analyst** | Derive, transform, or evaluate as the domain requires; add context the Builder needs. | inputs, prior outputs | analysis notes |
@@ -39,8 +42,10 @@ sub-agent, it **provisions the relevant playbooks** by copying them into the rep
 | Playbook | Provisioned to | When |
 |----------|----------------|------|
 | `design-methodology.md`, `anti-ai-aesthetics.md`, `design-styles.md` + `design-styles/` (67 styles) | **Designer** | frontend/UI repos (`profiles/frontend.md`) |
-| `planning-and-decision-briefs.md` | **Orchestrator** | always |
+| `planning-and-decision-briefs.md` | **Orchestrator** + **Planner** | always |
 | `clarify-and-challenge.md` | **Dispatcher / Orchestrator** | always (the task path) |
+| `product-discovery.md` | **Product Discovery Manager** | always (convened on the substantial lane) |
+| `market-and-competitive-research.md` | **Market & Competitive Researcher** | always (convened on the substantial lane) |
 | `technical-review.md` | **Reviewer / Evaluator** | always (any code/technical repo) |
 | `active-learning.md` | **Orchestrator** (the loop's UPDATE phase) | always — silently learns from corrections + major changes |
 
@@ -140,6 +145,13 @@ Parallel roles must not corrupt shared state. The rules:
   too — infer-from-repo ∥ generate 2–3 approaches ∥ scan risks — then synthesize. Same
   wall-clock as one pass, more perspectives = a sharper call. A serial plan→brief→review chain
   is the slow path; avoid it.
+- **The planning relay (substantial lane only).** Convene the **discovery team** in the PLAN phase:
+  **Product Discovery Manager ∥ Market & Competitive Researcher** run *concurrently* (independent
+  inputs) → both feed the **Planner** (which has a data dependency, so it runs after) → the Planner
+  hands `plan.md` + decision briefs back to you → you run **plan-review** and fold it into STATE.md →
+  build. **Skip the team on the fast lane** (small/clear/reversible — Builder just does it); on a
+  **medium** task, wear the hats yourself instead of spinning up all three. Depth scales to stakes;
+  never run a 3-agent discovery sprint on a one-line fix. You stay the sole STATE.md writer.
 - Parallelize only independent work (two independent analyses of the same input, or the same
   analysis across many independent items). Anything with a data dependency runs in sequence.
 - Give each spawned role only the context it needs (the relevant STATE.md slice + input
