@@ -29,8 +29,10 @@ If it doesn't clear both stages → **no-op.** When unsure, don't write.
 |---|---|
 | A standing **convention / rule** (every session needs it) | `CLAUDE.md` (a tight, declarative, reason-carrying one-liner) |
 | A reusable **domain how-to / technique** | the relevant **domain skill** in `.orbit/skills/` (incl. updating a default-provisioned one) |
-| A **methodology / quality heuristic** | the relevant **playbook** (design/technical-review) — append a `## Project learnings` section, don't edit the shared base |
-| A **dated, contextual choice + rationale** | the append-only **Decision log** in `.orbit/STATE.md` |
+| A **methodology / quality heuristic** | the relevant **playbook** (design/technical-review/qa) — append a `## Project learnings` section, don't edit the shared base |
+| A **design preference / token change** (a color the user corrected, a style they locked in) | **`DESIGN.md`** — update the token + add a Decisions Log line (it's the persistent design authority) |
+| An **architectural direction / reversal** (stack, boundary, schema, one-way door) | an **ADR** in `.orbit/decisions/` (supersede, never rewrite — see `architecture-decisions.md`) |
+| A **dated, contextual choice + rationale** (non-architectural) | the append-only **Decision log** in `.orbit/STATE.md` |
 
 ## How to write — ledger first, then promote (never rewrite prose blindly)
 1. **Always record to the ledger first** so it's deduped + decayed + revertible:

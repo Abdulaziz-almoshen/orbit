@@ -23,7 +23,8 @@ default; rename and re-scope each role to the real subtasks of the product you'r
 | **Designer** *(frontend repos only — see `profiles/frontend.md`)* | On any UI request, **first** run the mandatory **style-prototype gate**: shortlist 2–4 of the 67 styles, build a standalone HTML prototype of each, open them, let the user **pick** — then turn the chosen style into a distinctive, production-grade **Design Plan** (tokens + layout + signature) grounded in the product's world. Loads `design-methodology` + `design-styles` (the 67-style catalog) + `anti-ai-aesthetics`. | the brief, design source of truth | HTML prototypes → a Design Plan for the Builder |
 | **Analyst** | Derive, transform, or evaluate as the domain requires; add context the Builder needs. | inputs, prior outputs | analysis notes |
 | **Safety / Compliance** | Check the output is safe, permitted, and free of unreviewed side effects; block anything forbidden. **Veto power.** | candidate output, safety-rules skill | approved-or-rejected output + reason |
-| **Reviewer / Evaluator** | Quality gate before "done": check the output against §3 success criteria and **prove** it (run tests/validators, not eyeball); catch errors/regressions across correctness, security, concurrency, migrations, performance, tests, API-contract, maintainability. Loads `technical-review` (severity×confidence gate, **quote-the-line** verification, blast-radius judgment). On UI work, also apply the **Design Distinctiveness** gate — *and confirm the mandatory style-prototype selection happened* (a UI change with no user-picked style + previews doesn't pass). **Gate power.** | all outputs, success criteria, the diff | pass/fail + evidence-backed findings |
+| **Reviewer / Evaluator** | Quality gate before "done": check the output against §3 success criteria and **prove** it (run tests/validators, not eyeball); catch errors/regressions across correctness, security, concurrency, migrations, performance, tests, API-contract, maintainability. Loads `technical-review` (severity×confidence gate, **quote-the-line** verification, blast-radius judgment). On UI work, also apply the **Design Distinctiveness** gate — *and confirm the mandatory style-prototype selection happened* (a UI change with no user-picked style + previews doesn't pass). **Enforces ADRs**: an architectural change in the diff with no corresponding ADR in `.orbit/decisions/` is a finding, and each accepted ADR's Confirmation check runs as part of the gate. **Gate power.** (Reviews the *diff*; the QA Engineer validates the *product* — both must pass.) | all outputs, success criteria, the diff, `.orbit/decisions/` | pass/fail + evidence-backed findings |
+| **QA Engineer** | Validate the **product against the requirements** — requirement by requirement, user story by user story; on UI work, pixel-by-pixel vs the approved design. Builds a **Requirements Traceability Matrix** (every ID → test → verdict → evidence; PASS/CONCERNS/FAIL/WAIVED). **Report-only** (never fixes). Loads `qa-validation`. **Gate power** — a P0 FAIL or score <85 means not done. | the Planner's requirements/EARS criteria, the running app, `design/approved.json` + `DESIGN.md` | the RTM report + verdict |
 | **Reporter** | Turn results into clear, decision-ready outputs/explanations. | everything above, output-formatting skill | reports, summaries |
 
 Two roles hold special power and must always exist: **Safety/Compliance** can veto any
@@ -48,6 +49,9 @@ sub-agent, it **provisions the relevant playbooks** by copying them into the rep
 | `market-and-competitive-research.md` | **Market & Competitive Researcher** | always (convened on the substantial lane) |
 | `technical-review.md` | **Reviewer / Evaluator** | always (any code/technical repo) |
 | `active-learning.md` | **Orchestrator** (the loop's UPDATE phase) | always — silently learns from corrections + major changes |
+| `qa-validation.md` | **QA Engineer** | always — the requirements-traceability + pixel-fidelity gate |
+| `goal-pipeline.md` | **Planner + Orchestrator** | goal-sized asks — spec → story DAG → run-until-green → polish pass, 2 human gates |
+| `architecture-decisions.md` | **Planner / Orchestrator plan-review** (the CTO hat) | substantial lane — ADRs in `.orbit/decisions/`, boring-tech bar, fitness functions |
 
 Add new playbooks here as the system grows (e.g. data-validation, backtesting, fact-checking
 for other domains). A role's spec just says "load `<playbook>`"; the substance lives once, in
@@ -127,10 +131,10 @@ Parallel roles must not corrupt shared state. The rules:
 3. **Handoffs are explicit.** The producing role records the handoff in its report:
    "produced `<path>`; <next-role> should <do what>; need back: <what>." The Orchestrator
    mirrors current in-flight handoffs in STATE.md's Handoffs section.
-4. **Gates are sequential even when work is parallel.** Input → (Builder ∥ Analyst
-   in parallel) → Safety (veto) → Reviewer (gate) → Reporter. The two gates
-   (Safety, Reviewer) are choke points by design; nothing reaches "done" without passing
-   both.
+4. **Gates are sequential even when work is parallel.** Input → (Engineers ∥ Analyst
+   in parallel) → Safety (veto) → Reviewer (the diff) → **QA Engineer (the product vs the
+   requirements)** → Reporter. The three gates (Safety, Reviewer, QA) are choke points by
+   design; nothing reaches "done" without passing all of them.
 5. **Escalation beats guessing.** If a role hits an ambiguous, high-impact decision, it
    stops and records an Open Question in its report rather than improvising. The
    Orchestrator decides whether to pause for a human (see stop conditions).

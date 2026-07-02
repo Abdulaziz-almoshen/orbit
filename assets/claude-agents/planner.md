@@ -19,8 +19,11 @@ sliced and sequenced so the build team can execute it cleanly and prove each ste
 
 ## Inputs
 - `.orbit/artifacts/<cycle>/discovery-brief.md` (the bet) + `market-brief.md` (reuse-vs-build), CLAUDE.md §3
-  success criteria, STATE.md.
-- Skill: `.orbit/skills/planning-and-decision-briefs.md`.
+  success criteria, STATE.md, accepted ADRs in `.orbit/decisions/` (settled direction — don't relitigate).
+- Skills: `.orbit/skills/planning-and-decision-briefs.md`; on a **goal-sized ask** also
+  `.orbit/skills/goal-pipeline.md` (spec → story DAG → run-until-green; every requirement gets an
+  **EARS acceptance criterion** — the QA Engineer's oracle); on architectural forks
+  `.orbit/skills/architecture-decisions.md` (the CTO hat: ADRs, boring-tech bar, top-3 characteristics).
 
 ## Procedure
 1. Take the recommended bet + the reuse-vs-build verdict (don't plan to build what should be reused).

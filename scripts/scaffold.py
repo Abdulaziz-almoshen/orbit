@@ -52,13 +52,14 @@ FILE_PLAN = [
 # Reusable skill-library playbooks copied into .orbit/skills/ (the provisioning step).
 PLAYBOOKS_ALWAYS = ["clarify-and-challenge.md", "planning-and-decision-briefs.md",
                     "technical-review.md", "active-learning.md",
-                    "product-discovery.md", "market-and-competitive-research.md"]
+                    "product-discovery.md", "market-and-competitive-research.md",
+                    "qa-validation.md", "goal-pipeline.md", "architecture-decisions.md"]
 PLAYBOOKS_FRONTEND = ["design-methodology.md", "anti-ai-aesthetics.md", "design-styles.md"]
 
 # The UNIVERSAL spine — every project gets these (routing, planning, gates, reporting). Copied
 # verbatim to .claude/agents/<role>.md and, frontmatter-stripped, to .orbit/roles/<role>.md.
 ROLES_CORE = ["dispatcher", "orchestrator", "product-discovery", "market-researcher", "planner",
-              "reviewer", "reporter", "safety-gate"]
+              "reviewer", "qa-engineer", "reporter", "safety-gate"]
 
 # The PROJECT-SPECIFIC specialists — provisioned from the detected surfaces, NOT a fixed template.
 # surface keyword -> (engineer filename, display name, what it owns). One engineer per surface;
@@ -81,7 +82,7 @@ UI_SURFACES = {"web", "frontend", "ui", "mobile", "ios", "android"}  # → stand
 
 DIRS = [
     ".orbit", ".orbit/roles", ".orbit/skills",
-    ".orbit/artifacts", ".orbit/checks", ".claude/agents", "scripts",
+    ".orbit/artifacts", ".orbit/checks", ".orbit/decisions", ".claude/agents", "scripts",
 ]
 
 GUARD_CMD = 'python3 "$CLAUDE_PROJECT_DIR/.orbit/checks/guard.py"'

@@ -35,11 +35,15 @@ world, never a templated default.
    wireframes, the one signature element), grounding it in the subject — in writing, no code yet.
 3. Run the **plan-critique gate**: would a different brief produce the same choices? Does any part
    match an anti-AI-aesthetic default? Revise until distinctive.
-4. Write the Design Plan to `.orbit/artifacts/<cycle>/design-plan.md` (naming the chosen style) and
-   hand to the Builder.
+4. Write the **artifact contract** and hand to the Builder: `design/approved.json` (which prototype
+   won + remix notes — engineers must read it before any UI code), **`DESIGN.md`** (the persistent
+   token authority; future runs read it first, its tokens override new inventions), and
+   `.orbit/artifacts/<cycle>/design-plan.md` (naming the chosen style).
 
 ## Outputs
-- `design-plan.md` (tokens + layout + signature + rationale) + a one-line `[designer]` report.
+- `design/approved.json` + `DESIGN.md` + `design-plan.md` (tokens + layout + signature + rationale)
+  + a one-line `[designer]` report. The QA Engineer machine-verifies the build against the approved
+  prototype (token assertions + screenshot diffs — the verification triangle).
 
 ## Proof / verification
 - **The user picked the style from openable HTML prototypes** (record which, + the previews path),

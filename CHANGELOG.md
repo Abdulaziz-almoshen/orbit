@@ -3,6 +3,37 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.22.0
+
+Four capabilities from a market study of ~30 skills (gstack files read line-by-line + spec-kit, BMAD,
+superpowers, Pocock, Ralph, ADR practice): a professional QA Engineer, a goal→whole-product pipeline,
+the design-as-contract embedding, and the CTO hat. Active learning verified intact end-to-end and
+extended to route design learnings → DESIGN.md and architectural learnings → ADRs.
+
+- **QA Engineer (new core sub-agent) + `qa-validation` playbook** — validates the *product* against
+  the *requirements*, requirement by requirement: a Requirements Traceability Matrix (every ID → test →
+  verdict → evidence; PASS/CONCERNS/FAIL/WAIVED; any P0 fail or score <85 = not done), EARS acceptance
+  criteria as the oracle, boundary/equivalence case derivation, report-only posture (never fixes),
+  gstack-grade evidence discipline (screenshot per issue, retry-once, console per interaction), and a
+  **pixel pass**: computed-style token assertions vs DESIGN.md + screenshot diffs vs the approved
+  prototype at 3 viewports. Gate order is now Safety → Reviewer (diff) → QA (product) → Reporter.
+- **`goal-pipeline` playbook** — send a goal, receive a whole polished product: spec (numbered
+  requirements + EARS criteria, human gate #1) → story DAG of vertical tracer-bullet slices (each
+  independently demoable, walking skeleton first) → parallel wave dispatch → backpressure-verify →
+  run until every criterion is green → gap analysis → **mandatory polish pass**. Autonomy via the
+  Mechanical/Taste/User-Challenge decision taxonomy: exactly 2 human stops per goal.
+- **Design is a file contract** — the style-prototype winner becomes `design/approved.json` +
+  **`DESIGN.md`** (persistent token authority future runs must read; fidelity rule: pixel-match the
+  approved mockup) and the **verification triangle**: prototype = target → build to it → QA
+  machine-verifies against it. A UI change with no approved.json behind it is a finding.
+- **`architecture-decisions` playbook (the CTO hat)** — ADRs in `.orbit/decisions/` (append-only,
+  supersede-never-rewrite, option matrix, a Confirmation check per decision), Choose-Boring-Technology
+  innovation tokens, top-3 architecture characteristics → fitness functions the gates run; the
+  Orchestrator loads accepted ADRs as constraints every cycle (settled direction never relitigated);
+  the Reviewer flags architectural changes without an ADR.
+- Wired end-to-end: scaffolder (ROLES_CORE + playbooks + `.orbit/decisions/`), roles.md, CLAUDE.md
+  template, planner/orchestrator/reviewer/designer adapters, board colors (🧪 qa), CREDITS.md.
+
 ## 0.21.0
 
 Listable in the Claude plugin directory — without losing the no-restart clone install. Per the docs,

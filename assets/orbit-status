@@ -36,6 +36,7 @@ ROLE_COLORS = {
     "analyst": "\033[34m", "technical": "\033[34m",
     "safety": "\033[31m", "compliance": "\033[31m", "risk": "\033[31m",
     "reviewer": "\033[33m", "evaluator": "\033[33m", "editor": "\033[33m",
+    "qa-engineer": "\033[93m", "qa": "\033[93m",
     "reporter": "\033[37m", "human": "\033[1;33m",
 }
 TASK_MARK = {"done": "✓", "in_progress": "▸", "pending": "○", "skipped": "⊘"}

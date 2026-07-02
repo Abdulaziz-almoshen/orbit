@@ -77,7 +77,23 @@ distinctive and coherent. (See `anti-ai-aesthetics.md` for the specific defaults
 Responsive down to mobile; visible keyboard focus; `prefers-reduced-motion` respected. Mind
 CSS specificity (type- vs element-based selectors can cancel each other on padding/margins).
 
-## Handoff
-Produce `.orbit/artifacts/<cycle>/design-plan.md` — the token system (color, type, layout,
-signature) + the rationale — and hand it to the Builder to implement. The Reviewer checks it
-against the **Design Distinctiveness** gate (see `roles.md`).
+## Handoff — the design is a FILE contract, not a suggestion
+The user's pick from the style-prototype gate becomes **artifacts every later step must consume**:
+1. **`design/approved.json`** — which prototype won, the file path, viewport, and the remix notes
+   ("layout from A, colors from B"). Engineers **must detect and read this before any UI code.**
+2. **`DESIGN.md`** (repo root) — the extracted token system as the *persistent design authority*:
+   named hex values, type roles + scale, spacing scale, radius, the signature element, and a
+   **Decisions Log** line per change. Every future design/UI run reads DESIGN.md first; its tokens
+   **override** anything a new generation would invent. (This is what keeps the product visually
+   coherent across sessions — and it's where active learning writes design learnings.)
+3. **`.orbit/artifacts/<cycle>/design-plan.md`** — the per-cycle plan (tokens + layout + signature +
+   rationale, naming the chosen style) for the Builder.
+
+**Fidelity rule:** when an approved prototype exists, **pixel-match it** — source-of-truth fidelity
+beats code elegance (`width: 312px` matching the mockup beats a cleaner grid class that doesn't).
+Real content only, never lorem ipsum.
+
+**The verification triangle** closes the loop: approved prototype (the *target*) → Builder builds *to*
+it → the **QA Engineer** machine-verifies build-vs-target (token assertions from computed styles +
+screenshot diffs at 375/768/1440 — see `qa-validation.md`). The Reviewer's **Design Distinctiveness**
+gate still applies (see `roles.md`). A UI change with no `approved.json` behind it is a finding.

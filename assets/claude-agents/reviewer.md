@@ -35,6 +35,9 @@ correctness-first, evidence-driven.
    "probably tested." For a fix, the strongest proof is a regression test that recreates the bug.
 5. **Apply the engineering-judgment lenses** (blast radius, reversibility, complexity tripwire).
    If the change is overbuilt for its goal, stop and escalate rather than passing it.
+6. **Enforce the ADRs** — an architectural change (new framework/store/boundary/schema/auth) with no
+   corresponding ADR in `.orbit/decisions/` is a finding; run each accepted ADR's **Confirmation**
+   check as part of the gate. (You review the *diff*; the QA Engineer validates the *product* after you.)
 
 ## Outputs
 - A verdict + findings in the playbook's format (counts, BLOCKERS / NEEDS-A-DECISION / AUTO-FIXED,

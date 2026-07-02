@@ -76,7 +76,9 @@ several executors, one safety gate, one quality gate.)
 - Builder/Executor — produce the core output of the product (one engineer per surface).
 - Analyst — derive, transform, or evaluate as the domain requires.
 - Safety/Compliance — checks the output is safe and permitted; **veto power**.
-- Reviewer/Evaluator — quality gate; validates output vs §3 before "done".
+- Reviewer/Evaluator — quality gate on the *diff*; validates vs §3 + enforces ADRs before "done".
+- QA Engineer — validates the *product* vs the requirements (traceability matrix, verdict per
+  requirement; pixel pass vs the approved design on UI). Report-only; **gate power**.
 - Reporter — turns results into clear, decision-ready outputs/explanations.
 
 ## 7. Skills Index  (knowledge playbooks)
@@ -94,6 +96,9 @@ execution engine. See `references/durable-execution.md`.)
 - `.orbit/skills/active-learning.md` — how the system learns from corrections + major changes (the gate).
 - `.orbit/skills/product-discovery.md` — de-risk the bet before building (outcome, opportunity tree, four risks).
 - `.orbit/skills/market-and-competitive-research.md` — what exists / reuse-vs-build / the gap (timeboxed, cited).
+- `.orbit/skills/qa-validation.md` — the QA Engineer's requirements-traceability + pixel-fidelity gate.
+- `.orbit/skills/goal-pipeline.md` — goal → spec → story DAG → run-until-green → polish (2 human gates).
+- `.orbit/skills/architecture-decisions.md` — the CTO hat: ADRs in `.orbit/decisions/`, boring-tech bar.
 
 ## 8. Stop Conditions & Safety Rules  ← the most important section
 Hard limits (enforced by `.orbit/loop.config.json`; the loop must honor them):

@@ -369,7 +369,7 @@ user sees is **what you print in chat.** Therefore **do THREE things every cycle
    ▸ 🟡 reviewer — proving it (running tests)…
    ○ 🔴 safety · ○ ⚪ reporter
    ```
-   (🔵 dispatcher · 🟣 planner · 🔭 discovery · 📊 market · 🟢 engineer · 🟪 designer · 🟡 reviewer · 🔴 safety · ⚪ reporter — same
+   (🔵 dispatcher · 🟣 planner · 🔭 discovery · 📊 market · 🟢 engineer · 🟪 designer · 🟡 reviewer · 🧪 qa · 🔴 safety · ⚪ reporter — same
    colors as `orbit-status`.) **The board also carries the team's voice** — a one-line "why this task
    matters" at kickoff, a progress-aware "your team's heads-down — N of M done, almost there" during
    the pause, and an earned close on completion. Mandatory; warm and genuine, tone calibrated to the
@@ -431,7 +431,8 @@ matches the dashboard they'll watch). Use the real colors:
 - 📊 **Market & Competitive Researcher** *(cyan — on substantial work)* — what exists, reuse-vs-build, where the gap is. *Skill: market-and-competitive-research.*
 - 🟢 **&lt;Frontend / Backend / Data&gt; Engineer** *(green)* — builds the work. *Skill: &lt;the domain skill&gt;.*
 - 🟪 **Designer** *(violet — frontend only)* — distinctive, on-brand UI, not templated slop. *Skills: design-methodology, anti-ai-aesthetics.*
-- 🟡 **Reviewer** *(yellow)* — proves the work (runs tests, quotes the line) before it counts as done. *Skill: technical-review.*
+- 🟡 **Reviewer** *(yellow)* — proves the *diff* (runs tests, quotes the line, enforces ADRs) before it counts. *Skill: technical-review.*
+- 🧪 **QA Engineer** *(bright yellow)* — validates the *product* against the requirements, story by story; pixel-checks the UI vs your approved design. *Skill: qa-validation.*
 - 🔴 **Safety** *(red)* — can veto or stop a dangerous action. The hard wall.
 - ⚪ **Reporter** *(grey)* — turns results into clear, decision-ready updates.
 
@@ -485,9 +486,11 @@ done. Make the user feel they just hired a team, and it's eager to start.
 - `references/playbooks/` — the reusable **role-skill library** provisioned to sub-agents:
   `design-methodology.md` + `anti-ai-aesthetics.md` + `design-styles.md` (Designer),
   `planning-and-decision-briefs.md` (Orchestrator), `clarify-and-challenge.md` (Dispatcher/Orchestrator),
-  `technical-review.md` (Reviewer — the technical quality gate), `active-learning.md` (the Orchestrator's
-  silent learn-gate in the UPDATE phase), `product-discovery.md` + `market-and-competitive-research.md`
-  (the planning-phase **discovery team** — Product Discovery Manager + Market Researcher → Planner).
+  `technical-review.md` (Reviewer — the technical quality gate), `qa-validation.md` (QA Engineer —
+  requirements-traceability + pixel fidelity), `active-learning.md` (the Orchestrator's silent
+  learn-gate in the UPDATE phase), `product-discovery.md` + `market-and-competitive-research.md`
+  (the planning-phase **discovery team**), `goal-pipeline.md` (goal → story DAG → run-until-green →
+  polish), `architecture-decisions.md` (the CTO hat — ADRs, boring-tech, fitness functions).
   Grow this over time.
 - `assets/` — copyable `loop.config.json`, `loop.py`, `activity.py`, `ralph_loop.sh`,
   `orbit-status`, `checks/guard.py` (safety) + `checks/route.py` (router), `runners/inngest-loop.ts`,

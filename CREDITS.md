@@ -32,6 +32,29 @@ where required by their licenses (retained notices + a note of changes).
   multi-agent **planning-team relay** pattern (Analyst → PM → Architect → PO) from
   [BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD) (MIT) and GitHub spec-kit.
 
+## QA methodology — `references/playbooks/qa-validation.md`
+- **Concepts (public practice + open methodologies, adapted — no code copied):** the Requirements
+  Traceability Matrix (industry QA practice), [BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD)'s
+  Test Architect trace→gate workflow (PASS/CONCERNS/FAIL/WAIVED) (MIT), EARS requirements notation
+  (Rolls-Royce / AWS Kiro), Cucumber Example Mapping / Gherkin, gstack's `/qa` evidence discipline +
+  severity taxonomy, gstack's `/design-review` computed-style extraction, Playwright visual-comparison
+  practice, the uiMatch design-vs-build fidelity pattern, and obra/superpowers'
+  [verification-before-completion](https://github.com/obra/superpowers) Iron Law.
+
+## Goal pipeline — `references/playbooks/goal-pipeline.md`
+- **Concepts (adapted):** [GitHub spec-kit](https://github.com/github/spec-kit)'s artifact chain
+  (spec → plan → tasks-by-user-story → implement/converge) (MIT), BMAD story sharding, Matt Pocock's
+  PRD→issues DAG + run-until-backlog-empty night shift, Geoff Huntley's Ralph loop + backpressure,
+  tracer-bullet vertical slices (Hunt & Thomas, *The Pragmatic Programmer*), and gstack `/autoplan`'s
+  Mechanical/Taste/User-Challenge decision taxonomy.
+
+## Architecture decisions — `references/playbooks/architecture-decisions.md`
+- **Concepts (adapted):** Michael Nygard's ADRs, [MADR](https://adr.github.io/madr/) (decision drivers +
+  confirmation), the [everything-claude-code ADR skill](https://github.com/affaan-m/everything-claude-code)'s
+  decision-detection + Planner-suggests/Reviewer-enforces hooks, Dan McKinley's
+  [Choose Boring Technology](https://mcfunley.com/choose-boring-technology), architecture characteristics +
+  fitness functions (Richards/Ford, *Building Evolutionary Architectures*), and the C4 model (Simon Brown).
+
 ## Methodology
 - Orbit's core "build a system that prompts itself" loop is based on **Daisy Hollman's** talk
   "Beyond the basics with Claude Code."
