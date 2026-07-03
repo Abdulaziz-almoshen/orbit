@@ -32,6 +32,30 @@ ORBIT_DIR = Path(os.environ.get("ORBIT_DIR", ".orbit"))
 ACTIVITY = ORBIT_DIR / "activity.jsonl"
 TASKS = ORBIT_DIR / "tasks.json"
 RUN = ORBIT_DIR / "run.json"
+AGENTS = ORBIT_DIR / "agents.json"
+
+# Known roles → (human display name, one-line responsibility). Used to build the team board so a
+# queued agent reads like a person with a job, not a slug. Unknown roles get a title-cased name.
+ROLE_INFO = {
+    "dispatcher": ("Dispatcher", "routes the request (task vs question)"),
+    "orchestrator": ("Orchestrator", "plans + conducts the loop, owns state"),
+    "product-discovery": ("Product Discovery", "de-risks the bet before building"),
+    "market-researcher": ("Market Researcher", "what exists, reuse-vs-build, the gap"),
+    "planner": ("Planner", "slices the work + sets the proof bar"),
+    "builder": ("Builder", "produces the core output"),
+    "frontend-engineer": ("Frontend Engineer", "builds the web UI"),
+    "backend-engineer": ("Backend Engineer", "builds the API / services"),
+    "mobile-developer": ("Mobile Developer", "builds the mobile app"),
+    "data-engineer": ("Data Engineer", "data pipelines / ETL / ML"),
+    "cli-engineer": ("CLI Engineer", "builds the command-line tool"),
+    "designer": ("Designer", "distinctive, on-brand UI from picked prototypes"),
+    "reviewer": ("Reviewer", "checks correctness + regressions, proves the diff"),
+    "qa-engineer": ("QA Engineer", "validates the product vs the requirements (RTM)"),
+    "safety-gate": ("Safety", "confirms no unsafe/outward action without approval"),
+    "reporter": ("Reporter", "summarizes proof + remaining risk"),
+    "human": ("You", "decisions the loop pauses for"),
+    "subagent": ("Sub-agent", "a spawned worker"),
+}
 
 PHASES = ("plan", "act", "evaluate", "update", "decide", "read", "route", "build", "verify",
           "safety", "report")
@@ -166,6 +190,86 @@ def clear_block() -> None:
         _write_atomic(RUN, snap)
 
 
+# --------------------------------------------------------------------------- the team roster
+def role_display(role: str) -> str:
+    info = ROLE_INFO.get(role)
+    return info[0] if info else (role or "").replace("-", " ").replace("_", " ").title()
+
+
+def role_responsibility(role: str) -> str:
+    info = ROLE_INFO.get(role)
+    return info[1] if info else ""
+
+
+def _blank_agent(role: str) -> dict:
+    return {"display": role_display(role), "responsibility": role_responsibility(role),
+            "task": "", "status": "idle", "started_at": None, "last_event_at": None,
+            "mission": "", "last_message": ""}
+
+
+def agent_update(role: str, status: str = None, task: str = None, message: str = None) -> None:
+    """Fold one signal into .orbit/agents.json — the live team roster the dashboard/status line read.
+    status: active | queued | done | blocked | failed | idle. `started_at` is stamped the moment a
+    role goes active (so the board can show 'active 4m 52s'). Fail-safe; never raises."""
+    if not role or role == "?":
+        return
+    try:
+        agents = _read_json(AGENTS, {})
+        if not isinstance(agents, dict):
+            agents = {}
+        a = agents.get(role) or _blank_agent(role)
+        a.setdefault("display", role_display(role))
+        a.setdefault("responsibility", role_responsibility(role))
+        now = _now()
+        if status == "active" and (a.get("status") != "active" or not a.get("started_at")):
+            a["started_at"] = now                 # (re)entering active — or active-without-a-clock — starts it
+            a["mission"] = ""                     # a fresh stint gets a fresh mission line
+        if status:
+            a["status"] = status
+        if task:
+            a["task"] = task
+        if message:
+            if a.get("status") == "active" and not a.get("mission"):
+                a["mission"] = message            # the first substantive line of this stint = the mission
+            a["last_message"] = message
+        a["last_event_at"] = now
+        agents[role] = a
+        _write_atomic(AGENTS, agents)
+    except Exception:
+        pass
+
+
+def set_team(assignments) -> None:
+    """Declare the run's team + plan up front (the orchestrator calls this before dispatching, so the
+    dashboard can show WHO IS QUEUED and their job — a real standup, not just who's already talking).
+    assignments: ordered list of {role, task?, status? (default 'queued'), responsibility?}. Order is
+    preserved as 'seq' so the board can render the queue + derive each agent's 'next'."""
+    try:
+        agents = _read_json(AGENTS, {})
+        if not isinstance(agents, dict):
+            agents = {}
+        for i, item in enumerate(assignments or []):
+            if not isinstance(item, dict) or not item.get("role"):
+                continue
+            role = item["role"]
+            a = agents.get(role) or _blank_agent(role)
+            a["display"] = a.get("display") or role_display(role)
+            a["responsibility"] = item.get("responsibility") or a.get("responsibility") or role_responsibility(role)
+            a["status"] = item.get("status") or (a.get("status") if a.get("status") != "idle" else "queued")
+            if item.get("task"):
+                a["task"] = item["task"]
+            a["seq"] = i
+            agents[role] = a
+        _write_atomic(AGENTS, agents)
+    except Exception:
+        pass
+
+
+# emit() status → the roster status the board shows.
+_EMIT_TO_AGENT = {"start": "active", "info": "active", "done": "done",
+                  "blocked": "blocked", "failed": "failed"}
+
+
 # --------------------------------------------------------------------------- decision cards
 PENDING = ORBIT_DIR / "pending-question.json"
 
@@ -241,6 +345,9 @@ def emit(role: str, phase: str = "", status: str = "info", msg: str = "",
         with ACTIVITY.open("a") as f:
             f.write(json.dumps(ev) + "\n")
         _update_snapshot(ev)
+        # keep the team roster live off the same signal (so orbit-hook's emits feed it for free)
+        if role and role != "?":
+            agent_update(role, status=_EMIT_TO_AGENT.get(status), task=task_id, message=msg or None)
         tag = f"[{role}]" + (f" ({phase})" if phase else "")
         print(f"{tag} {msg}".rstrip(), flush=True)
     except Exception:

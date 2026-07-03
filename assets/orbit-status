@@ -44,6 +44,7 @@ TASKS = ORBIT_DIR / "tasks.json"
 ACTIVITY = ORBIT_DIR / "activity.jsonl"
 RUN = ORBIT_DIR / "run.json"
 PENDING = ORBIT_DIR / "pending-question.json"
+AGENTS = ORBIT_DIR / "agents.json"
 
 _NO_COLOR = bool(os.environ.get("NO_COLOR")) or "--no-ansi" in sys.argv
 DIM = "" if _NO_COLOR else "\033[2m"
@@ -117,13 +118,13 @@ def _age(iso_ts):
         return None
 
 
-def _fmt_dur(secs):
+def _fmt_dur(secs, fine=False):
     if secs is None:
         return "?"
     if secs < 60:
         return f"{secs}s"
     if secs < 3600:
-        return f"{secs // 60}m"
+        return f"{secs // 60}m {secs % 60}s" if fine else f"{secs // 60}m"
     return f"{secs // 3600}h{(secs % 3600) // 60}m"
 
 
@@ -170,6 +171,85 @@ def _active_roles(events):
     return [(r, msg, ts) for r, (st, msg, ts) in last.items() if st in ("start", "info")]
 
 
+def load_agents():
+    a = _load(AGENTS, {})
+    return a if isinstance(a, dict) else {}
+
+
+def _quiet_note(secs):
+    """The escalating 'is anything happening?' label (60 / 180 / 300s), or '' when fresh."""
+    if secs is None or secs < 60:
+        return ""
+    if secs < 180:
+        return f"quiet {_fmt_dur(secs)}"
+    if secs < 300:
+        return f"long step — {_fmt_dur(secs)} quiet"
+    return f"possibly stuck — {_fmt_dur(secs)} quiet"
+
+
+def _team(agents):
+    """(active[], queued[]) sorted by declared seq, each an agent dict + its role key."""
+    items = [dict(v, role=k) for k, v in agents.items() if isinstance(v, dict)]
+    items.sort(key=lambda x: (x.get("seq", 99), x.get("role", "")))
+    active = [x for x in items if x.get("status") in ("active", "blocked")]
+    queued = [x for x in items if x.get("status") == "queued"]
+    return active, queued
+
+
+def render_team(run, agents, events):
+    """The manager-visible standup board: who's working now (+ what/last signal/next) and who's
+    queued. This is the thing the checklist alone can't give — a team, not a to-do list."""
+    out = []
+    active, queued = _team(agents)
+    out.append(f"{B}Working now{RST}")
+    if not active:
+        out.append(f"  {DIM}(no agent active — orchestrator between steps){RST}")
+    for a in active:
+        el = _fmt_dur(_age(a.get("started_at")), fine=True) if a.get("started_at") else "?"
+        quiet = _quiet_note(_age(a.get("last_event_at")))
+        col = role_color(a.get("role", ""))
+        head = f"  ▸ {col}{B}{safe(a.get('display', a.get('role', '')))}{RST}  {DIM}active {el}{RST}"
+        if a.get("task"):
+            head += f"  {DIM}· {safe(a['task'])}{RST}"
+        if quiet:
+            head += f"  {c('ylw') if ('stuck' in quiet or 'long' in quiet) else DIM}({quiet}){RST}"
+        out.append(head)
+        # description = the mission (what this stint is about); fall back to the role's responsibility
+        desc = safe(a.get("mission")) or safe(a.get("responsibility"))
+        if desc:
+            out.append(f"    {desc}")
+        last = safe(a.get("last_message"))
+        if last and last != safe(a.get("mission")):
+            out.append(f"    {DIM}Last signal: {last}{RST}")
+        nxt = queued[0] if queued else None
+        if nxt:
+            out.append(f"    {DIM}Next: {safe(nxt.get('display', nxt.get('role','')))} "
+                       f"— {safe(nxt.get('responsibility',''))}{RST}")
+    if queued:
+        out.append("")
+        out.append(f"{B}Queued{RST}")
+        for a in queued:
+            col = role_color(a.get("role", ""))
+            out.append(f"  ○ {col}{safe(a.get('display', a.get('role','')))}{RST}  "
+                       f"{DIM}{safe(a.get('responsibility',''))}{RST}")
+    return out
+
+
+def _progress_line(run, agents, events):
+    done, total = run.get("tasks_done", 0), run.get("tasks_total", 0)
+    active, _ = _team(agents)
+    score, _ = _confidence(run, events)
+    bits = [f"{done}/{total} done"] if total else []
+    bits.append(f"{len(active)} active")
+    if score is not None:
+        bits.append(f"confidence {int(score)}%")
+    bits.append("blocked: " + run["blocked_question"][:40] if run.get("blocked_question") else "no blocker")
+    q = _quiet_note(_age(run.get("last_ts")))
+    if q:
+        bits.append(q)
+    return " · ".join(bits)
+
+
 def _snapshot(run, events):
     """The machine-readable summary for --json."""
     score, reason = _confidence(run, events)
@@ -203,17 +283,20 @@ def render_compact(run, tasks, events):
     return line + tail
 
 
-def render_full(run, tasks, events, tail):
+def render_full(run, tasks, events, tail, agents=None):
+    agents = agents if agents is not None else load_agents()
     out = []
     goal = safe(run.get("goal") or "")
-    out.append(f"{B}🛰  Orbit Run{RST}  {DIM}{goal}{RST}".rstrip())
+    active_now, _ = _team(agents)
+    slice_ = safe((active_now[0].get("task") if active_now else "") or run.get("active_task") or "")
+    header = f"{B}🛰  Orbit{RST}"
+    if slice_:
+        header += f"  {DIM}· {slice_}{RST}"
+    if goal:
+        header += f"  {DIM}{goal}{RST}"
+    out.append(header)
     if run:
         out.append(f"{B}Lifecycle{RST}  {_lifecycle_strip(run)}")
-        done, total = run.get("tasks_done", 0), run.get("tasks_total", 0)
-        cyc = run.get("cycle", 0)
-        el = _fmt_dur(_age(run.get("started_ts")))
-        out.append(f"{B}Progress{RST}   {_bar(done, total)} {done}/{total} tasks   "
-                   f"cycle {cyc}   {el} elapsed")
         out.append("")
 
     card = _load(PENDING, None)
@@ -232,13 +315,14 @@ def render_full(run, tasks, events, tail):
         out.append(f"{c('ylw')}{B}⚠ Needs input{RST}  {safe(run['blocked_question'])}")
         out.append("")
 
-    active = _active_roles(events)
-    out.append(f"{B}Active{RST}")
-    if not active:
-        out.append(f"  {DIM}(idle){RST}")
-    for r, msg, ts in active[-6:]:
-        col = role_color(r)
-        out.append(f"  {col}{safe(r)}{RST}  {DIM}{fmt_ts({'ts': ts})}{RST}  {safe(msg)}")
+    # The team board — who's working now + who's queued. Above the checklist, by design.
+    out.extend(render_team(run, agents, events))
+    out.append("")
+    out.append(f"{B}Progress{RST}    {_progress_line(run, agents, events)}")
+    if run:
+        el = _fmt_dur(_age(run.get("started_ts")))
+        out.append(f"            {DIM}{_bar(run.get('tasks_done', 0), run.get('tasks_total', 0))} "
+                   f"cycle {run.get('cycle', 0)} · {el} elapsed{RST}")
     out.append("")
 
     out.append(f"{B}Checklist{RST}")
@@ -292,24 +376,37 @@ def render_full(run, tasks, events, tail):
     return "\n".join(out)
 
 
+def render_team_board(run, agents, events):
+    """The standalone team board (--team): the manager view + progress, nothing else. Meant to be
+    printed inline before a long wait so the user never stares at only 'waiting for background agent'."""
+    out = [f"{B}🛰  Orbit — team{RST}"]
+    out.extend(render_team(run, agents, events))
+    out.append(f"{DIM}{_progress_line(run, agents, events)}{RST}")
+    return "\n".join(out)
+
+
 def render(mode, tail):
     run = _load(RUN, {})
     if not isinstance(run, dict):
         run = {}
     tasks = _load(TASKS, [])
     events = load_events(max(tail, 40))
+    agents = load_agents()
     if mode == "json":
-        return json.dumps({"run": _snapshot(run, events),
+        return json.dumps({"run": _snapshot(run, events), "agents": agents,
                            "tasks": tasks if isinstance(tasks, list) else []}, indent=2)
+    if mode == "team":
+        return render_team_board(run, agents, events)
     if mode == "compact":
         return render_compact(run, tasks, events)
-    return render_full(run, tasks, events, tail)
+    return render_full(run, tasks, events, tail, agents)
 
 
 def main():
     argv = sys.argv[1:]
     follow = "--follow" in argv or "-f" in argv
-    mode = "json" if "--json" in argv else "compact" if "--compact" in argv else "full"
+    mode = ("json" if "--json" in argv else "team" if "--team" in argv
+            else "compact" if "--compact" in argv else "full")
     tail = 20
     if "--tail" in argv:
         try:

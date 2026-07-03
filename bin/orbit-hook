@@ -135,6 +135,15 @@ def main():
             return
         rec = _map(event, data)
         if rec is not None:
+            # A tool edit/failure has no sub-agent identity — attribute it to whoever's ACTIVE
+            # (from run.json) so we update that agent's line instead of a phantom "builder".
+            if event in ("PostToolUse", "PostToolUseFailure"):
+                try:
+                    active = json.loads((orbit_dir / "run.json").read_text()).get("active_role")
+                    if active:
+                        rec["role"] = active
+                except Exception:
+                    pass
             activity.emit(**rec)
     except Exception:
         return                                              # fail open — telemetry never breaks a run

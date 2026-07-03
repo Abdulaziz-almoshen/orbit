@@ -43,28 +43,50 @@ def _age_seconds(iso_ts):
         return None
 
 
-def build_line(claude: dict, run: dict) -> str:
+def _active_agent(agents: dict):
+    """The agent working now (first with status active/blocked), or None."""
+    if not isinstance(agents, dict):
+        return None
+    cands = [dict(v, role=k) for k, v in agents.items()
+             if isinstance(v, dict) and v.get("status") in ("active", "blocked")]
+    cands.sort(key=lambda x: (x.get("seq", 99), x.get("role", "")))
+    return cands[0] if cands else None
+
+
+def _dur(secs):
+    if secs is None:
+        return ""
+    return f"{secs}s" if secs < 60 else f"{secs // 60}m{secs % 60}s" if secs < 3600 else f"{secs // 3600}h"
+
+
+def build_line(claude: dict, run: dict, agents: dict = None) -> str:
     seg = []
     blocked = run.get("blocked_question")
     if blocked:
         seg.append("⚠ needs input")
 
-    phase = run.get("phase") or run.get("mode")
-    if phase:
-        seg.append(str(phase))
-
-    role = run.get("active_role")
-    if role and not blocked:
-        seg.append(str(role))
+    # slice/task first, then the human-readable active agent + how long it's been at it
+    slice_ = run.get("active_task")
+    ag = _active_agent(agents or {})
+    if slice_ or (ag and ag.get("task")):
+        seg.append(str(slice_ or ag.get("task")))
+    if ag and not blocked:
+        name = ag.get("display") or ag.get("role") or "agent"
+        el = _dur(_age_seconds(ag.get("started_at")))
+        seg.append(f"{name}{(' ' + el) if el else ''}")
+    elif run.get("active_role") and not blocked:
+        seg.append(str(run["active_role"]))
+    elif run.get("phase") or run.get("mode"):
+        seg.append(str(run.get("phase") or run.get("mode")))
 
     total = run.get("tasks_total")
     if isinstance(total, int) and total > 0:
         seg.append(f"{run.get('tasks_done', 0)}/{total}")
 
-    # idle: only surface it once it's meaningful (the run may be waiting on the active agent)
+    # quiet: surface it once it's meaningful (the run may be waiting on the active agent)
     age = _age_seconds(run.get("last_ts"))
-    if age is not None and age >= 30:
-        seg.append(f"{age}s idle")
+    if age is not None and age >= 60:
+        seg.append(f"quiet {_dur(age)}")
 
     ctx = _get(claude, "context_window", "used_percentage")
     if isinstance(ctx, (int, float)):
@@ -95,16 +117,22 @@ def main():
             claude = {}
     except Exception:
         claude = {}
+    project = claude.get("cwd") or _get(claude, "workspace", "current_dir") \
+        or os.environ.get("CLAUDE_PROJECT_DIR") or "."
     try:
-        project = claude.get("cwd") or _get(claude, "workspace", "current_dir") \
-            or os.environ.get("CLAUDE_PROJECT_DIR") or "."
         run = json.loads((Path(project) / ".orbit" / "run.json").read_text())
         if not isinstance(run, dict):
             run = {}
     except Exception:
         run = {}
     try:
-        print(build_line(claude, run))
+        agents = json.loads((Path(project) / ".orbit" / "agents.json").read_text())
+        if not isinstance(agents, dict):
+            agents = {}
+    except Exception:
+        agents = {}
+    try:
+        print(build_line(claude, run, agents))
     except Exception:
         print("")                                           # never crash the status line
 
