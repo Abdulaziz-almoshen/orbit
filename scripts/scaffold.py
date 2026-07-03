@@ -100,6 +100,8 @@ FILE_PLAN = [
     ("lifecycle.py",     ".orbit/lifecycle.py",     None),   # mode detection + phase strip
     ("ralph_loop.sh",    "scripts/ralph_loop.sh",     0o755),
     ("orbit-status",     "scripts/orbit-status",      0o755),
+    ("orbit-statusline.py", "scripts/orbit-statusline", 0o755),  # the one-line Claude Code status line
+
     ("checks/guard.py",  ".orbit/checks/guard.py",    0o755),  # placed, NOT wired (see skill Phase 6a)
     ("checks/route.py",  ".orbit/checks/route.py",    0o755),  # the UserPromptSubmit router (Phase 6a)
     ("checks/learn.py",  ".orbit/checks/learn.py",    0o755),  # the active-learning ledger helper
@@ -163,6 +165,7 @@ DESIGN_GATE_CMD = 'python3 "$CLAUDE_PROJECT_DIR/.orbit/checks/design-gate.py"'
 ORBIT_HOOK_CMD = 'python3 "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/orbit/bin/orbit-hook"'
 ORBIT_HOOK_EVENTS = ["SubagentStart", "SubagentStop", "TaskCreated", "TaskCompleted",
                      "PostToolUse", "PostToolUseFailure", "PostToolBatch", "Stop", "Notification"]
+STATUSLINE_CMD = 'python3 "$CLAUDE_PROJECT_DIR/scripts/orbit-statusline"'
 
 
 def _strip_frontmatter(text: str) -> str:
@@ -289,6 +292,14 @@ def install_hooks(target: Path, has_ui: bool = False) -> None:
         added.append(f"[{', '.join(ORBIT_HOOK_EVENTS)}] → orbit-hook   "
                      "(telemetry: live run visibility; observe-only, fail-open)")
 
+    # Status line — add ONLY if the user has none; NEVER overwrite an existing one.
+    statusline_manual = False
+    if "statusLine" not in data:
+        data["statusLine"] = {"type": "command", "command": STATUSLINE_CMD, "refreshInterval": 2}
+        added.append("statusLine → orbit-statusline   (live one-line run summary, 2s refresh)")
+    else:
+        statusline_manual = True
+
     if added:
         tmp = settings.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(data, indent=2))
@@ -300,6 +311,9 @@ def install_hooks(target: Path, has_ui: bool = False) -> None:
             print("  (your previous settings.json was backed up alongside it)")
     else:
         print("Orbit hooks already wired in .claude/settings.json — left as-is.")
+    if statusline_manual:
+        print("  Note: you already have a statusLine — left untouched. To use Orbit's, set")
+        print(f"        .claude/settings.json statusLine.command to: {STATUSLINE_CMD}")
     print("  Remove anytime:  orbit-uninstall   (or delete those hook blocks)")
 
 
