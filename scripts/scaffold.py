@@ -154,6 +154,13 @@ DIRS = [
 GUARD_CMD = 'python3 "$CLAUDE_PROJECT_DIR/.orbit/checks/guard.py"'
 ROUTE_CMD = 'python3 "$CLAUDE_PROJECT_DIR/.orbit/checks/route.py"'
 DESIGN_GATE_CMD = 'python3 "$CLAUDE_PROJECT_DIR/.orbit/checks/design-gate.py"'
+# The telemetry collector is wired from the TRUSTED Orbit INSTALL (not copied into the repo), so
+# editing the product repo can't alter it — unlike guard/route/design-gate, which are project-local
+# BECAUSE they're meant to be customized per repo (the guard's RULES block especially). Resolved at
+# hook-run time via the default install location; degrades to a no-op if Orbit lives elsewhere.
+ORBIT_HOOK_CMD = 'python3 "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/orbit/bin/orbit-hook"'
+ORBIT_HOOK_EVENTS = ["SubagentStart", "SubagentStop", "TaskCreated", "TaskCompleted",
+                     "PostToolUse", "PostToolUseFailure", "PostToolBatch", "Stop", "Notification"]
 
 
 def _strip_frontmatter(text: str) -> str:
@@ -226,6 +233,9 @@ def install_hooks(target: Path, has_ui: bool = False) -> None:
       • PreToolUse(Edit|Write|MultiEdit) → design-gate.py — UI repos only (has_ui): a coarse
         backstop that asks once per cycle if a UI production file has no design-decision record.
         Never denies; fails open. Not a per-change heavy-redesign blocker — see its own docstring.
+      • [SubagentStart/Stop, TaskCreated/Completed, PostToolUse(+Failure/Batch), Stop, Notification]
+        → bin/orbit-hook — the telemetry collector, wired from the TRUSTED install path (not the
+        repo), observe-only + fail-open: makes long runs visible in orbit-status / the status line.
 
     Backs up settings.json first, merges each hook idempotently (never double-adds), prints what it
     added + the one-line removal. Remove anytime with `orbit-uninstall`.
@@ -264,6 +274,18 @@ def install_hooks(target: Path, has_ui: bool = False) -> None:
                     "hooks": [{"type": "command", "command": DESIGN_GATE_CMD}]})
         added.append("PreToolUse[matcher=Edit|Write|MultiEdit] → design-gate.py   "
                      "(design: ask once/cycle if a UI edit has no design record)")
+
+    # Telemetry collector (observe-only, fail-open) across the run-lifecycle events → makes long
+    # runs visible in orbit-status / the status line without the model having to remember to emit.
+    hook_added = False
+    for event in ORBIT_HOOK_EVENTS:
+        lst = hooks.setdefault(event, [])
+        if not any("orbit-hook" in json.dumps(e) for e in lst):
+            lst.append({"hooks": [{"type": "command", "command": ORBIT_HOOK_CMD}]})
+            hook_added = True
+    if hook_added:
+        added.append(f"[{', '.join(ORBIT_HOOK_EVENTS)}] → orbit-hook   "
+                     "(telemetry: live run visibility; observe-only, fail-open)")
 
     if added:
         tmp = settings.with_suffix(".json.tmp")

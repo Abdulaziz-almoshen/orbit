@@ -29,10 +29,11 @@ echo "Orbit uninstall — repo: $ROOT"
 echo
 echo "Will remove (Orbit-authored):"
 for t in "${TARGETS[@]}"; do [ -e "$t" ] && echo "  - $t"; done
-# Orbit-tagged hooks = any hook whose command references .orbit/
+# Orbit-tagged hooks = any hook whose command references .orbit/ (guard/route/design-gate) OR the
+# install-path telemetry collector (orbit-hook).
 HOOK_HITS=0
 if [ -f "$SETTINGS" ]; then
-  HOOK_HITS=$(python3 -c "import json;print(json.dumps(json.load(open('$SETTINGS')).get('hooks',{})).count('.orbit/'))" 2>/dev/null || echo 0)
+  HOOK_HITS=$(python3 -c "import json;b=json.dumps(json.load(open('$SETTINGS')).get('hooks',{}));print(b.count('.orbit/')+b.count('orbit-hook'))" 2>/dev/null || echo 0)
   [ "${HOOK_HITS:-0}" != "0" ] && echo "  - Orbit hook(s) in $SETTINGS (the rest of the file is preserved)"
 fi
 echo
@@ -64,7 +65,7 @@ def keep(group):
     out = []
     for entry in group:
         cmds = json.dumps(entry.get("hooks", entry))
-        if ".orbit/" in cmds:
+        if ".orbit/" in cmds or "orbit-hook" in cmds:   # guard/route/design-gate OR the telemetry collector
             continue
         out.append(entry)
     return out

@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+"""
+orbit-hook — telemetry collector wired to Claude Code hook events.
+
+It lives in the TRUSTED Orbit install and is wired into a project's .claude/settings.json by its
+ABSOLUTE install path (not copied into the repo), so editing the product repo can't alter the
+collector's code — it addresses the project-local-hook trust boundary for the observability path.
+It WRITES to the *project's* .orbit/ (resolved from the hook payload's cwd), so trusted code
+records into project-owned data.
+
+It OBSERVES ONLY: it never blocks a tool, never returns a permission decision, never logs a raw
+prompt (everything is control-char-stripped + length-capped), and FAILS OPEN — any error, any
+unknown event, any un-scaffolded repo → it does nothing and exits 0. A telemetry hook must never
+break the user's workflow, and "the event didn't fire in this Claude Code version" must degrade to
+"less telemetry", never an error.
+
+Wired to (each a settings.json hook entry): SubagentStart, SubagentStop, TaskCreated,
+TaskCompleted, PostToolUse, PostToolUseFailure, PostToolBatch, Stop, Notification. (route.py owns
+UserPromptSubmit — routing telemetry — so this collector leaves it alone.)
+"""
+import json
+import os
+import re
+import sys
+from pathlib import Path
+
+_CONTROL = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|[\x00-\x1f\x7f]")   # ANSI escapes + control chars
+
+# PostToolUse fires on EVERY tool — only these carry signal worth a line in the thread.
+_FILE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
+
+
+def _redact(text, cap=80):
+    t = _CONTROL.sub(" ", str(text or ""))
+    t = re.sub(r"\s+", " ", t).strip()
+    return (t[: cap - 1] + "…") if len(t) > cap else t
+
+
+def _tool_name(data):
+    return data.get("tool_name") or (data.get("tool") or {}).get("name") or ""
+
+
+def _file_path(data):
+    ti = data.get("tool_input") or {}
+    return ti.get("file_path") or ti.get("path") or ""
+
+
+def _map(event, data):
+    """Map a Claude Code hook event to activity.emit() kwargs, or None to ignore this event."""
+    agent = _redact(data.get("agent_type") or data.get("agent") or "subagent", 24) or "subagent"
+    if event == "SubagentStart":
+        return {"role": agent, "phase": "act", "status": "start", "msg": f"{agent} started"}
+    if event == "SubagentStop":
+        return {"role": agent, "phase": "act", "status": "done", "msg": f"{agent} finished"}
+    if event == "PostToolUse":
+        tool = _tool_name(data)
+        if tool not in _FILE_TOOLS:
+            return None                                     # skip Read/Grep/Bash/etc. — too noisy
+        fp = _file_path(data)
+        files = [fp] if fp else None
+        return {"role": "builder", "phase": "build", "status": "info",
+                "msg": f"{tool} {_redact(fp, 60)}".strip(), "files": files}
+    if event == "PostToolUseFailure":
+        tool = _tool_name(data) or "tool"
+        return {"role": "builder", "phase": "build", "status": "failed",
+                "msg": f"{_redact(tool, 30)} failed", "confidence_delta": -10}
+    if event == "PostToolBatch":
+        return {"role": "orchestrator", "phase": "act", "status": "info",
+                "msg": "parallel tool batch complete"}
+    if event == "Stop":
+        return {"role": "orchestrator", "phase": "report", "status": "done", "msg": "run complete"}
+    if event == "Notification":
+        note = _redact(data.get("message") or data.get("msg") or "notification")
+        low = note.lower()
+        blocked = any(k in low for k in ("waiting", "need", "input", "permission", "approve"))
+        return {"role": "human", "phase": "decide", "status": "blocked" if blocked else "info",
+                "msg": note}
+    # TaskCreated / TaskCompleted are handled separately (they mirror the native checklist).
+    return None
+
+
+def _mirror_task(activity, event, data):
+    """Mirror Claude Code's native TaskCreate/TaskUpdate checklist into .orbit/tasks.json so the
+    dashboard + run.json see the same progress the pinned checklist shows."""
+    tid = str(data.get("task_id") or (data.get("task") or {}).get("id") or "").strip()
+    if not tid:
+        return
+    title = _redact((data.get("task") or {}).get("content") or data.get("content")
+                    or data.get("title") or tid, 80)
+    if event == "TaskCreated":
+        try:
+            tasks = json.loads((Path(os.environ["ORBIT_DIR"]) / "tasks.json").read_text())
+            if not isinstance(tasks, list):
+                tasks = []
+        except Exception:
+            tasks = []
+        if not any(isinstance(t, dict) and t.get("id") == tid for t in tasks):
+            tasks.append({"id": tid, "title": title, "owner": "", "status": "pending"})
+            activity.set_tasks(tasks)
+    elif event == "TaskCompleted":
+        activity.update_task(tid, "done")
+
+
+def main():
+    try:
+        data = json.load(sys.stdin)
+    except Exception:
+        return                                              # fail open, no output
+    if not isinstance(data, dict):
+        return
+    event = data.get("hook_event_name") or ""
+    project = data.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or "."
+    orbit_dir = Path(project) / ".orbit"
+    if not orbit_dir.is_dir():
+        return                                              # Orbit not scaffolded here — do nothing
+
+    # Import the TRUSTED install's activity.py (single source of truth for schema + snapshot),
+    # pointed at the PROJECT's .orbit/. Never import project-local code from this trusted script.
+    os.environ["ORBIT_DIR"] = str(orbit_dir)
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "assets"))
+    try:
+        import activity  # noqa: E402
+    except Exception:
+        return
+
+    try:
+        if event in ("TaskCreated", "TaskCompleted"):
+            _mirror_task(activity, event, data)
+            return
+        rec = _map(event, data)
+        if rec is not None:
+            activity.emit(**rec)
+    except Exception:
+        return                                              # fail open — telemetry never breaks a run
+
+
+if __name__ == "__main__":
+    main()
