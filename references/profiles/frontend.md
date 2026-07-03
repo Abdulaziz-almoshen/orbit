@@ -18,13 +18,22 @@ job, don't.
   `design-methodology.md`, `anti-ai-aesthetics.md`, `design-styles.md`, **and the whole
   `design-styles/` directory (the 67-style catalog)**. The scaffolder does this automatically with
   `--frontend`. (This is the "provide skills to the sub-agent" pattern — the role loads them on demand.)
-- **The mandatory style-prototype gate.** On every new component/module/screen, the Designer must
-  shortlist 2–4 styles from `design-styles.md`, build a **standalone HTML prototype of each**, open
-  them for the user, and let the user **pick one** before any production build. The user chooses the
-  look from real prototypes — this is non-negotiable for design work (see `design-methodology.md`).
-- Give the Reviewer the **Design Distinctiveness** gate (the ported/built UI must not read like a
-  default, must match the design source of truth if one exists, **and a style must have been
-  selected from prototypes** — a UI change with no recorded style choice doesn't pass).
+- **Determine impact first, every design-related request.** HEAVY (a new/redesigned component,
+  module, screen, or flow; a layout/hierarchy/typography/color/spacing/interaction change; no
+  approved style yet) fires a prototype gate; TRIVIAL (copy fix, sanctioned token tweak,
+  appearance-restoring bug fix, className/prop swap, zero-pixel refactor) skips it — fast lane
+  stays fast (see `design-methodology.md`).
+- **The mandatory prototype gate — HEAVY work only.** No style chosen yet → the Designer shortlists
+  2–5 styles from `design-styles.md`, builds a **standalone HTML prototype of each**, opens them for
+  the user, and lets the user **pick one** (sets the product's look, once). A style already exists →
+  the Designer builds **2–5 HTML prototypes of the component itself**, within that style, opens
+  them, and lets the user pick the variant. Either way: before any production build, non-negotiable
+  on HEAVY, skipped entirely on TRIVIAL (see `design-methodology.md`).
+- Give the Reviewer the **Design Distinctiveness** gate, **conditional on `impact_level: HEAVY`**
+  (the ported/built UI must not read like a default, must match the design source of truth if one
+  exists, **and a style/variant must have been selected from prototypes** — a HEAVY UI change with
+  no recorded pick doesn't pass; TRIVIAL work is exempt and a legacy record with no `impact_level`
+  is a pass-with-warning, not an auto-fail).
 - If the repo has a **design source of truth** (e.g. `design-concept.html`, a tokens file),
   name it in CLAUDE.md §4 and treat it as the fidelity reference + a human-approval checkpoint
   for direct edits.

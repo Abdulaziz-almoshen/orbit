@@ -13,13 +13,37 @@ defaults are the enemy of that.
 You have a catalog of **67 selectable style token-systems** in `design-styles.md` (full specs in
 `design-styles/<name>.md`) — minimal, brutalist, glassmorphism, editorial, luxury, retro, neon,
 and more. These are the *menu*; this methodology is the *how*. The user picks the style from real
-prototypes (gate below); you then apply it with the rigor here (grounding, signature, anti-AI
+prototypes (gates below); you then apply it with the rigor here (grounding, signature, anti-AI
 checklist, quality floor) so it's distinctive, not a templated drop-in.
 
-## Style-prototype selection gate — MANDATORY on every new design request
-**Never jump straight to building one look.** For any new component, module, screen, or visual
-change, do this *first*, every time:
-1. **Shortlist 2–4 styles** from `design-styles.md` that genuinely fit the brief — use the families
+## First, determine impact — heavy or trivial? (every design-related request)
+Before touching a style or building a component, classify the request. This is what keeps the
+prototype gate scoped to work that deserves it, and keeps the fast lane (CLAUDE.md §10) fast:
+
+**HEAVY — changes the user experience** (a prototype gate fires, below):
+- A new or redesigned component, module, screen, or flow.
+- A change to layout, visual hierarchy, typography, the color system, spacing rhythm, or an
+  interaction/motion pattern.
+- Introducing a UI surface that has no approved style yet (the *first* design request in this repo).
+
+**TRIVIAL — no gate, just do it** (fast lane, §10):
+- A copy/text fix or a same-layout content swap.
+- A single token tweak already sanctioned by `DESIGN.md`.
+- An appearance-*restoring* bug fix (bringing a component back to its approved design).
+- A `className`/prop swap or a zero-pixel refactor.
+- Anything small · clear · reversible.
+
+On TRIVIAL, proceed directly — no prototypes, no `AskUserQuestion` — and still record the triage
+(see Handoff below), so later checks can see a design decision was made. On HEAVY, run whichever
+gate applies below.
+
+## Two gates — the one-time style pick, and the recurring component gate
+These serve different moments in a product's life, and only one runs per HEAVY request.
+
+### A. The style-prototype gate — once per product, not per component
+Run this **only** the first time this repo needs a design (no `DESIGN.md` / no chosen style yet),
+or when the user explicitly asks to re-pick the whole product's look:
+1. **Shortlist 2–5 styles** from `design-styles.md` that genuinely fit the brief — use the families
    to narrow (e.g. a fintech dashboard → `clean` / `corporate` / `sleek`; a kids' app → `doodle` /
    `colorful` / `friendly`; a launch page → `bold` / `editorial` / `cosmic`). Show the relevant few,
    never all 67.
@@ -29,15 +53,26 @@ change, do this *first*, every time:
    `.orbit/artifacts/<cycle>/previews/<style>.html`.
 3. **Open them for the user** to compare side by side (`open` each file, or serve the folder), with a
    one-line pitch per style ("Brutalist — raw, high-contrast, unmissable"; "Clean — calm, trustworthy").
-4. **The user picks one — via `AskUserQuestion`.** After opening the previews, ask with one option
-   per style (its one-line pitch as the description, **your best fit for the brief first, labeled
-   "(Recommended)"**) plus an "Other / remix" escape. Never make the pick a prose question — the
-   selection must be one click. Only then proceed to the token system + build below, using the chosen
-   style as the base and grounding it in the subject.
+4. **The user picks one — via `AskUserQuestion`.** One option per style (its one-line pitch as the
+   description, **your best fit for the brief first, labeled "(Recommended)"**) plus an
+   "Other / remix" escape. Never a prose question — the selection must be one click.
 
-This gate is **mandatory for all design-related requests** — the user chooses the look from real,
-openable prototypes, not from a description. (The Reviewer enforces it: a UI change with no recorded
-style selection doesn't pass.)
+This sets the product's visual language for everything after it (see Handoff — `DESIGN.md`).
+
+### B. The component prototype gate — every subsequent HEAVY component/redesign
+Once a style is chosen (gate A already ran), a new HEAVY component does **not** re-pick the style —
+it generates variations *within* it:
+1. **Build 2–5 HTML prototypes of this component** — different layouts, compositions, or
+   interaction patterns for *this* brief, all using the *already-approved* style's tokens from
+   `DESIGN.md`. Write them to `.orbit/artifacts/<cycle>/previews/<variant>.html`.
+2. **Open them for the user** the same way (`open` each file, or serve the folder), with a one-line
+   pitch per variant.
+3. **The user picks one — via `AskUserQuestion`.** One option per variant, your recommendation
+   first labeled "(Recommended)", plus an "Other / remix" escape.
+
+**This gate is mandatory on the HEAVY branch — not on every design-related request.** TRIVIAL work
+skips it by design; the fast lane stays fast. (The Reviewer/QA enforce it *conditionally*, only
+when `impact_level: HEAVY` — see `roles.md` and `qa-validation.md`.)
 
 ## The two-pass process — plan before you code, critique twice
 1. **Start from the chosen style** (the prototype the user picked) and explore the subject's world to
@@ -81,16 +116,29 @@ Responsive down to mobile; visible keyboard focus; `prefers-reduced-motion` resp
 CSS specificity (type- vs element-based selectors can cancel each other on padding/margins).
 
 ## Handoff — the design is a FILE contract, not a suggestion
-The user's pick from the style-prototype gate becomes **artifacts every later step must consume**:
-1. **`design/approved.json`** — which prototype won, the file path, viewport, and the remix notes
-   ("layout from A, colors from B"). Engineers **must detect and read this before any UI code.**
+The user's pick from whichever gate ran becomes **artifacts every later step must consume**. The
+canonical, single location for the approval record is **`design/approved.json`** at the repo
+root — every role (Designer, Reviewer, QA) reads and writes this one path, never a per-cycle copy:
+
+1. **`design/approved.json`** — the triage decision *and* the pick, in one record:
+   ```json
+   { "component": "checkout-summary", "impact_level": "HEAVY",
+     "impact_rationale": "new layout + interaction pattern",
+     "variants_shown": 3, "chosen": "variant-b",
+     "previews": [".orbit/artifacts/12/previews/variant-b.html"], "cycle": 12 }
+   ```
+   `impact_level` is `"HEAVY"` or `"TRIVIAL"` — write it even on TRIVIAL (a triage record with no
+   prototypes is still a record of the decision). `variants_shown` is 2–5 on HEAVY, absent/0 on
+   TRIVIAL. Engineers **must detect and read this before any UI code.** A **legacy record with no
+   `impact_level`** (written before this gate existed) is not an error — treat it as
+   **pass-with-warning**, never an auto-fail.
 2. **`DESIGN.md`** (repo root) — the extracted token system as the *persistent design authority*:
    named hex values, type roles + scale, spacing scale, radius, the signature element, and a
    **Decisions Log** line per change. Every future design/UI run reads DESIGN.md first; its tokens
    **override** anything a new generation would invent. (This is what keeps the product visually
    coherent across sessions — and it's where active learning writes design learnings.)
 3. **`.orbit/artifacts/<cycle>/design-plan.md`** — the per-cycle plan (tokens + layout + signature +
-   rationale, naming the chosen style) for the Builder.
+   rationale, naming the chosen style/variant) for the Builder.
 
 **Fidelity rule:** when an approved prototype exists, **pixel-match it** — source-of-truth fidelity
 beats code elegance (`width: 312px` matching the mockup beats a cleaner grid class that doesn't).
@@ -102,5 +150,6 @@ screenshot diffs at 375/768/1440 — see `qa-validation.md`). Orbit ships thin h
 `.orbit/qa/` (`extract-tokens.py --compare DESIGN.md`, `snapshot.py screenshot|diff`) — **helpers,
 not a bundled browser**: they use Playwright if installed and otherwise fall back to a browser MCP /
 gstack `/browse` / a manual capture (they exit cleanly, never crash the cycle). The Reviewer's
-**Design Distinctiveness** gate still applies (see `roles.md`). A UI change with no `approved.json`
-behind it is a finding.
+**Design Distinctiveness** gate still applies (see `roles.md`), **conditionally** — it fires when
+`impact_level: HEAVY`. A HEAVY UI change with no `approved.json` behind it is a finding; TRIVIAL
+work is exempt (its own triage record is enough).

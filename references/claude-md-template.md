@@ -100,6 +100,14 @@ execution engine. See `references/durable-execution.md`.)
 - `.orbit/skills/goal-pipeline.md` — goal → spec → story DAG → run-until-green → polish (2 human gates).
 - `.orbit/skills/architecture-decisions.md` — the CTO hat: ADRs in `.orbit/decisions/`, boring-tech bar.
 
+**Design playbooks** (frontend repos only, provisioned when a UI surface is detected):
+- `.orbit/skills/design-methodology.md` — the Designer's process, including the **impact
+  determination** (HEAVY vs TRIVIAL) and the two prototype gates it scopes: the one-time
+  style-prototype gate (2–5 styles, once per product) and the recurring component gate (2–5
+  variants, every HEAVY component/redesign). TRIVIAL work skips both — the fast lane (§10) stays fast.
+- `.orbit/skills/anti-ai-aesthetics.md` — the templated-default clusters to reject.
+- `.orbit/skills/design-styles.md` + `design-styles/` — the 67-style catalog the gates draw from.
+
 **QA executors** (frontend repos only — *tools*, not playbooks; helpers, not a bundled browser):
 - `.orbit/qa/snapshot.py` — `screenshot` / pixel-`diff` / `console` capture. Playwright if installed,
   else exits 2 with the install line; `diff` is pure-python. Fallback: browser MCP → gstack `/browse` → manual.
@@ -137,7 +145,11 @@ prompts itself *and* stays fast: most requests don't need ceremony, so don't pay
   file outside it:
   - **Small · clear · reversible** (a rename, a log line, a localized fix) → **just do it well,
     now.** Reason internally, act, self-check against §3, log one line in STATE.md. No briefs,
-    no role hand-offs, no phase narration. *This is the default, and it's fast.*
+    no role hand-offs, no phase narration. *This is the default, and it's fast.* On frontend
+    repos, this lane is why the Designer's prototype gate stays out of the way for small work:
+    small/clear/reversible UI edits (a copy fix, a sanctioned token tweak, an appearance-restoring
+    bug fix) never route to the Designer at all, so they cannot trigger a prototype gate — the
+    gate only fires on work the Designer itself classifies HEAVY (see `design-methodology.md`).
   - **Substantial · ambiguous · irreversible** (a new capability; anything touching
     schema/data/security/payments; wide blast radius) → run the full loop, and run the
     **thinking in parallel**: infer from the repo, generate 2–3 approaches, and scan risks
