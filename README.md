@@ -331,6 +331,24 @@ default and tells you exactly what it added; everything is removable with `orbit
 full path `~/.claude/skills/orbit/bin/orbit-uninstall` if it isn't on your PATH — `./setup` symlinks
 it into `~/.local/bin` when that's on your PATH).
 
+## Maturity
+
+Straight talk: Orbit is a **young project**, public only since mid-2026 and still finding its first
+users. It's not a bank-grade framework and doesn't claim to be. What it *is* is a governed harness
+whose brakes actually bind — and that part is proven, not asserted:
+
+- 📓 **[Case study](docs/case-study.md)** — a real, reproducible walkthrough on a messy demo repo:
+  the scaffold, the surface-fitted team, and the safety wall / router / budgets binding, with the
+  actual command output pasted in (no mock-ups).
+- 🧪 **[Evals](docs/evals.md)** — harness invariants that pass **3/3** (deterministic, runnable now)
+  plus an honest, still-empty task-quality A/B table. We publish real numbers or none — never faked.
+- ✅ **8 automated test files** — guard schema + `cd &&` bypass cases, router accuracy (69/69),
+  budget persistence, migration safety, the coherence gate. `bash tests/run.sh`.
+
+The [binds / advisory / stub table](#safety--what-binds-and-what-doesnt) above is the honest map of
+what's enforced vs. what's prompt-discipline. If that trade sounds useful, **you're exactly the early
+user I'm looking for** — try it, file what breaks, tell me what's overclaimed.
+
 ## Repo layout
 
 ```
@@ -341,15 +359,19 @@ orbit/                          ← this repo == the skill dir (clones to ~/.cla
 ├── VERSION                     # single source of truth for the version
 ├── CHANGELOG.md                # what "what's new" reads from
 ├── bin/
+│   ├── orbit-preamble          # the skill's STEP 0 in one command (resolve + version check)
 │   ├── orbit-update-check      # prints UPGRADE_AVAILABLE / JUST_UPGRADED / nothing
 │   └── orbit-uninstall         # removes the Orbit scaffold from a product repo
 ├── references/                 # methodology, templates, roles, loop design, observability,
 │                               #   hooks/enforcement, profiles, playbooks (the skill library)
 ├── assets/                     # loop.py, loop.config.json, activity.py, ralph_loop.sh,
-│                               #   orbit-status, checks/guard.py + route.py, role adapters
+│                               #   orbit-status, checks/guard.py + route.py, qa/ tools, role adapters
 ├── scripts/scaffold.py         # lays down the deterministic skeleton (Phase 2)
+├── scripts/check-coherence.py  # the coherence gate (no phantom skills / roster drift)
 ├── orbit-upgrade/SKILL.md      # the self-update flow (git pull)
-└── evals/                      # test cases (for contributors)
+├── docs/                       # case-study.md + evals.md (the evidence)
+├── tests/                      # the automated suite (bash tests/run.sh)
+└── evals/                      # canned tasks + the eval harness (run-eval.sh)
 ```
 
 ## Releasing a new version

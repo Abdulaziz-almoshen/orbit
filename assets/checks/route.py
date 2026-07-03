@@ -3,9 +3,10 @@
 route.py — Orbit's UserPromptSubmit hook: the deterministic router in front of EVERY message.
 
 Once Orbit is installed in a repo, Claude Code runs this BEFORE the model sees each user prompt.
-*The system* classifies the request (task vs. question) — not the model — and injects the routing
-decision as a live instruction every turn. This is what makes Orbit control the project instead of
-being an optional rule the model may or may not follow.
+It classifies the request (task vs. question) deterministically and injects the **default lane** as
+a live instruction every turn. The injection is mechanical and guaranteed (it fires every turn, no
+model in the loop) — but it's a keyword matcher, not the last word: the model executes the loop and
+may override a clear misclassification with a one-line reason (the Dispatcher role ratifies).
 
 - TASK (build / fix / add / implement / an operational command, incl. polite "can you…") → route through the loop.
 - QUESTION (status / explanation / "how do I…") → answer directly, no loop.
@@ -16,7 +17,9 @@ Honest scope: classification is a fast, **deterministic English-keyword matcher*
 NLP) — non-English or unusual phrasing falls to the soft "ambiguous" directive rather than being
 forced. The hook DECIDES the lane and injects the directive every turn (that part is the system's,
 guaranteed); the model still *executes* the loop — a hook can't run the sub-agent team itself. It
-FAILS OPEN: any error → no injection, prompt proceeds untouched. It never blocks a prompt.
+FAILS OPEN: any error → no injection, prompt proceeds untouched. It never blocks a prompt. (The
+§8 SAFETY hook is the different one — a hard wall that can actually stop a tool; this router only
+injects text.)
 """
 from __future__ import annotations
 
@@ -66,7 +69,8 @@ NEGATION_PAT = re.compile(r"^\s*(don'?t|do not|no need to|never mind|nevermind|s
                           re.IGNORECASE)
 
 TASK_CTX = (
-    "[orbit] SYSTEM ROUTING DECISION — this message is a TASK. Route it through the loop. "
+    "[orbit] ROUTING — default lane: TASK. Route it through the loop (deterministic keyword match; "
+    "if it's clearly NOT a task, say so in one line and answer directly instead). "
     "**If it's a substantial goal/feature, the planning team reviews it as experts FIRST, before "
     "building.** Understand the real intent, then bring the team's knowledge to bear (discovery: is "
     "this the right bet?; prior-art/market: does it already exist, or is there a better/reusable way?; "
@@ -82,8 +86,9 @@ TASK_CTX = (
     "free-edit a source-of-truth file outside the loop."
 )
 QUESTION_CTX = (
-    "[orbit] SYSTEM ROUTING DECISION — this message is a QUESTION. Answer it directly: no loop, no "
-    "roles, no ceremony. Read .orbit/STATE.md only if it helps."
+    "[orbit] ROUTING — default lane: QUESTION. Answer it directly: no loop, no roles, no ceremony "
+    "(deterministic keyword match; if it's actually a task, say so and route it). Read "
+    ".orbit/STATE.md only if it helps."
 )
 AMBIGUOUS_CTX = (
     "[orbit] routing: unclassified — decide the lane yourself per CLAUDE.md §10 (task → loop; "
