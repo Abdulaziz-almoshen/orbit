@@ -117,6 +117,11 @@ PLAYBOOKS_FRONTEND = ["design-methodology.md", "anti-ai-aesthetics.md", "design-
 QA_FRONTEND = [("qa/snapshot.py", ".orbit/qa/snapshot.py"),
                ("qa/extract-tokens.py", ".orbit/qa/extract-tokens.py")]
 
+# The design gate hook (Phase 2) — a coarse PreToolUse backstop that asks once per cycle when a
+# UI production file is edited with no design-decision record. Frontend-only (it acts on a
+# rendered UI); placed but NOT wired unless --install-hooks (see install_hooks below).
+DESIGN_GATE_FRONTEND = [("checks/design-gate.py", ".orbit/checks/design-gate.py")]
+
 # The UNIVERSAL spine — every project gets these (routing, planning, gates, reporting). Copied
 # verbatim to .claude/agents/<role>.md and, frontmatter-stripped, to .orbit/roles/<role>.md.
 ROLES_CORE = ["dispatcher", "orchestrator", "product-discovery", "market-researcher", "planner",
@@ -148,6 +153,7 @@ DIRS = [
 
 GUARD_CMD = 'python3 "$CLAUDE_PROJECT_DIR/.orbit/checks/guard.py"'
 ROUTE_CMD = 'python3 "$CLAUDE_PROJECT_DIR/.orbit/checks/route.py"'
+DESIGN_GATE_CMD = 'python3 "$CLAUDE_PROJECT_DIR/.orbit/checks/design-gate.py"'
 
 
 def _strip_frontmatter(text: str) -> str:
@@ -211,12 +217,15 @@ def resolve_engineers(surfaces):
     return eng, has_ui
 
 
-def install_hooks(target: Path) -> None:
-    """Wire Orbit's two always-on hooks into .claude/settings.json (default-on + announced):
+def install_hooks(target: Path, has_ui: bool = False) -> None:
+    """Wire Orbit's always-on hooks into .claude/settings.json (default-on + announced):
 
       • PreToolUse(Bash) → guard.py  — the binding safety wall (deny/ask on dangerous commands).
       • UserPromptSubmit → route.py  — the deterministic router: classifies every message
         (task → loop, question → direct) and injects the decision as the default lane.
+      • PreToolUse(Edit|Write|MultiEdit) → design-gate.py — UI repos only (has_ui): a coarse
+        backstop that asks once per cycle if a UI production file has no design-decision record.
+        Never denies; fails open. Not a per-change heavy-redesign blocker — see its own docstring.
 
     Backs up settings.json first, merges each hook idempotently (never double-adds), prints what it
     added + the one-line removal. Remove anytime with `orbit-uninstall`.
@@ -249,6 +258,12 @@ def install_hooks(target: Path) -> None:
     if not any("route.py" in json.dumps(e) for e in ups):
         ups.append({"hooks": [{"type": "command", "command": ROUTE_CMD}]})
         added.append("UserPromptSubmit → route.py            (routing: classify task vs question)")
+
+    if has_ui and not any("design-gate.py" in json.dumps(e) for e in pre):
+        pre.append({"matcher": "Edit|Write|MultiEdit",
+                    "hooks": [{"type": "command", "command": DESIGN_GATE_CMD}]})
+        added.append("PreToolUse[matcher=Edit|Write|MultiEdit] → design-gate.py   "
+                     "(design: ask once/cycle if a UI edit has no design record)")
 
     if added:
         tmp = settings.with_suffix(".json.tmp")
@@ -323,6 +338,12 @@ def main():
         for src_rel, dst_rel in QA_FRONTEND:
             _place(ASSETS / src_rel, target / dst_rel, created, skipped, 0o755)
 
+    # 3d. the design gate hook (UI surfaces only) -> .orbit/checks/design-gate.py
+    #     placed here always on has_ui repos; WIRED into settings.json only via --install-hooks.
+    if has_ui:
+        for src_rel, dst_rel in DESIGN_GATE_FRONTEND:
+            _place(ASSETS / src_rel, target / dst_rel, created, skipped, 0o755)
+
     # 4a. the universal spine -> .claude/agents/ (verbatim) + .orbit/roles/ (frontmatter-stripped)
     for role in ROLES_CORE:
         src = AGENTS / f"{role}.md"
@@ -373,7 +394,7 @@ def main():
     )
     if args.install_hooks:
         print()
-        install_hooks(target)
+        install_hooks(target, has_ui)
     else:
         print(
             "\nSafety guard: .orbit/checks/guard.py is PLACED but NOT wired (re-run with\n"

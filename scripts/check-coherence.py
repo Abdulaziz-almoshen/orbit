@@ -13,6 +13,9 @@ Invariants enforced:
   C. Every `.orbit/skills/<name>.md` a shipped agent template LOADS is either provisioned
      (in a PLAYBOOKS_* list) or an explicitly author-per-domain skill — no phantoms.
   D. The "universal spine" list in SKILL.md and references/roles.md names exactly ROLES_CORE.
+  F. Every placed check/hook script (FILE_PLAN + QA_FRONTEND + DESIGN_GATE_FRONTEND src files,
+     plus every *_CMD constant's referenced filename) exists in assets/ — a hook wired into
+     settings.json can never point at a file the scaffolder doesn't actually place.
 
 Run:  python3 scripts/check-coherence.py   (exit 0 = coherent, 1 = drift found)
 """
@@ -83,6 +86,31 @@ def main():
         if name not in loaded:
             fails.append(f"[E] playbook '{name}.md' is provisioned into every repo (PLAYBOOKS_ALWAYS) "
                          f"but no agent template loads it — dead provisioning (wire it to a role or drop it)")
+
+    # --- F. every placed check/hook script's source file actually exists -----------
+    placed_lists = [sc.FILE_PLAN, sc.QA_FRONTEND, sc.DESIGN_GATE_FRONTEND]
+    placed_srcs = set()
+    for plist in placed_lists:
+        for entry in plist:
+            src_rel = entry[0]
+            placed_srcs.add(src_rel)
+            if not os.path.isfile(os.path.join(ROOT, "assets", src_rel)):
+                fails.append(f"[F] a placement list names 'assets/{src_rel}' but that file is missing")
+    # every *_CMD constant (the hooks actually wired into settings.json) must reference a file
+    # that some placement list above places — otherwise install_hooks could wire a dead path.
+    cmd_ref = re.compile(r"\.orbit/checks/([A-Za-z0-9_-]+\.py)")
+    for name in dir(sc):
+        if not name.endswith("_CMD"):
+            continue
+        cmd = getattr(sc, name)
+        if not isinstance(cmd, str):
+            continue
+        m = cmd_ref.search(cmd)
+        if not m:
+            continue
+        fn = m.group(1)
+        if f"checks/{fn}" not in placed_srcs:
+            fails.append(f"[F] {name} references checks/{fn} but no placement list places it")
 
     # --- D. the documented spine matches ROLES_CORE --------------------------------
     core = set(sc.ROLES_CORE)
