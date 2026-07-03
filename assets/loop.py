@@ -69,11 +69,26 @@ class Steps:
     def __init__(self, path: Path):
         self.path = path
         self.done: dict = {}
+        self.last_budget: dict | None = None
         if path.exists():
             for line in path.read_text().splitlines():
-                if line.strip():
+                if not line.strip():
+                    continue
+                try:
                     r = json.loads(line)
+                except json.JSONDecodeError:
+                    continue  # a truncated final line (crash/OOM mid-append) is uncheckpointed — skip it
+                if "__budget__" in r:                 # a budget checkpoint (see save_budget)
+                    self.last_budget = r["__budget__"]
+                elif "name" in r:
                     self.done[r["name"]] = r
+
+    def save_budget(self, budget, cycle: int):
+        """Persist the running spend so --resume doesn't reset the per-run budget to zero."""
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self.path.open("a") as f:
+            f.write(json.dumps({"__budget__": {
+                "tokens": budget.tokens, "cost_usd": budget.cost_usd, "cycle": cycle}}) + "\n")
 
     def run(self, name: str, fn):
         if name in self.done:                       # already completed on an earlier run —
@@ -200,6 +215,9 @@ def run(cfg: dict, resume: bool = False):
     if not resume and ckpt.exists():
         ckpt.unlink()
     steps = Steps(ckpt)
+    if resume and steps.last_budget:                 # restore spend so per-run caps survive a restart
+        budget.tokens = steps.last_budget.get("tokens", 0)
+        budget.cost_usd = steps.last_budget.get("cost_usd", 0.0)
 
     while True:
         # DECIDE (pre-check): does any hard limit say stop before we even start?
@@ -226,6 +244,23 @@ def run(cfg: dict, resume: bool = False):
         emit("orchestrator", "act", "done", result.get("summary", "(no summary)"), cycle=cycle)
         budget.tokens += result.get("tokens", 0)
         budget.cost_usd += result.get("cost_usd", 0.0)
+        steps.save_budget(budget, cycle)             # persist spend so --resume can't reset caps to zero
+
+        # Approval enforcement: a tagged side-effect action is gated by config. FORBIDDEN never
+        # runs (loop stops); "human"/threshold pauses for approval. This is the point that makes
+        # loop.config.json's approval_checkpoints actually bind on the runner path.
+        action_tag = result.get("action")
+        if action_tag:
+            try:
+                gated = needs_human(action_tag, cfg, result.get("cost_usd", 0.0))
+            except PermissionError as e:
+                emit("safety", "evaluate", "blocked", str(e), cycle=cycle)
+                on_run_end({"cfg": cfg, "budget": budget, "reason": f"FORBIDDEN: {action_tag}"})
+                return
+            if gated:
+                emit("human", "decide", "blocked", f"awaiting approval: {action_tag}", cycle=cycle)
+                on_run_end({"cfg": cfg, "budget": budget, "reason": "awaiting human"})
+                return
 
         # Human checkpoint mid-cycle if the orchestrator proposed a gated action.
         if result.get("needs_human"):

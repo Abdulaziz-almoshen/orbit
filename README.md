@@ -6,7 +6,8 @@
 
 Orbit turns any product repo into a **self-prompting agentic loop** — persistent memory,
 a specialized sub-agent team, packaged skills, and a real run→evaluate→decide loop with
-**hard brakes** so it can never run away on cost or do something irreversible on its own.
+**real brakes**: a PreToolUse hook that blocks catastrophic git commands, iteration/runtime
+caps that bind the loop, and token/cost budgets metered on the runner.
 
 One command sets it up. It runs on your own orchestrator. It updates itself.
 
@@ -30,8 +31,9 @@ Right now you **babysit** your AI: re-explaining the project every session, watc
 drift, never quite sure what it's doing — or whether it'll do something it can't undo. Orbit
 ends that. It turns your repo into a **system that runs itself**: it remembers, it routes
 your work through a small team of specialists that check each other, it shows you who's
-doing what **live**, and it **physically can't run away or wreck your project**. One command
-sets it up — it reads your repo and asks almost nothing.
+doing what **live**, and a **safety hook blocks the catastrophic** (force-push, secrets-branch
+push) before it runs. One command sets it up — it reads your repo and asks almost nothing.
+(What binds vs. what's advisory is spelled out honestly in [Safety](#safety--what-binds-and-what-doesnt).)
 
 ## Why you'll care
 
@@ -41,14 +43,14 @@ sets it up — it reads your repo and asks almost nothing.
 | One agent does everything, you catch the mess later | A **team** — plan → build → **safety gate** → **quality gate** — that checks its own work |
 | A wall of text; you're not sure what's happening | A **live checklist** of who's working, crossing itself off as it goes |
 | It free-edits, force-pushes, maybe breaks your DB | A guard **physically blocks** the catastrophic; irreversible actions are *proposed*, never done alone |
-| A crash → it starts over and re-burns tokens | **Checkpointed** — it resumes from the last finished step |
+| A crash → it starts over and re-burns tokens | **Checkpointed** — resumes from the last finished step (on the `loop.py` runner / a durable engine; the dev loop restarts the cycle) |
 | It does exactly what you typed, bugs and all | It **plans like a senior** — clarifies, challenges weak assumptions, writes a decision brief, proposes a better approach |
 | Generic, templated UI that screams "AI made this" | On frontend repos a real **Designer** stands up — a distinctive, on-brand Design Plan, not slop |
 
-You ask for a **task** → it runs the loop. You ask a **question** → it just answers. And that
-split isn't left to chance: a **router hook reads every message and decides** — the system, not
-the model. That's the whole idea: *a system that prompts itself*, so you stop hand-holding and
-start shipping.
+You ask for a **task** → it runs the loop. You ask a **question** → it just answers. That split
+isn't left to the model's mood: a **router hook classifies every message deterministically and
+injects the lane** each turn (the model then executes under it). That's the idea: *a system that
+prompts itself*, so you stop hand-holding and start shipping.
 
 ## The loop
 
@@ -293,25 +295,20 @@ tells you a new version is available and waits for you to run `/orbit-upgrade`.
 
 Be clear-eyed about where the guarantees are:
 
-- **Orbit controls the project — via a router hook, not a hope.** Once installed, a
-  **`UserPromptSubmit` hook** (`route.py`) runs on **every message before Claude responds** and —
-  *deterministically, in code* — classifies it: a **task** (build/fix/change) gets routed through
-  the loop; a **question** is answered directly. **The system makes that call, not the model.** So
-  routing is no longer "a rule the model might follow" — it's decided by Orbit and injected into
-  every turn. (Honest scope: the hook *decides and injects*; the model still *executes* the loop — a
-  hook can't run the sub-agents itself. But the decision layer is now the system's.)
-- **The safety wall is a second hook — also installed by default.** The always-on **`PreToolUse`
-  hook** (`guard.py`) makes your non-negotiables (force-push, a schema migration, pushing a secrets
-  branch) bind on *every* command, loop or not — the harness runs it before the tool and can `deny`.
-  It's the one thing the agent can't talk its way around.
-- **Inside the loop** (`loop.py` / `ralph_loop.sh`): hard caps always apply (iterations, tokens,
-  cost, runtime), `move_money` is `FORBIDDEN`, side effects route through human-approval checkpoints.
-- **What's still model-carried:** executing the loop and the role/gate ceremony. The hooks decide
-  routing and stop dangerous tools; the model does the work under those rails. Both hooks **fail
-  open** (a bug never bricks your shell or blocks a prompt).
+Not everything Orbit does binds equally. Here's the honest breakdown — the line between a
+guarantee and a suggestion:
 
-`/orbit` wires **both hooks** as part of setup and **tells you exactly what it added**. Everything
-Orbit adds — including the hooks — is removable with `orbit-uninstall`.
+| Layer | Status | What it is |
+|---|---|---|
+| **Safety wall** (`PreToolUse` → `guard.py`) | ✅ **binds** | Blocks force-push / secrets-branch push, asks before a plain push — *before* the tool runs, model has no say. Splits `cd x && git push --force`, recurses `sh -c`. (Verified against the real harness; covered by `tests/test_guard.py`.) |
+| **Iteration + runtime caps** (`ralph_loop.sh`) | ✅ **binds** | The loop physically stops at the cap. |
+| **Token + cost budgets** | ✅ **binds on the runner** | `ralph_loop.sh` meters `claude -p --output-format json`; `loop.py` tracks + persists spend across `--resume`. `move_money` is `FORBIDDEN` (raises). |
+| **Router classification** (`UserPromptSubmit` → `route.py`) | ⚖️ **system decides, model executes** | A deterministic keyword classifier picks the lane (task→loop / question→direct) and injects it every turn — that call is the system's. But the model still *runs* the loop; a hook can't spawn the sub-agents itself. |
+| **Roles, playbooks, the review/QA gates** | 📋 **advisory** | Prompt-driven discipline the model follows reliably — strong, but not mechanically enforced. |
+| **`loop.py dispatch()`** (your own-model path) | 🔌 **stub** | An honest seam: raises until you wire it to Gemini/etc. The Claude Code subagent path is what works today. |
+
+Both hooks **fail open** — a bug never bricks your shell or blocks a prompt. `/orbit` wires them by
+default and tells you exactly what it added; everything is removable with `orbit-uninstall`.
 
 ## Repo layout
 

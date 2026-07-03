@@ -78,28 +78,41 @@ def record(raw: str) -> None:
 def recall(limit: int) -> None:
     if not LEDGER.exists():
         return
+    def _ts(r):
+        try:
+            return float(r.get("ts", 0))
+        except (TypeError, ValueError):
+            return 0.0
+
     rows = []
     for ln in LEDGER.read_text().splitlines():
         try:
-            rows.append(json.loads(ln))
+            r = json.loads(ln)
+            if isinstance(r, dict):
+                rows.append(r)
         except Exception:
-            continue
+            continue                                     # a bad line never breaks recall
     # dedup by (key|type): latest timestamp wins (an "update" == append with same key)
-    latest: dict[tuple, dict] = {}
+    latest: dict = {}
     for r in rows:
         k = (r.get("key"), r.get("type"))
-        if k not in latest or r.get("ts", 0) >= latest[k].get("ts", 0):
+        if k not in latest or _ts(r) >= _ts(latest[k]):
             latest[k] = r
     now = time.time()
     out = []
     for r in latest.values():
-        eff = r.get("confidence", 0)
-        if r.get("source") != "user-stated":           # decay unverified; user-stated holds
-            eff -= int((now - r.get("ts", now)) // (DECAY_DAYS * 86400))
-        out.append((eff, r.get("ts", 0), r))
+        try:
+            eff = int(r.get("confidence", 0) or 0)
+        except (TypeError, ValueError):
+            eff = 0
+        if r.get("source") != "user-stated":            # decay unverified; user-stated holds
+            eff -= int((now - _ts(r)) // (DECAY_DAYS * 86400))
+        out.append((eff, _ts(r), r))
     out.sort(key=lambda x: (x[0], x[1]), reverse=True)
-    for eff, _ts, r in out[:limit]:
-        print(f"[{r['type']}] {r['key']} (eff {max(eff,0)}/{r['confidence']}, {r['source']}): {r['insight']}")
+    for eff, _t, r in out[:limit]:
+        conf = r.get("confidence", "?")
+        print(f"[{r.get('type', '?')}] {r.get('key', '?')} "
+              f"(eff {max(eff, 0)}/{conf}, {r.get('source', '?')}): {r.get('insight', '')}")
 
 
 def main() -> None:

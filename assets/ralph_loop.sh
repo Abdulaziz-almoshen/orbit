@@ -5,8 +5,10 @@
 # The idea (Daisy / "Ralph loop"): instead of one long-running agent whose context rots,
 # restart a FRESH agent each cycle and let CLAUDE.md + STATE.md carry the memory. Each
 # iteration is a clean `claude -p` invocation that reads state, does ONE cycle, and writes
-# state back. This script is the brake: it enforces the same hard limits as loop.config.json
-# in plain bash, so the loop physically cannot run unbounded.
+# state back. This script is the brake: it enforces loop.config.json's hard limits in plain
+# bash — iterations, runtime, and (via `claude -p --output-format json`) the per-run token +
+# cost budgets — so the loop physically cannot run unbounded. If the JSON usage fields are
+# unavailable, it says so and falls back to the iteration + runtime caps.
 #
 # Usage:  scripts/ralph_loop.sh [path/to/loop.config.json]
 # Stop early at any time:  touch .orbit/STOP   (or Ctrl-C)
@@ -16,15 +18,23 @@ set -euo pipefail
 CONFIG="${1:-.orbit/loop.config.json}"
 [ -f "$CONFIG" ] || { echo "config not found: $CONFIG" >&2; exit 1; }
 
-# --- read hard limits from the config (python3, so no jq dependency) ----------------
-read_cfg() { python3 -c "import json,sys;print(json.load(open('$CONFIG'))$1)"; }
-MAX_ITERS="$(read_cfg "['hard_limits']['max_iterations']")"
-MAX_RUNTIME="$(read_cfg "['hard_limits']['max_runtime_seconds']")"
-STOP_SENTINEL="$(read_cfg "['paths']['stop_sentinel']")"
-STATE_FILE="$(read_cfg "['paths']['state']")"
+# --- read hard limits from the config (python3, so no jq dependency; $2 = default) --------
+read_cfg() { python3 -c "import json;c=json.load(open('$CONFIG'));print(c$1)" 2>/dev/null || printf '%s' "$2"; }
+MAX_ITERS="$(read_cfg "['hard_limits']['max_iterations']" 50)"
+MAX_RUNTIME="$(read_cfg "['hard_limits']['max_runtime_seconds']" 3600)"
+TOKEN_BUDGET="$(read_cfg "['hard_limits']['token_budget']['per_run']" 0)"
+COST_BUDGET="$(read_cfg "['hard_limits']['cost_budget_usd']['per_run']" 0)"
+STOP_SENTINEL="$(read_cfg "['paths']['stop_sentinel']" .orbit/STOP)"
+STATE_FILE="$(read_cfg "['paths']['state']" .orbit/STATE.md)"
 
 START="$(date +%s)"
 ITER=1
+COST_SPENT=0
+TOKENS_SPENT=0
+PARSE_OK=1
+
+# float/int compare via python: returns 0 (true) if $1 >= $2 and $2 > 0
+over() { python3 -c "import sys; a,b=float('$1'),float('$2'); sys.exit(0 if b>0 and a>=b else 1)"; }
 
 # The prompt is the SAME every cycle -- the system prompts itself via the files.
 read -r -d '' CYCLE_PROMPT <<'EOF' || true
@@ -51,7 +61,7 @@ money). Never take an irreversible, financial, or outward-facing action without 
 propose it via STATE.md instead. Then STOP; do not start another cycle yourself.
 EOF
 
-echo "Ralph loop starting: max_iters=$MAX_ITERS max_runtime=${MAX_RUNTIME}s"
+echo "Ralph loop starting: max_iters=$MAX_ITERS max_runtime=${MAX_RUNTIME}s token_budget=$TOKEN_BUDGET cost_budget=\$$COST_BUDGET"
 echo "Tip: in another pane, run  scripts/orbit-status --follow  to watch live (Ctrl-C to stop)."
 
 while :; do
@@ -60,13 +70,38 @@ while :; do
   if [ "$ITER" -gt "$MAX_ITERS" ]; then echo "[STOP] max_iterations ($MAX_ITERS) reached"; break; fi
   NOW="$(date +%s)"; ELAPSED=$((NOW - START))
   if [ "$ELAPSED" -ge "$MAX_RUNTIME" ]; then echo "[STOP] max_runtime (${MAX_RUNTIME}s) reached"; break; fi
+  if [ "$PARSE_OK" = 1 ]; then
+    if over "$COST_SPENT" "$COST_BUDGET"; then echo "[STOP] per-run cost budget (\$$COST_BUDGET) reached — spent \$$COST_SPENT"; break; fi
+    if over "$TOKENS_SPENT" "$TOKEN_BUDGET"; then echo "[STOP] per-run token budget ($TOKEN_BUDGET) reached — spent $TOKENS_SPENT"; break; fi
+  fi
 
-  echo "=== cycle $ITER (elapsed ${ELAPSED}s) ==="
+  echo "=== cycle $ITER (elapsed ${ELAPSED}s, spent \$$COST_SPENT / $TOKENS_SPENT tok) ==="
 
-  # --- one fresh-context cycle ------------------------------------------------------
-  # --print/-p runs headless; the agent's memory is the files, not this process.
-  if ! claude -p "$CYCLE_PROMPT"; then
-    echo "[STOP] claude exited non-zero on cycle $ITER"; break
+  # --- one fresh-context cycle (JSON output so we can meter cost + tokens) -----------
+  TMPOUT="$(mktemp)"
+  if ! claude -p --output-format json "$CYCLE_PROMPT" > "$TMPOUT"; then
+    echo "[STOP] claude exited non-zero on cycle $ITER"; rm -f "$TMPOUT"; break
+  fi
+  # show the agent's result text so progress is visible
+  python3 -c "import json,sys
+try: print(json.load(open('$TMPOUT')).get('result') or '')
+except Exception: pass"
+  # meter this cycle's spend
+  STATS="$(python3 -c "import json
+try:
+    d=json.load(open('$TMPOUT')); u=d.get('usage') or {}
+    t=sum(int(u.get(k,0) or 0) for k in ('input_tokens','output_tokens','cache_read_input_tokens','cache_creation_input_tokens'))
+    c=float(d.get('total_cost_usd') or d.get('cost_usd') or 0)
+    print(f'{c} {t}')
+except Exception: print('FAIL')")"
+  rm -f "$TMPOUT"
+  if [ "$STATS" = "FAIL" ]; then
+    if [ "$PARSE_OK" = 1 ]; then echo "[warn] couldn't read cost/tokens from claude JSON — enforcing iterations + runtime only"; fi
+    PARSE_OK=0
+  else
+    C="${STATS%% *}"; T="${STATS##* }"
+    COST_SPENT="$(python3 -c "print($COST_SPENT + $C)")"
+    TOKENS_SPENT="$(python3 -c "print($TOKENS_SPENT + $T)")"
   fi
 
   # --- check the sentinels the agent may have written to STATE.md -------------------
