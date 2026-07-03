@@ -3,6 +3,43 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.24.0
+
+**Prototype-before-develop, scoped to the work that deserves it.** The Designer's style-prototype
+gate previously fired on "any new component… every time," with no way to tell a genuine redesign
+from a copy fix, and always re-picked the product's whole look even for a single component in an
+already-styled product. Neither matched how a good design process actually works. This release
+adds an impact determination and splits the gate in two:
+
+- **HEAVY vs TRIVIAL, decided first, every design request.** HEAVY (a new/redesigned component,
+  module, screen, or flow; a layout/hierarchy/typography/color/spacing/interaction change; no
+  approved style yet) fires a prototype gate; TRIVIAL (a copy fix, a sanctioned token tweak, an
+  appearance-restoring bug fix, a className/prop swap, a zero-pixel refactor) skips it entirely —
+  the fast lane (CLAUDE.md §10) stays fast, structurally: small/clear/reversible UI edits never
+  route to the Designer at all.
+- **Two gates for two different moments.** Gate A — the one-time **style-prototype pick** (2–5 of
+  the 67 catalog styles, once per product, sets `DESIGN.md`) — is now clearly distinct from gate B,
+  the new **recurring component gate**: 2–5 HTML variants of *this* component, built within the
+  already-approved style, every time a HEAVY component is designed or redesigned. Both are opened
+  in the browser and picked via `AskUserQuestion`, same as before — no new tooling.
+- **Real teeth downstream, honestly scoped.** The Reviewer's Design Distinctiveness gate and the
+  QA Engineer's pixel pass are now **conditional on `impact_level: HEAVY`** in `design/approved.json`
+  — TRIVIAL work (which drops a separate `.orbit/design/TRIVIAL` marker) is exempt, and a visibly
+  HEAVY change with *neither* record present is itself a finding, not a silent pass. A legacy
+  `approved.json` with no `impact_level` is a pass-with-warning, never an auto-fail.
+- **A coarse mechanical backstop for the silent skip.** New `.orbit/checks/design-gate.py`
+  (`PreToolUse[Edit|Write|MultiEdit]`, UI repos only): Claude Code only exposes the file path being
+  edited, not its content, so this hook can't judge heavy-vs-trivial or verify real prototypes were
+  built — what it *can* catch is a UI production file edited with **no design-decision record at
+  all**. Asks once per cycle, never denies, fails open, ignores `.orbit/` previews and non-UI files.
+  Honestly labeled in the README's binds table as a **coarse traceability backstop**, not a
+  per-change heavy-redesign blocker.
+- **Tests.** New `tests/test_design_gate.py` (9 cases: unguarded-edit asks, either record allows,
+  `.orbit/`/doc/backend/test files are never gated, ask-once-then-silent within a cycle, re-arms on
+  a new cycle, fails open); `check-coherence.py` gained invariant **[F]** — every placed check/hook
+  script's source file exists and every `*_CMD` constant references a file that's actually placed.
+  Suite is now 13 files, all green.
+
 ## 0.23.1
 
 **⚠️ Security — the safety guard is now hard to slip past, and it grew real teeth.** 0.23.0 fixed
