@@ -97,6 +97,17 @@ def main():
         if "Needs input" not in run(o).stdout:
             fails.append("blocked run did not surface 'Needs input'")
 
+    # --- defense-in-depth: control chars / ANSI in an event never reach the terminal ---
+    with tempfile.TemporaryDirectory() as d:
+        evil = [{"schema": 2, "ts": now, "role": "builder", "status": "info",
+                 "msg": "edit \x1b[31mRED\x1b[0m \x1b]0;title\x07 \x00 done"}]
+        tasks_evil = [{"id": "t", "title": "task \x1b[5mblink\x1b[0m", "owner": "b", "status": "pending"}]
+        o = _seed(d, run_json, tasks_evil, evil)
+        for args in ([], ["--compact"]):
+            out = run(o, *args).stdout
+            if any(ch in out for ch in ("\x1b", "\x07", "\x00")) or "]0;" in out:
+                fails.append(f"dashboard leaked control/ANSI/OSC to terminal in {args}: {out!r}")
+
     # --- defensive: garbage run.json, missing run.json, bad event line -----------------
     with tempfile.TemporaryDirectory() as d:
         o = _seed(d, "{ this is not json", tasks, events)

@@ -20,9 +20,24 @@ Set ORBIT_DIR to point at a different state dir.
 """
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
+
+# Defense-in-depth: strip any ANSI/terminal escapes + control chars from message text before it
+# reaches the terminal — the writers (route.py/orbit-hook/activity.py) already redact, but a legacy
+# or hand-edited activity.jsonl line must never inject codes into the live view either.
+_STRIP = re.compile(
+    r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?"
+    r"|\x1b[\^_P][^\x1b]*(?:\x1b\\)?"
+    r"|\x1b\[[0-9;?]*[ -/]*[@-~]"
+    r"|[\x00-\x1f\x7f\x9b]"
+)
+
+
+def safe(text):
+    return _STRIP.sub(" ", str(text if text is not None else "")).strip()
 
 ORBIT_DIR = Path(os.environ.get("ORBIT_DIR", ".orbit"))
 TASKS = ORBIT_DIR / "tasks.json"
@@ -184,13 +199,13 @@ def render_compact(run, tasks, events):
         seg.append(f"conf {int(score)}%")
     line = "  ".join(seg)
     ev = events[-1] if events else None
-    tail = f"\n{DIM}last: {fmt_ts(ev)} [{actor(ev)}] {ev.get('msg','')}{RST}" if ev else ""
+    tail = f"\n{DIM}last: {fmt_ts(ev)} [{actor(ev)}] {safe(ev.get('msg',''))}{RST}" if ev else ""
     return line + tail
 
 
 def render_full(run, tasks, events, tail):
     out = []
-    goal = run.get("goal") or ""
+    goal = safe(run.get("goal") or "")
     out.append(f"{B}🛰  Orbit Run{RST}  {DIM}{goal}{RST}".rstrip())
     if run:
         out.append(f"{B}Lifecycle{RST}  {_lifecycle_strip(run)}")
@@ -203,18 +218,18 @@ def render_full(run, tasks, events, tail):
 
     card = _load(PENDING, None)
     if isinstance(card, dict) and card.get("title"):
-        out.append(f"{c('ylw')}{B}❓ Decision needed{RST}  {card['title']}")
+        out.append(f"{c('ylw')}{B}❓ Decision needed{RST}  {safe(card['title'])}")
         if card.get("why"):
-            out.append(f"  {DIM}{card['why']}{RST}")
+            out.append(f"  {DIM}{safe(card['why'])}{RST}")
         for o in card.get("options", []):
             if not isinstance(o, dict):
                 continue
-            oid = o.get("id", "")
-            rec = f" {c('grn')}(recommended){RST}" if oid and oid == card.get("recommended") else ""
-            out.append(f"    {B}{oid}{RST} {o.get('label', '')}{rec}  {DIM}{o.get('tradeoff', '')}{RST}")
+            oid = safe(o.get("id", ""))
+            rec = f" {c('grn')}(recommended){RST}" if oid and oid == safe(card.get("recommended")) else ""
+            out.append(f"    {B}{oid}{RST} {safe(o.get('label', ''))}{rec}  {DIM}{safe(o.get('tradeoff', ''))}{RST}")
         out.append("")
     elif run.get("blocked_question"):
-        out.append(f"{c('ylw')}{B}⚠ Needs input{RST}  {run['blocked_question']}")
+        out.append(f"{c('ylw')}{B}⚠ Needs input{RST}  {safe(run['blocked_question'])}")
         out.append("")
 
     active = _active_roles(events)
@@ -223,7 +238,7 @@ def render_full(run, tasks, events, tail):
         out.append(f"  {DIM}(idle){RST}")
     for r, msg, ts in active[-6:]:
         col = role_color(r)
-        out.append(f"  {col}{r}{RST}  {DIM}{fmt_ts({'ts': ts})}{RST}  {msg}")
+        out.append(f"  {col}{safe(r)}{RST}  {DIM}{fmt_ts({'ts': ts})}{RST}  {safe(msg)}")
     out.append("")
 
     out.append(f"{B}Checklist{RST}")
@@ -235,7 +250,7 @@ def render_full(run, tasks, events, tail):
         mark = TASK_MARK.get(t.get("status", "pending"), "○")
         owner = t.get("owner", "")
         own = f"{role_color(owner)}[{owner}]{RST} " if owner else ""
-        line = f"  {mark} {own}{t.get('title', '')}"
+        line = f"  {mark} {own}{safe(t.get('title', ''))}"
         out.append(f"{DIM}{line}{RST}" if t.get("status") == "done" else line)
     out.append("")
 
@@ -259,7 +274,7 @@ def render_full(run, tasks, events, tail):
         elif age >= 30:
             note = f"  {c('ylw')}(still waiting on the active agent){RST}"
         out.append(f"{B}Last event{RST}  {DIM}{_fmt_dur(age)} ago{RST} "
-                   f"{role_color(actor(ev))}[{actor(ev)}]{RST} {ev.get('msg','')}{note}")
+                   f"{role_color(actor(ev))}[{actor(ev)}]{RST} {safe(ev.get('msg',''))}{note}")
 
     out.append("")
     out.append(f"{B}Thread{RST} {DIM}(who said what){RST}")
@@ -271,7 +286,7 @@ def render_full(run, tasks, events, tail):
             badge = EVENT_BADGE.get(e.get("status", "info"), "·")
             ph = e.get("phase", "")
             out.append(f"  {DIM}{fmt_ts(e)}{RST} {role_color(who)}{badge} [{who}]{RST} "
-                       f"{ph + ': ' if ph else ''}{e.get('msg', '')}")
+                       f"{safe(ph) + ': ' if ph else ''}{safe(e.get('msg', ''))}")
         except Exception:
             continue
     return "\n".join(out)

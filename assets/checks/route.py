@@ -135,13 +135,20 @@ def classify(prompt: str) -> str:
     return "ambiguous"
 
 
-_CONTROL = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|[\x00-\x1f\x7f]")  # ANSI escapes + control chars
+# Strip ANSI/terminal control sequences so a prompt can't inject codes into the live view:
+# OSC (ESC] … BEL/ST), PM/APC/DCS (ESC ^/_/P … ST), CSI (ESC[ …), and C0 controls / DEL / 8-bit CSI.
+_CONTROL = re.compile(
+    r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?"
+    r"|\x1b[\^_P][^\x1b]*(?:\x1b\\)?"
+    r"|\x1b\[[0-9;?]*[ -/]*[@-~]"
+    r"|[\x00-\x1f\x7f\x9b]"
+)
 
 
 def _redact(text: str, cap: int = 80) -> str:
-    """A privacy-safe, dashboard-safe summary of a prompt: strip ANSI escapes + control chars
-    (so a prompt can't inject terminal codes into the live view), collapse whitespace, cap length.
-    We log a short redacted summary for context, never the full raw prompt."""
+    """A privacy-safe, dashboard-safe summary of a prompt: strip ANSI/terminal escapes + control
+    chars (so a prompt can't inject terminal codes or leave OSC framing in the live view), collapse
+    whitespace, cap length. We log a short redacted summary for context, never the full raw prompt."""
     t = _CONTROL.sub(" ", str(text or ""))
     t = re.sub(r"\s+", " ", t).strip()
     return (t[: cap - 1] + "…") if len(t) > cap else t

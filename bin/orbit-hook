@@ -24,7 +24,13 @@ import re
 import sys
 from pathlib import Path
 
-_CONTROL = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|[\x00-\x1f\x7f]")   # ANSI escapes + control chars
+# OSC (ESC] … BEL/ST), PM/APC/DCS (ESC ^/_/P … ST), CSI (ESC[ …), and C0 controls / DEL / 8-bit CSI.
+_CONTROL = re.compile(
+    r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?"
+    r"|\x1b[\^_P][^\x1b]*(?:\x1b\\)?"
+    r"|\x1b\[[0-9;?]*[ -/]*[@-~]"
+    r"|[\x00-\x1f\x7f\x9b]"
+)
 
 # PostToolUse fires on EVERY tool — only these carry signal worth a line in the thread.
 _FILE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
