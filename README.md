@@ -35,6 +35,24 @@ doing what **live**, and a **safety hook blocks the catastrophic** (force-push, 
 push) before it runs. One command sets it up — it reads your repo and asks almost nothing.
 (What binds vs. what's advisory is spelled out honestly in [Safety](#safety--what-binds-and-what-doesnt).)
 
+## Install
+
+```bash
+git clone --single-branch --depth 1 https://github.com/Abdulaziz-almoshen/orbit.git \
+  ~/.claude/skills/orbit && cd ~/.claude/skills/orbit && ./setup
+```
+
+`/orbit` is available right away — no restart (it's a live-discovered user skill). Prefer `curl`?
+`curl -fsSL https://raw.githubusercontent.com/Abdulaziz-almoshen/orbit/main/install.sh | bash` runs
+the exact same clone + `./setup`. More options (marketplace plugin, "let Claude do it") are in
+[Install options](#install-options).
+
+> [!IMPORTANT]
+> **Pick ONE install path.** Orbit is both a user skill (the clone above) *and* a Claude Code
+> marketplace plugin. Installing it **both** ways gives you two copies of `/orbit` that both try to
+> load — pick one and stick with it. The clone is the default; the marketplace path is in
+> [Install options](#install-options).
+
 ## Why you'll care
 
 | Without Orbit | With Orbit |
@@ -197,22 +215,23 @@ every other AI-generated app:
 > Playbooks: `design-methodology.md` + `anti-ai-aesthetics.md`. Self-contained — no external
 > design skill required.
 
-## Install
+## Install options
 
-Orbit installs as a Claude Code **user skill** — cloned into `~/.claude/skills/orbit`, the same
-way gstack does it. Claude Code watches that folder and discovers skills **live**, so `/orbit`
-and `/orbit-upgrade` work **immediately, no restart**. Updates are a fast `git pull` (`/orbit-upgrade`).
+The [one-command clone](#install) up top is the default. It installs Orbit as a Claude Code **user
+skill** — cloned into `~/.claude/skills/orbit`, the same way gstack does it. Claude Code watches that
+folder and discovers skills **live**, so `/orbit` and `/orbit-upgrade` work **immediately, no
+restart**. Updates are a fast `git pull` (`/orbit-upgrade`).
 
-### One command
+### As a marketplace plugin (the other path — don't combine with the clone)
 
-```bash
-git clone --single-branch --depth 1 https://github.com/Abdulaziz-almoshen/orbit.git \
-  ~/.claude/skills/orbit && cd ~/.claude/skills/orbit && ./setup
+```text
+/plugin marketplace add Abdulaziz-almoshen/orbit
+/plugin install orbit@orbit
 ```
 
-That's it — `/orbit` is available right away. (Prefer `curl`? `curl -fsSL
-https://raw.githubusercontent.com/Abdulaziz-almoshen/orbit/main/install.sh | bash` does the exact
-same clone + `./setup`.)
+Same Orbit, installed as a plugin instead of a user-skill clone. **Use this *or* the clone, never
+both** — two copies of `/orbit` will collide. The clone is easier to self-update (`/orbit-upgrade`
+is a `git pull`); the plugin updates through Claude Code's plugin manager.
 
 ### Or let Claude do it — paste this prompt
 
@@ -308,7 +327,9 @@ guarantee and a suggestion:
 | **`loop.py dispatch()`** (your own-model path) | 🔌 **stub** | An honest seam: raises until you wire it to Gemini/etc. The Claude Code subagent path is what works today. |
 
 Both hooks **fail open** — a bug never bricks your shell or blocks a prompt. `/orbit` wires them by
-default and tells you exactly what it added; everything is removable with `orbit-uninstall`.
+default and tells you exactly what it added; everything is removable with `orbit-uninstall` (or the
+full path `~/.claude/skills/orbit/bin/orbit-uninstall` if it isn't on your PATH — `./setup` symlinks
+it into `~/.local/bin` when that's on your PATH).
 
 ## Repo layout
 

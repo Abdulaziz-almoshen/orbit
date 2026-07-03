@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+#
+# orbit-preamble — the skill's STEP 0 in one command.
+#
+# Runs the (throttled, non-blocking) update check and prints exactly one line for the model
+# to act on. Lives next to VERSION + orbit-update-check, so it needs no path guessing — the
+# SKILL.md preamble just finds THIS script and runs it (falling back to an inline block only
+# if it's missing). Always exits 0; offline / throttled / snoozed just yields the version line.
+#
+# Output is one of:
+#   UPGRADE_AVAILABLE <old> <new>
+#   JUST_UPGRADED <from> <to>
+#   orbit v<x> (up to date / not re-checked within 24h)
+set -u
+
+SELF="$(cd "$(dirname "$0")" 2>/dev/null && pwd -P)"
+INSTALL_DIR="$(dirname "$SELF")"
+VER="$(tr -d '[:space:]' < "$INSTALL_DIR/VERSION" 2>/dev/null || echo '?')"
+
+LINE=""
+if [ -x "$SELF/orbit-update-check" ]; then
+  LINE="$("$SELF/orbit-update-check" 2>/dev/null || true)"
+fi
+
+echo "${LINE:-orbit v$VER (up to date / not re-checked within 24h)}"

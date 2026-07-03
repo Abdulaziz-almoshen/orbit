@@ -47,26 +47,34 @@ echo "INSTALL_DIR=$INSTALL_DIR"
 echo "IS_GIT=$([ -d "$INSTALL_DIR/.git" ] && echo yes || echo no)"
 ```
 
-### Step 1: auto-upgrade by default (opt-out, not opt-in)
+### Step 1: ask once, then honor the choice (consent-once, opt-out default)
 
-**Auto-upgrade is the DEFAULT** — installs stay current hands-off. A user only avoids it by
-explicitly setting `auto_upgrade=false`.
+The posture is **auto-upgrade recommended**, but a user should get **one** say in it — not silent
+auto-updates forever, and not a prompt on every release. So: the **first** time an upgrade is offered
+and `auto_upgrade` is unset, **ask once**; persist the answer; honor it silently ever after.
 
 ```bash
 STATE_DIR="${ORBIT_HOME:-$HOME/.orbit}"; mkdir -p "$STATE_DIR" 2>/dev/null || true
 _auto="$(grep -E '^auto_upgrade=' "$STATE_DIR/config" 2>/dev/null | tail -1 | cut -d= -f2-)"
 [ "${ORBIT_AUTO_UPGRADE:-}" = "1" ] && _auto="true"
 [ "${ORBIT_AUTO_UPGRADE:-}" = "0" ] && _auto="false"
-[ -z "$_auto" ] && _auto="true"   # DEFAULT: auto-upgrade unless the user opted out
-echo "AUTO_UPGRADE=$_auto"
+echo "AUTO_UPGRADE=${_auto:-unset}"
 ```
 
-**If `AUTO_UPGRADE=true` (the default):** skip the question entirely. Say "⬆️ Auto-upgrading orbit
-v{old} → v{new}…" and go to Step 2. (It's announced + shows what's new in Step 5 — auto, never silent.
-The user can opt out anytime with `auto_upgrade=false`.)
+**If `AUTO_UPGRADE=unset` (first upgrade, no choice recorded yet):** ask **once** with the
+`AskUserQuestion` tool — *"Keep Orbit auto-updated?"* with the **Recommended** option first:
+- **Yes, auto-update (Recommended)** — stay current hands-off; each upgrade is announced, never silent.
+- **No, ask me each time** — I'll tell you when a version is available and wait for `/orbit-upgrade`.
 
-**If `AUTO_UPGRADE=false` (the user opted out):** don't upgrade and don't nag — just one line:
-"orbit **v{new}** is available (you're on v{old}). Run `/orbit-upgrade` when you want it." Then continue
+Then **persist the choice** with `_set auto_upgrade true|false` (below) and proceed by the matching
+branch. This is the *only* time you ask; every later upgrade honors the saved value silently.
+
+**If `AUTO_UPGRADE=true`:** skip the question. Say "⬆️ Auto-upgrading orbit v{old} → v{new}…" and go
+to Step 2. (Announced + shows what's new in Step 5 — auto, never silent. Opt out anytime with
+`auto_upgrade=false`.)
+
+**If `AUTO_UPGRADE=false` (opted out):** don't upgrade and don't nag — just one line: "orbit
+**v{new}** is available (you're on v{old}). Run `/orbit-upgrade` when you want it." Then continue
 the original skill.
 
 To write a config key (create the file if missing):

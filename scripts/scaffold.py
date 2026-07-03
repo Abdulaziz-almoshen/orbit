@@ -195,11 +195,14 @@ def install_hooks(target: Path) -> None:
     """Wire Orbit's two always-on hooks into .claude/settings.json (default-on + announced):
 
       • PreToolUse(Bash) → guard.py  — the binding safety wall (deny/ask on dangerous commands).
-      • UserPromptSubmit → route.py  — the deterministic router: the SYSTEM classifies every message
-        (task → loop, question → direct) and injects the decision, so Orbit controls the project.
+      • UserPromptSubmit → route.py  — the deterministic router: classifies every message
+        (task → loop, question → direct) and injects the decision as the default lane.
 
     Backs up settings.json first, merges each hook idempotently (never double-adds), prints what it
-    added + the one-line removal. Remove anytime with `orbit-uninstall`."""
+    added + the one-line removal. Remove anytime with `orbit-uninstall`.
+
+    If an existing settings.json is present but unparseable, ABORT rather than overwrite it — a
+    corrupt-but-recoverable user file must never be clobbered by a fresh `{}`."""
     settings = target / ".claude" / "settings.json"
     settings.parent.mkdir(parents=True, exist_ok=True)
     data = {}
@@ -207,8 +210,11 @@ def install_hooks(target: Path) -> None:
     if backed_up:
         try:
             data = json.loads(settings.read_text())
-        except Exception:
-            data = {}
+        except (json.JSONDecodeError, ValueError) as e:
+            print(f"⚠️  {settings} exists but is not valid JSON ({e}).")
+            print("    Refusing to overwrite it. Fix or move that file, then re-run — "
+                  "your hooks were NOT installed.")
+            return
         settings.with_suffix(f".json.bak.{int(time.time())}").write_text(settings.read_text())
 
     hooks = data.setdefault("hooks", {})
@@ -348,7 +354,8 @@ def main():
             "--install-hooks to wire it, or let the skill do it by default in Phase 6a)."
         )
     print(
-        "\nTo undo everything later: run `orbit-uninstall` from this repo (lists, asks, then\n"
+        "\nTo undo everything later: run `orbit-uninstall` from this repo — or its full path\n"
+        "`~/.claude/skills/orbit/bin/orbit-uninstall` if it isn't on your PATH — (lists, asks, then\n"
         "removes .orbit/, scripts/ralph_loop.sh, scripts/orbit-status, and any Orbit hooks;\n"
         "leaves your CLAUDE.md alone)."
     )

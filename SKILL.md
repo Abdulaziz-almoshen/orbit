@@ -22,9 +22,17 @@ description: >-
 
 This is your **first action** the moment `/orbit` loads — before you read the repo, plan, respond,
 or run any other phase. **Do not skip it. Do not batch it after other work.** Run exactly this one
-block (it resolves the install location whether Orbit is a user skill or a marketplace plugin):
+block (it finds `orbit-preamble` whether Orbit is a user skill or a marketplace plugin, and falls
+back to an inline resolver if that script is missing):
 
 ```bash
+for _p in "${CLAUDE_PLUGIN_ROOT:-}/bin/orbit-preamble" \
+          "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/orbit/bin/orbit-preamble" \
+          "$HOME/.claude/skills/orbit/bin/orbit-preamble" \
+          ".claude/skills/orbit/bin/orbit-preamble"; do
+  [ -x "$_p" ] && { "$_p"; exit 0; }
+done
+# fallback: older install without orbit-preamble — resolve orbit-update-check inline
 _UPD=""; _DIR=""; _CC="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 for _p in "${CLAUDE_PLUGIN_ROOT:-}/bin/orbit-update-check" \
           "$_CC/skills/orbit/bin/orbit-update-check" \
@@ -38,8 +46,9 @@ echo "${_UPD:-orbit v$_VER (up to date / not re-checked within 24h)}"
 
 Then act on the line it printed — and **always say one line back so the user can see the check ran**:
 - `UPGRADE_AVAILABLE <old> <new>` → read `orbit-upgrade/SKILL.md` and follow its **Inline upgrade
-  flow** — **auto-upgrade is the default** (announced, then continue), unless the user set
-  `auto_upgrade=false`. When done, **continue this skill** from the next section.
+  flow**. The default posture is auto-upgrade, but on the **first** upgrade with no saved choice it
+  **asks once** (`auto_upgrade` consent) and then honors that silently forever after. When done,
+  **continue this skill** from the next section.
 - `JUST_UPGRADED <from> <to>` → say "Running orbit v{to} (just updated!)" and continue.
 - `orbit v<x> …` (the fallback line) → say "Running orbit v{x}." once, then continue.
 
@@ -63,9 +72,6 @@ You are **not** running the loop yourself right now. You are **building the harn
 that will run it. Resist the urge to start "doing the work" of the product. Instead,
 lay down the artifacts that let the system do that work repeatedly, on its own, without
 you re-typing the prompt each time.
-
-Read `references/methodology.md` once before you start — it distills the principles
-so the rest of this skill makes sense.
 
 ## In plain language (tell the user this up front)
 
@@ -398,22 +404,20 @@ End every `/orbit` run with a short, beginner-readable summary — not a file du
 3. **Works today vs. wire later** — be honest: `loop.py`'s `dispatch()` is a **stub** that
    raises until you connect your own model; the Claude Code path works now via the
    subagents. Don't let scaffolding read as a finished product.
-4. **What it can spend** — in plain words: "a run can use up to ~$X and N steps, then it
-   stops itself; anything risky waits for you."
-5. **The first loop to run** + its exact stop conditions — start tiny and safe (smallest
-   unit of work, dry-run, max 3 iterations, every checkpoint human).
-6. **How to undo** — `orbit-uninstall` from this repo removes everything Orbit added and
-   leaves your CLAUDE.md alone.
-7. **How routing now works** — say it plainly: *"From now on in this repo, a **router hook** reads
-   **every** message before I respond and decides: a **task** (build/fix/change) routes through the
-   loop; a **question** is answered directly. The system makes that call, not me. Both always-on
-   hooks (router + safety) are: <on / off>."*
-8. **What binds vs. what's advisory** (don't oversell): the **router hook** decides routing
-   deterministically and injects it every message (the system's call, not the model's) — but the
-   model still *executes* the loop (a hook can't run the sub-agents). The **safety hook** is the hard
-   wall that can stop a tool. `loop.py`'s `dispatch()` is a stub until wired. So: routing is
-   system-decided + force-injected; execution and the role/gate ceremony are still model-carried.
-9. **A status line** — `DONE` / `DONE_WITH_CONCERNS (…)` / `BLOCKED (…)` so the true state
+4. **Limits + the first run** — in plain words: "a run can use up to ~$X and N steps, then it
+   stops itself; anything risky waits for you." Then name the **first loop** and its exact stop
+   conditions — start tiny and safe (smallest unit of work, dry-run, max 3 iterations, every
+   checkpoint human).
+5. **How routing & safety work — what binds vs. what's advisory** (don't oversell): a **router
+   hook** classifies **every** message deterministically (task → loop, question → direct) and
+   injects that as the **default lane** before I respond — mechanical, every turn, no model in the
+   loop. But it's a keyword matcher, so I still *execute* the loop and can override a clear
+   misclassification with a stated reason. The **safety hook** is different: a hard wall that can
+   actually **stop** a tool call, in every lane. `loop.py`'s `dispatch()` is a stub until wired.
+   Both always-on hooks (router + safety) are: `<on / off>`. **To undo:** run `orbit-uninstall`
+   from this repo (or `~/.claude/skills/orbit/bin/orbit-uninstall` if it isn't on your PATH) — it
+   removes everything Orbit added and leaves your CLAUDE.md alone.
+6. **A status line** — `DONE` / `DONE_WITH_CONCERNS (…)` / `BLOCKED (…)` so the true state
    is unambiguous.
 
 Nothing here needs a restart: the scaffolded files are read live, and the safety hook arms on
@@ -478,7 +482,8 @@ done. Make the user feel they just hired a team, and it's eager to start.
 
 ## Reference map
 
-- `references/methodology.md` — the principles and the "why". Read first.
+- `references/methodology.md` — the principles and the "why". Read if you're new to the approach or
+  customizing a piece — **not** required to run the scaffold (the script owns the structure).
 - `references/claude-md-template.md` — CLAUDE.md template + required sections.
 - `references/state-template.md` — STATE.md working-memory template.
 - `references/roles.md` — the sub-agent team, specs, and handoff protocol.
