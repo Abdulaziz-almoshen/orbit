@@ -52,7 +52,8 @@ TASK_CTX = (
     "technical judgment: risks, blast radius, a simpler path). **If that knowledge reveals something "
     "material — a wrong premise, a better/more scalable approach, a real risk, a reuse-over-build, or "
     "a missing requirement — you MUST surface it to the user, backed by evidence (the 'surprise': be "
-    "smarter than the ask).** If the goal and the plan are genuinely sound and you have nothing "
+    "smarter than the ask), as an AskUserQuestion with selectable options, your recommendation first "
+    "labeled '(Recommended)' — never a question buried in prose.** If the goal and the plan are genuinely sound and you have nothing "
     "material to add, say so in ONE line and proceed — never manufacture friction, never rubber-stamp "
     "when you do have a better read. Then run read→plan→act→evaluate→update→decide via the roles in "
     ".claude/agents/. Small/clear/reversible → just do it (no review theater). Drive the "
@@ -64,8 +65,10 @@ QUESTION_CTX = (
     "roles, no ceremony. Read .orbit/STATE.md only if it helps."
 )
 AMBIGUOUS_CTX = (
-    "[orbit] SYSTEM ROUTING DECISION — ambiguous. Ask exactly ONE clarifying question, then route per "
-    "CLAUDE.md §10 (task → loop; question → direct). Lean to the loop if it would change the product."
+    "[orbit] SYSTEM ROUTING DECISION — ambiguous. Ask exactly ONE clarifying question — via the "
+    "AskUserQuestion tool (2-4 selectable options, your recommendation FIRST labeled '(Recommended)', "
+    "a one-line trade-off per option; NEVER a question buried in prose). Then route per CLAUDE.md §10 "
+    "(task → loop; question → direct). Lean to the loop if it would change the product."
 )
 
 

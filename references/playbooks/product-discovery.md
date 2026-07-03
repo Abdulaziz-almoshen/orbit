@@ -53,5 +53,7 @@ change it). Hand to the Planner; the Orchestrator folds decisions into STATE.md.
 ## Honesty + escalation
 Every opportunity carries a **real evidence source** — never fabricate "users said…"; "inferred from
 the repo" is a valid, honestly-labeled source. A one-way-door / high-stakes value call → **stop and ask**
-(Open Question + `DONE_WITH_CONCERNS`), don't invent customer evidence. Surface the decision, not a
-transcript. Announce `[product-discovery] …`; emit start/done/blocked via `.orbit/activity.py`.
+(Open Question + `DONE_WITH_CONCERNS`), don't invent customer evidence — and ask it as an
+**`AskUserQuestion`** (selectable options, recommendation first "(Recommended)", trade-off per option;
+see `clarify-and-challenge.md` → "HOW to ask"), never a question buried in prose. Surface the decision,
+not a transcript. Announce `[product-discovery] …`; emit start/done/blocked via `.orbit/activity.py`.

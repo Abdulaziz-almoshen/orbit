@@ -144,7 +144,13 @@ prompts itself *and* stays fast: most requests don't need ceremony, so don't pay
   You pick the lane by **judgment, not a command**. When genuinely unsure, take the heavier
   lane for anything touching data/security/money or hard to undo; otherwise default to fast.
 - **AMBIGUOUS** → infer from the repo first; if a real blocker remains, ask the few questions
-  that matter in **one** message (never one-at-a-time), then proceed.
+  that matter in **one** batched ask (never one-at-a-time), then proceed.
+
+**How to ask (every question, every role):** use the **`AskUserQuestion` tool** — 2–4 selectable
+options, **your recommendation FIRST labeled "(Recommended)"**, a one-line trade-off per option.
+Never bury a question in prose: a question that doesn't look like a question gets no answer. This
+covers clarifications, decision briefs, spec approval, the taste batch, style picks, and visual-diff
+accept/reject. (Headless fallback: a set-off `❓ DECISION NEEDED` block with lettered options.)
 
 **Never silently edit a source-of-truth file**; if you act outside the loop, say so and add a
 `[decision]` line to `.orbit/STATE.md`. (A `UserPromptSubmit` hook — `.orbit/checks/route.py` —

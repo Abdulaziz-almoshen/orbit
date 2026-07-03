@@ -3,6 +3,19 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.22.1
+
+Questions to the user must LOOK like questions. Field feedback: a clarifying question rendered as
+prose (options crammed in parentheses) was scrolled past and timed out unanswered.
+
+- **Every ask is now an `AskUserQuestion`** — 2–4 selectable options, the **recommendation FIRST
+  labeled "(Recommended)"**, a one-line trade-off per option, several questions batched into one call.
+  Canonical rule in `clarify-and-challenge.md` → "HOW to ask" + the scaffolded CLAUDE.md §10; wired
+  into every ask-point: the router's ambiguous + surprise directives (route.py), decision briefs
+  (presented AS the question, options selectable), goal-pipeline's two gates + user-challenges, the
+  discovery one-way-door escalation, QA's visual-diff accept/reject, and the Designer's style pick
+  (one option per style + "Other / remix"). Headless fallback: a set-off `❓ DECISION NEEDED` block.
+
 ## 0.22.0
 
 Four capabilities from a market study of ~30 skills (gstack files read line-by-line + spec-kit, BMAD,

@@ -45,6 +45,11 @@ Classify every decision mid-run; don't stop for what you can decide:
   recommendation, **batch into ONE end-of-run approval** alongside the demo. *Human gate #2.*
 - **User-challenge** (the evidence says the user's stated direction should change) and **one-way doors**
   (schema, auth model, anything hard to undo): **never auto-decide** — stop and ask, with the evidence.
+
+**Every gate is an `AskUserQuestion`** — spec approval, the taste batch, and user-challenges are all
+asked with selectable options, recommendation first labeled "(Recommended)", trade-off per option —
+never a question buried in prose (see `clarify-and-challenge.md` → "HOW to ask"). The taste batch =
+one AskUserQuestion call with multiple questions, not a thread of asks.
 Principles when deciding: completeness over shortcut · smallest diff that's actually right · boring
 tech by default · explicit over clever · bias to action. **Auto-deciding replaces the user's judgment,
 never the analysis** — and every decision gets a line in the audit trail (STATE.md / an ADR if architectural).

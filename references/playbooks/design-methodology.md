@@ -29,7 +29,10 @@ change, do this *first*, every time:
    `.orbit/artifacts/<cycle>/previews/<style>.html`.
 3. **Open them for the user** to compare side by side (`open` each file, or serve the folder), with a
    one-line pitch per style ("Brutalist — raw, high-contrast, unmissable"; "Clean — calm, trustworthy").
-4. **The user picks one.** Only then proceed to the token system + build below, using the chosen
+4. **The user picks one — via `AskUserQuestion`.** After opening the previews, ask with one option
+   per style (its one-line pitch as the description, **your best fit for the brief first, labeled
+   "(Recommended)"**) plus an "Other / remix" escape. Never make the pick a prose question — the
+   selection must be one click. Only then proceed to the token system + build below, using the chosen
    style as the base and grounding it in the subject.
 
 This gate is **mandatory for all design-related requests** — the user chooses the look from real,

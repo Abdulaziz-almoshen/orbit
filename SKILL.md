@@ -452,6 +452,11 @@ done. Make the user feel they just hired a team, and it's eager to start.
   (CLAUDE.md §10). When the system does deliberate, it fans out (approaches ∥ risks ∥ infer)
   instead of a slow serial chain, and surfaces the decision, not a transcript. Don't build a
   system that runs six phases of ceremony on a one-line fix — that's the latency users feel.
+- **Every question to the user is an `AskUserQuestion`.** Selectable options, recommendation
+  FIRST labeled "(Recommended)", one-line trade-off per option, batched when there are several —
+  never a question buried in prose (it doesn't look like a question and goes unanswered). This is
+  the rule for setup AND for the system you scaffold (it's in the CLAUDE.md template §10 and
+  `clarify-and-challenge.md` → "HOW to ask").
 - **Never wire auto-execution of irreversible or outward-facing actions.** Moving money,
   sending outbound messages, deploys, deleting data — these route through a human-approval
   checkpoint. The loop proposes; a human disposes.

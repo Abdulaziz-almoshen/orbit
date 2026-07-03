@@ -41,8 +41,9 @@ The Designer's **approved prototype** (`design/approved.json` + `DESIGN.md` toke
    (body ≥16px, WCAG AA 4.5:1, 44px targets, spacing on the 4/8px scale), not vibes.
 2. **Screenshot diff:** render build and prototype at the same viewports (375/768/1440), mask dynamic
    regions, diff at ~1% threshold; emit the diff image as evidence and a multi-axis fidelity score.
-3. **Intentional change?** Never self-approve a visual delta — batch diffs into one accept/reject
-   decision brief for the user; accepted changes advance the baseline.
+3. **Intentional change?** Never self-approve a visual delta — batch the diffs into **one
+   `AskUserQuestion`** (per-change options: Accept / Reject, with the diff evidence linked and your
+   recommendation labeled "(Recommended)"); accepted changes advance the baseline. Never a prose ask.
 4. Quick structural checks per page: trunk test (what site/page/sections/where-am-I), states
    (empty/loading/error/overflow), responsive at 3 viewports, keyboard focus visible.
 

@@ -25,6 +25,11 @@ Use `Completeness: X/10` only when options differ in *coverage*; if they differ 
 say so and skip the score. Log settled decisions to `STATE.md` → `## Decisions` so a re-run
 doesn't relitigate them.
 
+**Present the brief as an `AskUserQuestion`** — the D<N> line is the question, the options are the
+selectable options (**recommendation FIRST, labeled "(Recommended)"**), stakes/net go in the option
+descriptions. Never render a decision brief as prose the user has to parse — a question that doesn't
+look like a question gets no answer (see `clarify-and-challenge.md` → "HOW to ask").
+
 ## Two lenses, every plan
 - **CEO lens (scope & value):** Is this the *simplest valuable* thing? Or is there a coherent
   *bigger* version worth proposing? Tie every choice to an observable outcome ("users wait

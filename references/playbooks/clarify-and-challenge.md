@@ -30,6 +30,18 @@ Read the repo (README, manifests, code, prior artifacts) and infer what you can.
 what you genuinely *cannot* infer. Bar: an existing repo gets **0–1 questions**; a greenfield
 one a few. Never interrogate for things the code already answers.
 
+## HOW to ask (mandatory, for every question to the user, everywhere in the loop)
+**Always use the `AskUserQuestion` tool** — never bury a question in prose. A question inside a
+paragraph doesn't *look* like a question, gets scrolled past, and times out unanswered. The shape:
+- **A short question** (one or two sentences — the context lives in the options, not the preamble).
+- **2–4 selectable options**, each with a one-line description of the trade-off.
+- **Your recommendation FIRST, labeled "(Recommended)"** — take a position; never present a flat menu.
+- Multiple genuine questions → **one batched AskUserQuestion call** (multiple questions), not a thread.
+This applies to *every* ask in the system: clarifying questions, decision briefs, spec approval, the
+taste batch, style-prototype picks, visual-diff accept/reject, one-way-door escalations.
+**Fallback** (headless / tool unavailable): a visually set-off block —
+`❓ DECISION NEEDED` + lettered options + `→ recommended: A` — never inline prose.
+
 ## Surface and challenge the premises
 Before proposing a solution, state the premises the request rests on and let the user correct
 them:
