@@ -3,6 +3,46 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.23.0
+
+**⚠️ Security/correctness fix — the safety guard now actually binds.** Earlier versions' `guard.py`
+emitted its deny/ask decision in a JSON shape that current Claude Code **silently ignores**
+(`{"permissionDecision": …}` at the top level instead of inside `hookSpecificOutput`). The effect:
+the safety wall's blocks were **not enforced** — a `git push --force` the guard "denied" could still
+run. This release ships the correct envelope, verified against the schema Claude Code actually reads,
+with a 30-case test suite. It also closes a guard **bypass** where wrapping a dangerous command
+behind `cd x && …` slipped past the matcher (the guard now splits on `&&`/`||`/`;`/`|` and inspects
+each segment, including `sh -c` recursion). **If you scaffolded a project before 0.23.0, re-run
+`/orbit`** — the migration detects the old, unmodified hooks and replaces them (with a `.bak` backup
+and an announcement); a locally-modified hook is never overwritten — you get a warning + manual
+diff instructions instead.
+
+Everything else in this release is about making the pitch **true** rather than overclaimed:
+
+- **The dead brakes now work.** `loop.py` enforces `approval_checkpoints` before tagged side-effects
+  (FORBIDDEN raises; a `human` gate awaits), persists its budget across `--resume`, and survives a
+  truncated checkpoint line. `ralph_loop.sh` meters real cost + tokens from
+  `claude -p --output-format json` and stops when a budget is hit (falls back to iteration/runtime
+  caps, and says so, if the JSON is unreadable — never crashes the loop).
+- **Honest framing everywhere.** README carries a **binds / advisory / stub** table for every claim;
+  the router is described (and now *injects itself*) as the **default lane the model can override**,
+  not "the system's call, not the model's"; `dispatch()` is labeled a stub, not a feature.
+- **Coherence, enforced.** New `scripts/check-coherence.py` fails CI on phantom skills or roster
+  drift; shipped the real `safety-rules.md` playbook the safety gate was loading from thin air;
+  `ROLES_CORE` is the single source of truth for the roster.
+- **UX.** Install block on the README's first screen + a "pick ONE install path" warning; the
+  settings-hook installer now **aborts** instead of clobbering an unparseable `settings.json`;
+  `install.sh` won't `rm -rf` a non-git dir without `--force`/consent; `setup` no longer leaves stray
+  symlinks and puts `orbit-uninstall` on your PATH; the first auto-upgrade asks **once** for consent.
+- **QA executors, not sermons.** New `.orbit/qa/snapshot.py` (screenshot / pixel-diff / console) and
+  `extract-tokens.py` (computed-style token check) — helpers, not a bundled browser: Playwright if
+  installed, graceful degradation (exit 2, never a traceback) otherwise; the pixel-diff is pure-python.
+- **Evidence.** `docs/case-study.md` (a real, reproducible harness walkthrough) and `docs/evals.md` +
+  `evals/run-eval.sh` (harness invariants passing 3/3, plus an honest, un-faked task-quality A/B
+  table). A README **Maturity** section states the young-project reality plainly.
+- **Router accuracy** held at 69/69 on the test set with zero task→question misroutes; acks
+  (`"yes"`, `"go ahead"`) correctly inject nothing.
+
 ## 0.22.1
 
 Questions to the user must LOOK like questions. Field feedback: a clarifying question rendered as
