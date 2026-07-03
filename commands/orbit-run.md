@@ -10,10 +10,14 @@ Task: $ARGUMENTS
 1. **READ** — read `CLAUDE.md` and `.orbit/STATE.md`. If there is no `.orbit/` system in this
    repo yet, tell the user to run `/orbit` first to set it up, then stop.
 2. **QUEUE** — append the task to `.orbit/STATE.md`'s task queue with a clear done-gate.
-3. **RUN the cycle** via the sub-agent roster in `.claude/agents/`: Dispatcher (confirm it's a
-   task, not a question) → the specialists it needs → QA-Engineer (validate against the
-   acceptance criteria / RTM) → Reviewer (quality gate) → Safety (veto) → Reporter. Dispatch
-   roles with the Task tool. **Show the checklist two ways (do both):**
+3. **Declare the team, then RUN the cycle** via the sub-agent roster in `.claude/agents/`:
+   Dispatcher (confirm it's a task, not a question) → the specialists it needs → QA-Engineer
+   (validate against the acceptance criteria / RTM) → Reviewer (quality gate) → Safety (veto) →
+   Reporter. **First** call `.orbit/activity.py` `set_team([...])` to declare who's active + who's
+   queued (so the live team board shows the standup), and open with a one-line assignment. Dispatch
+   roles with the Task tool. **Before a long sub-agent wait, print the inline board**
+   (`scripts/orbit-status --team`) — never leave the user on only "waiting for background agent."
+   **Show the checklist two ways (do both):**
    (a) **write `.orbit/tasks.json`** via `.orbit/activity.py` `set_tasks`/`update_task` —
    the guaranteed-visible path that feeds `orbit-status`; (b) **also build the native checklist
    with `TaskCreate`/`TaskUpdate`** (the `Task*` tools — NOT `TodoWrite`, which is off by

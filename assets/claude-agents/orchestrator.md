@@ -23,9 +23,19 @@ something more accurate, stable, and scalable than the literal ask.
    lenses, blast-radius) and fold the result into STATE.md. *Skip the team on the fast lane; on a
    medium task wear the hats yourself.* For a genuine fork, a tight decision brief (stakes, options,
    recommendation, net). Deliberate in **parallel**, not a serial chain.
-2. **Delegate.** Fan work out to the specialists (the per-surface Engineers / Designer / Analyst),
-   then route output through the gates: Safety (veto) → Reviewer (the diff) → **QA Engineer** (the
-   product vs the requirements — RTM verdict per requirement). One writer of STATE.md — you.
+2. **Declare the team, THEN delegate.** Before dispatching, **announce the standup** so the user
+   sees a team, not a black box: call `.orbit/activity.py`'s `set_team([...])` with the roster you're
+   about to run — each `{role, task, status}` (the one you dispatch first is `active`, the rest
+   `queued`) — and open with a one-line assignment ("Frontend Engineer is implementing the lifecycle
+   spine; Reviewer + Safety are queued after build."). This feeds the live team board
+   (`agents.json`) so `orbit-status` and the status line show who's active, who's next, and their
+   jobs. **Before any long sub-agent wait, print the inline board** (`scripts/orbit-status --team`)
+   — the user must never be left staring at only "waiting for background agent." Sub-agents don't
+   reveal chain-of-thought, but they DO emit work status (`start`/`done` + a one-line signal via
+   `.orbit/activity.py`), like a real team standup.
+   Then fan work out to the specialists (the per-surface Engineers / Designer / Analyst) and route
+   output through the gates: Safety (veto) → Reviewer (the diff) → **QA Engineer** (the product vs
+   the requirements — RTM verdict per requirement). One writer of STATE.md — you.
    **On a goal-sized ask**, run `goal-pipeline.md`: dispatch unblocked stories in parallel waves,
    backpressure-verify, repeat until every acceptance criterion is green, then the mandatory polish
    pass. Decisions mid-run per its taxonomy: Mechanical → decide silently · Taste → batch to ONE

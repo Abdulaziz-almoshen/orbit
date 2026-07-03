@@ -135,35 +135,42 @@ so if the task tools aren't called you can still see it via `orbit-status` (belo
 checklist into, so run `scripts/orbit-status --follow` for a live dashboard (**Ctrl-C** to stop):
 
 ```text
-🛰  Orbit Run  build settings screen
+🛰  Orbit  · F-S1  worker lifecycle spine
 Lifecycle  Discover › Plan › [Build] › Verify › Safety › Report
-Progress   [######----] 5/9 tasks   cycle 2   11m elapsed
 
-Active
-  builder   15:38:14   editing settings form
+Working now
+  ▸ Frontend Engineer  active 4m 52s  · F-S1  (quiet 1m 12s)
+    Building the worker lifecycle spine: arrival → probation → return
+    Last signal: edited lifecycle schema + wiring UI copy
+    Next: Reviewer — checks correctness + regressions
 
-Checklist
-  ✓ [dispatcher] classify request
-  ▸ [builder]    implement settings UI
-  ○ [qa-engineer] run proof checks
+Queued
+  ○ Reviewer   checks correctness + regressions, proves the diff
+  ○ Safety     confirms no unsafe/outward action without approval
+  ○ Reporter   summarizes proof + remaining risk
 
-Budget      cost $0.42   41000 tokens
-Confidence  76%: test, review pass; safety pending
-Last event  0s ago [builder] editing settings form
+Progress    3/9 done · 1 active · confidence 76% · no blocker
+Checklist / Budget / Confidence / Thread …
 ```
+
+It's a **team**, not a to-do list: who's working now (with a live *active 4m 52s* clock, their
+mission, last signal, and who's up next), who's queued and their job, and an escalating quiet timer
+(`quiet 1m` → `long step` → `possibly stuck`) so silence never looks like progress.
 
 **A one-line status line, too.** On install Orbit wires a Claude Code `statusLine` (only if you
 don't already have one) — the run at a glance, every couple of seconds:
 
 ```text
-🛰 build · builder · 5/9 · ctx 38% · $0.42 · cache 61% · conf 76%
+🛰 F-S1 · Frontend Engineer 4m52s · 3/9 · quiet 72s · ctx 38% · $0.42 · conf 76%
 ```
 
 Everything here is fed **mechanically** by a telemetry hook (`orbit-hook`) on Claude Code's real
 run events (sub-agent start/stop, native task create/complete, tool edits/failures, notifications)
-— so it stays live even if a role forgets to narrate. Dashboard modes: `--compact` (a 3-line
-summary), `--json` (machine-readable), `--no-ansi` (plain, also honors `NO_COLOR`). **Confidence**
-is evidence-based (tests/review/safety/QA passing = up; a failure or blocker = down), not a vibe.
+— so it stays live even if a role forgets to narrate. The orchestrator declares the roster up front
+so the *queued* agents show too, not just whoever's already talking. Dashboard modes: `--team`
+(just the standup board, for inline use), `--compact` (a 3-line summary), `--json` (machine-readable,
+includes the roster), `--no-ansi` (plain, also honors `NO_COLOR`). **Confidence** is evidence-based
+(tests/review/safety/QA passing = up; a failure or blocker = down), not a vibe.
 When a run needs a decision in a headless context, it writes a **decision card** the dashboard pins
 (`❓ Decision needed …` with options + a recommendation) and the status line shows `⚠ needs input`.
 
@@ -409,7 +416,7 @@ whose brakes actually bind — and that part is proven, not asserted:
   actual command output pasted in (no mock-ups).
 - 🧪 **[Evals](docs/evals.md)** — harness invariants that pass **3/3** (deterministic, runnable now)
   plus an honest, still-empty task-quality A/B table. We publish real numbers or none — never faked.
-- ✅ **18 automated test files + the coherence gate** — guard schema + 70+ bypass/wrapper cases,
+- ✅ **19 automated test files + the coherence gate** — guard schema + 70+ bypass/wrapper cases,
   router accuracy (69/69), budget persistence, migration safety, install/uninstall behavior,
   scaffold idempotency, config-vs-code consistency, hook-drift detection, telemetry schema +
   prompt redaction, the hook collector, the dashboard/status line, confidence + lifecycle, and
