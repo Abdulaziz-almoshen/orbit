@@ -3,6 +3,19 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.26.2
+
+**Marketplace install is now a first-class path for telemetry.** The telemetry hook is wired from
+the trusted Orbit install (so editing a product repo can't alter the collector) — but 0.26.1 wired
+a single skills-dir path, so a **marketplace/plugin install** silently got no telemetry. A
+project-level hook can't see `$CLAUDE_PLUGIN_ROOT` (verified against the docs), so `orbit-hook` is
+now wired as a runtime **resolver** that finds the collector across both layouts: the skills-dir
+clone (`${CLAUDE_CONFIG_DIR:-~/.claude}/skills/orbit`) and the marketplace plugin cache
+(`~/.claude/plugins/cache/<marketplace>/orbit/<version>/bin`, confirmed on disk). It `exec`s the
+first match with stdin intact, and exits cleanly (0, no telemetry) if Orbit isn't found anywhere —
+still fail-open. `orbit-uninstall` strips it, re-scaffold stays idempotent, and
+`tests/test_orbit_hook.py` now covers all three resolution cases (skills-dir / plugin-cache / none).
+
 ## 0.26.1
 
 **Hardening — three reproduced P1s in the visibility system, fixed.**

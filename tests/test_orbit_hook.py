@@ -7,6 +7,7 @@ un-scaffolded repo / malformed input → no-op, no crash, never writes outside a
 
 Run: python3 tests/test_orbit_hook.py   (exit 0 = pass)
 """
+import importlib.util
 import json
 import os
 import subprocess
@@ -23,8 +24,65 @@ def fire(payload, cwd):
                           capture_output=True, text=True, cwd=cwd, timeout=10)
 
 
+def _scaffold_hook_cmd():
+    spec = importlib.util.spec_from_file_location("scaffold_oh", os.path.join(ROOT, "scripts", "scaffold.py"))
+    m = importlib.util.module_from_spec(spec)
+    sys.modules["scaffold_oh"] = m
+    spec.loader.exec_module(m)
+    return m.ORBIT_HOOK_CMD
+
+
+def _install_resolution():
+    """The wired ORBIT_HOOK_CMD must resolve orbit-hook for BOTH the skills-dir clone AND the
+    marketplace plugin cache (~/.claude/plugins/cache/<mkt>/orbit/<ver>/bin), and no-op (exit 0)
+    when Orbit isn't installed anywhere."""
+    fails = []
+    cmd = _scaffold_hook_cmd()
+
+    def place(binroot):
+        os.makedirs(os.path.join(binroot, "bin"))
+        os.makedirs(os.path.join(binroot, "assets"))
+        for src, dst in ((HOOK, "bin/orbit-hook"), (os.path.join(ROOT, "assets", "activity.py"), "assets/activity.py")):
+            with open(src, "rb") as a, open(os.path.join(binroot, dst), "wb") as b:
+                b.write(a.read())
+
+    def run_cmd(fake_home, repo):
+        env = {**os.environ, "HOME": fake_home, "CLAUDE_CONFIG_DIR": os.path.join(fake_home, ".claude")}
+        env.pop("CLAUDE_PLUGIN_ROOT", None)
+        payload = json.dumps({"hook_event_name": "SubagentStart", "agent_type": "builder", "cwd": repo})
+        return subprocess.run(cmd, shell=True, input=payload, capture_output=True, text=True, env=env, timeout=10)
+
+    # marketplace plugin-cache layout ONLY (no skills-dir)
+    with tempfile.TemporaryDirectory() as home, tempfile.TemporaryDirectory() as repo:
+        place(os.path.join(home, ".claude", "plugins", "cache", "orbit", "orbit", "0.26.2"))
+        os.makedirs(os.path.join(repo, ".orbit"))
+        r = run_cmd(home, repo)
+        if r.returncode != 0 or not os.path.exists(os.path.join(repo, ".orbit", "activity.jsonl")):
+            fails.append(f"resolver missed the marketplace plugin-cache install: rc={r.returncode} err={r.stderr[:150]!r}")
+
+    # skills-dir clone layout
+    with tempfile.TemporaryDirectory() as home, tempfile.TemporaryDirectory() as repo:
+        place(os.path.join(home, ".claude", "skills", "orbit"))
+        os.makedirs(os.path.join(repo, ".orbit"))
+        r = run_cmd(home, repo)
+        if not os.path.exists(os.path.join(repo, ".orbit", "activity.jsonl")):
+            fails.append("resolver missed the skills-dir clone install")
+
+    # neither → clean no-op (exit 0, no write, no error)
+    with tempfile.TemporaryDirectory() as home, tempfile.TemporaryDirectory() as repo:
+        os.makedirs(os.path.join(home, ".claude"))
+        os.makedirs(os.path.join(repo, ".orbit"))
+        r = run_cmd(home, repo)
+        if r.returncode != 0:
+            fails.append(f"resolver should exit 0 when Orbit isn't installed, got {r.returncode}")
+        if os.path.exists(os.path.join(repo, ".orbit", "activity.jsonl")):
+            fails.append("resolver wrote telemetry with no Orbit install present")
+    return fails
+
+
 def main():
     fails = []
+    fails += _install_resolution()
     with tempfile.TemporaryDirectory() as d:
         os.makedirs(os.path.join(d, ".orbit"))
         act = os.path.join(d, ".orbit", "activity.jsonl")

@@ -160,9 +160,21 @@ ROUTE_CMD = 'python3 "$CLAUDE_PROJECT_DIR/.orbit/checks/route.py"'
 DESIGN_GATE_CMD = 'python3 "$CLAUDE_PROJECT_DIR/.orbit/checks/design-gate.py"'
 # The telemetry collector is wired from the TRUSTED Orbit INSTALL (not copied into the repo), so
 # editing the product repo can't alter it — unlike guard/route/design-gate, which are project-local
-# BECAUSE they're meant to be customized per repo (the guard's RULES block especially). Resolved at
-# hook-run time via the default install location; degrades to a no-op if Orbit lives elsewhere.
-ORBIT_HOOK_CMD = 'python3 "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/orbit/bin/orbit-hook"'
+# BECAUSE they're meant to be customized per repo (the guard's RULES block especially).
+# A project-level hook can't see $CLAUDE_PLUGIN_ROOT (verified against the docs), so we RESOLVE the
+# install at hook-run time across BOTH supported layouts: the skills-dir clone
+# (${CLAUDE_CONFIG_DIR:-~/.claude}/skills/orbit) AND the marketplace plugin cache
+# (~/.claude/plugins/cache/<marketplace>/orbit/<version>/, confirmed on disk). `exec` runs the first
+# match with stdin intact; if Orbit isn't found anywhere the loop just exits 0 (no telemetry, never
+# an error). The $CLAUDE_PLUGIN_ROOT candidate is a bonus for the day project hooks ever get it.
+ORBIT_HOOK_CMD = (
+    "sh -c 'for p in "
+    '"${CLAUDE_PLUGIN_ROOT:-}/bin/orbit-hook" '
+    '"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/orbit/bin/orbit-hook" '
+    '"$HOME"/.claude/plugins/cache/*/orbit/*/bin/orbit-hook '
+    '"${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/*/orbit/*/bin/orbit-hook; '
+    "do [ -f \"$p\" ] && exec python3 \"$p\"; done; exit 0'"
+)
 ORBIT_HOOK_EVENTS = ["SubagentStart", "SubagentStop", "TaskCreated", "TaskCompleted",
                      "PostToolUse", "PostToolUseFailure", "PostToolBatch", "Stop", "Notification"]
 STATUSLINE_CMD = 'python3 "$CLAUDE_PROJECT_DIR/scripts/orbit-statusline"'
