@@ -36,10 +36,12 @@ P0 = 40pts (any failure → 0), P1 = 30 prorated, P2 = 15 prorated, visual fidel
 
 ## The pixel pass (UI work — the design is a contract, not a suggestion)
 **Runs conditionally: only when `design/approved.json` says `impact_level: "HEAVY"`.** TRIVIAL work
-has no prototype baseline to diff against by design — check its triage record exists and move on; a
-legacy record with no `impact_level` field is a **pass-with-warning**, never an auto-fail (it
-predates this gate). On HEAVY, the Designer's **approved prototype** (`design/approved.json` +
-`DESIGN.md` tokens) is the golden baseline:
+has no prototype baseline to diff against by design — confirm `.orbit/design/TRIVIAL` exists and
+move on. A legacy `approved.json` with no `impact_level` field is a **pass-with-warning**, never an
+auto-fail (it predates this gate). But if the change looks HEAVY and **neither** `approved.json` nor
+the `TRIVIAL` marker exists, that's a finding, not an exemption — the triage step was skipped
+entirely, not judged unnecessary. On HEAVY, the Designer's **approved prototype**
+(`design/approved.json` + `DESIGN.md` tokens) is the golden baseline:
 1. **Token assertions:** extract the *rendered* design system via computed styles (fonts, palette, type
    scale, spacing, touch-target boxes) and assert token-by-token against DESIGN.md — numeric checks
    (body ≥16px, WCAG AA 4.5:1, 44px targets, spacing on the 4/8px scale), not vibes.

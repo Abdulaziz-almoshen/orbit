@@ -33,9 +33,9 @@ prototype gate scoped to work that deserves it, and keeps the fast lane (CLAUDE.
 - A `className`/prop swap or a zero-pixel refactor.
 - Anything small · clear · reversible.
 
-On TRIVIAL, proceed directly — no prototypes, no `AskUserQuestion` — and still record the triage
-(see Handoff below), so later checks can see a design decision was made. On HEAVY, run whichever
-gate applies below.
+On TRIVIAL, proceed directly — no prototypes, no `AskUserQuestion` — and drop a
+**`.orbit/design/TRIVIAL`** marker (see Handoff below), so later checks can see a design decision
+was made without mistaking it for a HEAVY approval. On HEAVY, run whichever gate applies below.
 
 ## Two gates — the one-time style pick, and the recurring component gate
 These serve different moments in a product's life, and only one runs per HEAVY request.
@@ -116,28 +116,30 @@ Responsive down to mobile; visible keyboard focus; `prefers-reduced-motion` resp
 CSS specificity (type- vs element-based selectors can cancel each other on padding/margins).
 
 ## Handoff — the design is a FILE contract, not a suggestion
-The user's pick from whichever gate ran becomes **artifacts every later step must consume**. The
-canonical, single location for the approval record is **`design/approved.json`** at the repo
-root — every role (Designer, Reviewer, QA) reads and writes this one path, never a per-cycle copy:
+The user's pick from whichever gate ran (or the triage call, on TRIVIAL) becomes **artifacts every
+later step must consume**. Two distinct records, so a HEAVY approval is never confused with a
+TRIVIAL pass-through:
 
-1. **`design/approved.json`** — the triage decision *and* the pick, in one record:
+1. **On HEAVY — `design/approved.json`** (the repo root; canonical, single location — every role
+   reads and writes this one path, never a per-cycle copy) — the pick, in one record:
    ```json
    { "component": "checkout-summary", "impact_level": "HEAVY",
      "impact_rationale": "new layout + interaction pattern",
      "variants_shown": 3, "chosen": "variant-b",
      "previews": [".orbit/artifacts/12/previews/variant-b.html"], "cycle": 12 }
    ```
-   `impact_level` is `"HEAVY"` or `"TRIVIAL"` — write it even on TRIVIAL (a triage record with no
-   prototypes is still a record of the decision). `variants_shown` is 2–5 on HEAVY, absent/0 on
-   TRIVIAL. Engineers **must detect and read this before any UI code.** A **legacy record with no
-   `impact_level`** (written before this gate existed) is not an error — treat it as
-   **pass-with-warning**, never an auto-fail.
-2. **`DESIGN.md`** (repo root) — the extracted token system as the *persistent design authority*:
+   `variants_shown` is always 2–5 here. Engineers **must detect and read this before any UI code.**
+   A **legacy record with no `impact_level`** (written before this gate existed) is not an error —
+   treat it as **pass-with-warning**, never an auto-fail.
+2. **On TRIVIAL — `.orbit/design/TRIVIAL`** — a one-line marker (which component, why trivial, the
+   cycle), dropped instead of `approved.json`. It records that triage happened without implying a
+   prototype pick ever occurred. Its mere presence is proof enough for this cycle.
+3. **`DESIGN.md`** (repo root) — the extracted token system as the *persistent design authority*:
    named hex values, type roles + scale, spacing scale, radius, the signature element, and a
    **Decisions Log** line per change. Every future design/UI run reads DESIGN.md first; its tokens
    **override** anything a new generation would invent. (This is what keeps the product visually
    coherent across sessions — and it's where active learning writes design learnings.)
-3. **`.orbit/artifacts/<cycle>/design-plan.md`** — the per-cycle plan (tokens + layout + signature +
+4. **`.orbit/artifacts/<cycle>/design-plan.md`** — the per-cycle plan (tokens + layout + signature +
    rationale, naming the chosen style/variant) for the Builder.
 
 **Fidelity rule:** when an approved prototype exists, **pixel-match it** — source-of-truth fidelity

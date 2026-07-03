@@ -32,8 +32,8 @@ world, never a templated default. Scoped so trivial work never pays for ceremony
    layout/hierarchy/typography/color/spacing/interaction change; no approved style exists yet) vs
    TRIVIAL (copy fix, sanctioned token tweak, appearance-restoring bug fix, className/prop swap,
    zero-pixel refactor). See `design-methodology.md` for the full test.
-   - **TRIVIAL** → proceed directly, no prototypes, no `AskUserQuestion`. Write a triage-only
-     `design/approved.json` (`impact_level: "TRIVIAL"`, no prototypes) and continue to step 2.
+   - **TRIVIAL** → proceed directly, no prototypes, no `AskUserQuestion`. Drop a
+     `.orbit/design/TRIVIAL` marker (one line: which component, why trivial) and continue to step 2.
    - **HEAVY** → run the gate that applies, **mandatory, before any code**:
      - No style chosen yet in this repo → **gate A** (`design-methodology.md`): shortlist 2–5
        styles from `design-styles.md`, build a standalone HTML prototype of each, **open them for
@@ -48,10 +48,11 @@ world, never a templated default. Scoped so trivial work never pays for ceremony
    code yet. (TRIVIAL work skips straight to the small fix — no token system needed.)
 3. Run the **plan-critique gate**: would a different brief produce the same choices? Does any part
    match an anti-AI-aesthetic default? Revise until distinctive.
-4. Write the **artifact contract** and hand to the Builder: `design/approved.json` (the triage +
-   which prototype won + remix notes — engineers must read it before any UI code), **`DESIGN.md`**
-   (the persistent token authority; future runs read it first, its tokens override new
-   inventions), and `.orbit/artifacts/<cycle>/design-plan.md` (naming the chosen style/variant).
+4. Write the **artifact contract** and hand to the Builder: `design/approved.json` on HEAVY (which
+   prototype won + remix notes — engineers must read it before any UI code) or the
+   `.orbit/design/TRIVIAL` marker on TRIVIAL, **`DESIGN.md`** (the persistent token authority;
+   future runs read it first, its tokens override new inventions), and
+   `.orbit/artifacts/<cycle>/design-plan.md` (naming the chosen style/variant).
 
 ## Outputs
 - `design/approved.json` + `DESIGN.md` + `design-plan.md` (tokens + layout + signature + rationale)
