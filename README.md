@@ -9,11 +9,13 @@ a specialized sub-agent team, packaged skills, and a real run→evaluate→decid
 **real brakes**: a PreToolUse hook that blocks catastrophic git commands, iteration/runtime
 caps that bind the loop, and token/cost budgets metered on the runner.
 
-One command sets it up. It runs on your own orchestrator. It updates itself.
+One command sets it up. It runs today on Claude Code's own sub-agents; a portable runner with the
+same durability/budget logic is included for your own orchestrator, one function-wire away. It
+updates itself.
 
 <br/>
 
-![version](https://img.shields.io/badge/version-0.24.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.24.1-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![self-updating](https://img.shields.io/badge/self--updating-yes-22863a)
@@ -36,6 +38,13 @@ root/system path, a disk wipe) and pauses on the risky (a plain push, `reset --h
 runs. One command sets it up — it reads your repo and asks almost nothing.
 (What binds vs. what's advisory is spelled out honestly in [Safety](#safety--what-binds-and-what-doesnt).)
 
+> **Works today vs. needs one wire-up.** The Claude Code path — the sub-agent team, the safety
+> hook, the router — works out of the box. The portable `loop.py` runner (for your own
+> orchestrator, e.g. Gemini) has real durable checkpointing, budget tracking, and approval
+> enforcement — but its model seam, `dispatch()`, is an **honest stub that raises** until you wire
+> it to your own model. Don't let the pitch above read as "drop-in on day one" for that path; see
+> the [binds/advisory/stub table](#safety--what-binds-and-what-doesnt) for the full breakdown.
+
 ## Install
 
 ```bash
@@ -53,6 +62,16 @@ the exact same clone + `./setup`. More options (marketplace plugin, "let Claude 
 > marketplace plugin. Installing it **both** ways gives you two copies of `/orbit` that both try to
 > load — pick one and stick with it. The clone is the default; the marketplace path is in
 > [Install options](#install-options).
+
+### Command map
+
+| Command | Where it runs | What it does |
+|---|---|---|
+| `/orbit` | In a product repo | Scaffold the governed loop, or merge template updates into an already-scaffolded repo |
+| `/orbit:orbit-run <task>` | In a product repo | Force a task through the loop explicitly, bypassing the router's default-lane classification |
+| `scripts/orbit-status --follow` | In a product repo (terminal) | Live who's-talking dashboard — the headless-runner equivalent of the pinned Claude Code checklist |
+| `orbit-uninstall` [`--force`] | In a product repo | Remove Orbit's engine files + hooks from that repo (partial by design — see [Safety](#safety--what-binds-and-what-doesnt)) |
+| `/orbit-upgrade` | Anywhere | Upgrade the Orbit plugin itself (fetches latest, shows what changed) — see [Self-update](#self-update) |
 
 ## Why you'll care
 
@@ -221,7 +240,8 @@ every other AI-generated app:
 The [one-command clone](#install) up top is the default. It installs Orbit as a Claude Code **user
 skill** — cloned into `~/.claude/skills/orbit`, the same way gstack does it. Claude Code watches that
 folder and discovers skills **live**, so `/orbit` and `/orbit-upgrade` work **immediately, no
-restart**. Updates are a fast `git pull` (`/orbit-upgrade`).
+restart**. Updates are a fast `git fetch` + reset to the latest (`/orbit-upgrade`) — see
+[Self-update](#self-update) for exactly what that does to a hand-modified install.
 
 ### As a marketplace plugin (the other path — don't combine with the clone)
 
@@ -232,7 +252,7 @@ restart**. Updates are a fast `git pull` (`/orbit-upgrade`).
 
 Same Orbit, installed as a plugin instead of a user-skill clone. **Use this *or* the clone, never
 both** — two copies of `/orbit` will collide. The clone is easier to self-update (`/orbit-upgrade`
-is a `git pull`); the plugin updates through Claude Code's plugin manager.
+fetches + resets to the latest); the plugin updates through Claude Code's plugin manager.
 
 ### Or let Claude do it — paste this prompt
 
@@ -296,8 +316,15 @@ A loop that can't survive a restart isn't a loop — it re-fetches, re-calls the
 ## Self-update
 
 Every time you run `/orbit`, a preamble quietly checks GitHub for a newer version (throttled
-to once a day). **Auto-upgrade is on by default** — if there's a newer version it pulls it
-(`git pull`, no restart), announces what changed, and continues. You stay current hands-off. Or:
+to once a day). **The first time** an upgrade is available and you haven't chosen a preference
+yet, it asks **once** — *"Keep Orbit auto-updated?"*, auto-update recommended — and saves your
+answer; every upgrade after that honors it silently, no repeat prompts. If you picked auto-update
+(or set `auto_upgrade=true` yourself), a newer version is announced and applied with no restart.
+
+Mechanically, an upgrade is a `git fetch` + `git reset --hard` to the tracked branch's latest
+commit — **not** a merge-preserving `git pull`. Any local edits to the installed copy are stashed
+first (with a note to run `git stash pop` to recover them), never silently discarded, but don't
+expect `git pull` semantics if you've hand-modified files under `~/.claude/skills/orbit`. Or:
 
 ```text
 /orbit-upgrade               # upgrade on demand — fetches latest + "what's new", no restart
@@ -310,6 +337,13 @@ tells you a new version is available and waits for you to run `/orbit-upgrade`.
 > loop files a previous run wrote into a product repo are *that project's files* and are never
 > touched. To pull template improvements into an existing project, re-run `/orbit` — it
 > merges, it doesn't clobber.
+
+> **What you're trusting:** installs and upgrades track a **mutable branch** (`main` by default),
+> not a signed release or a pinned checksum — both `install.sh`/`./setup` and `/orbit-upgrade`
+> print the **resolved commit SHA** after every install/upgrade so you have a concrete, checkable
+> record of exactly what's now running (`git -C ~/.claude/skills/orbit log -1 --oneline`). Signed
+> tags with real checksum verification would be stronger and are a real next step, not yet built —
+> don't read the printed SHA as cryptographic proof, just as an audit trail.
 
 ## Safety — what binds, and what doesn't
 
@@ -329,9 +363,26 @@ guarantee and a suggestion:
 | **`loop.py dispatch()`** (your own-model path) | 🔌 **stub** | An honest seam: raises until you wire it to Gemini/etc. The Claude Code subagent path is what works today. |
 
 Both hooks **fail open** — a bug never bricks your shell or blocks a prompt. `/orbit` wires them by
-default and tells you exactly what it added; everything is removable with `orbit-uninstall` (or the
-full path `~/.claude/skills/orbit/bin/orbit-uninstall` if it isn't on your PATH — `./setup` symlinks
-it into `~/.local/bin` when that's on your PATH).
+default and tells you exactly what it added. `orbit-uninstall` (or the full path
+`~/.claude/skills/orbit/bin/orbit-uninstall` if it isn't on your PATH — `./setup` symlinks it into
+`~/.local/bin` when that's on your PATH) removes the engine files it added (`.orbit/`,
+`scripts/ralph_loop.sh`, `scripts/orbit-status`) and strips the Orbit-tagged hooks from
+`.claude/settings.json` — **but is a partial uninstall by design**: `.claude/agents/*.md` (the
+sub-agent adapters) and `CLAUDE.md` are left for you to review, since some of that content may be
+yours. It lists exactly what it's about to touch before doing anything.
+
+> **A hook is code that lives in the repo it protects.** `.claude/settings.json` points at
+> `$CLAUDE_PROJECT_DIR/.orbit/checks/*.py` — those files are tracked like any other repo file.
+> Anyone with commit access (a teammate, a merged PR) can edit `guard.py` itself, and Claude Code
+> will silently run the modified version next time. This isn't unique to Orbit — it's inherent to
+> Claude Code's project-local hook model — but treat `.orbit/checks/` and `.claude/settings.json`
+> as security-sensitive paths: a CODEOWNERS entry (or equivalent required-review rule) on both is
+> the concrete mitigation for a shared repo. `scripts/verify-hooks.py --target <repo>` gives you a
+> way to *notice* drift — it hashes the installed hooks against what your current Orbit install
+> ships and flags anything that differs (a deliberate customization, or not — it tells you to look,
+> it can't tell you which). It's detection, not prevention; a declarative-rules-plus-trusted-runner
+> redesign (rules as data, not code, interpreted by a runner installed outside the repo) would
+> close this properly and is a real next step, not yet built.
 
 ## Maturity
 
@@ -344,8 +395,9 @@ whose brakes actually bind — and that part is proven, not asserted:
   actual command output pasted in (no mock-ups).
 - 🧪 **[Evals](docs/evals.md)** — harness invariants that pass **3/3** (deterministic, runnable now)
   plus an honest, still-empty task-quality A/B table. We publish real numbers or none — never faked.
-- ✅ **8 automated test files** — guard schema + `cd &&` bypass cases, router accuracy (69/69),
-  budget persistence, migration safety, the coherence gate. `bash tests/run.sh`.
+- ✅ **13 automated test files + the coherence gate** — guard schema + 70+ bypass/wrapper cases,
+  router accuracy (69/69), budget persistence, migration safety, install/uninstall behavior,
+  scaffold idempotency, config-vs-code consistency, hook-drift detection. `bash tests/run.sh`.
 
 The [binds / advisory / stub table](#safety--what-binds-and-what-doesnt) above is the honest map of
 what's enforced vs. what's prompt-discipline. If that trade sounds useful, **you're exactly the early
@@ -370,7 +422,8 @@ orbit/                          ← this repo == the skill dir (clones to ~/.cla
 │                               #   orbit-status, checks/guard.py + route.py, qa/ tools, role adapters
 ├── scripts/scaffold.py         # lays down the deterministic skeleton (Phase 2)
 ├── scripts/check-coherence.py  # the coherence gate (no phantom skills / roster drift)
-├── orbit-upgrade/SKILL.md      # the self-update flow (git pull)
+├── scripts/verify-hooks.py     # detects drift between a repo's installed hooks and this install
+├── orbit-upgrade/SKILL.md      # the self-update flow (fetch + reset --hard, consent-once)
 ├── docs/                       # case-study.md + evals.md (the evidence)
 ├── tests/                      # the automated suite (bash tests/run.sh)
 └── evals/                      # canned tasks + the eval harness (run-eval.sh)
@@ -381,7 +434,7 @@ orbit/                          ← this repo == the skill dir (clones to ~/.cla
 1. Make changes, bump `VERSION` (the update checker compares it against GitHub), add a
    `CHANGELOG.md` entry.
 2. `git push` to `main`. Installed users get the offer on their next `/orbit`, or immediately
-   via `/orbit-upgrade` (a `git pull`).
+   via `/orbit-upgrade` (fetch + reset to the latest commit).
 
 ## License
 

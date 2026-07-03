@@ -9,7 +9,7 @@
 #       ~/.claude/skills/orbit && cd ~/.claude/skills/orbit && ./setup
 #
 # It clones Orbit into ~/.claude/skills/orbit (the skill dir IS the git checkout, so updates are a
-# fast `git pull` via /orbit-upgrade — no restart, Claude Code discovers it live). Re-runnable.
+# fast fetch+reset via /orbit-upgrade — no restart, Claude Code discovers it live). Re-runnable.
 #
 set -euo pipefail
 
@@ -47,5 +47,10 @@ else
   echo "Cloning Orbit → $DEST …"
   git clone --single-branch --depth 1 --branch "$BRANCH" "https://github.com/$SLUG.git" "$DEST"
 fi
+
+# print exactly what's now running — a resolved commit SHA is the concrete, checkable record of
+# which code you have, since installs currently track a mutable branch, not a signed release.
+_SHA="$(git -C "$DEST" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+echo "Orbit is now at commit $_SHA (branch: $BRANCH). Verify: git -C \"$DEST\" log -1 --oneline"
 
 cd "$DEST" && ./setup

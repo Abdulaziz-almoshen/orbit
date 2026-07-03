@@ -100,6 +100,9 @@ git fetch origin
 _BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)"
 git reset --hard "origin/$_BRANCH"
 echo "$_STASH" | grep -q "Saved working directory" && echo "NOTE: local changes were stashed — run 'git stash pop' in $INSTALL_DIR to restore."
+_SHA="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+echo "Now at commit $_SHA on $_BRANCH — this is a floating-branch install, not a signed release;
+this is the checkable record of exactly what code is now running."
 ```
 
 **Skills-dir install (`IS_GIT=no` and `$INSTALL_DIR/.install-method` says `method=skills-dir`, or `$INSTALL_DIR` is under `~/.claude/skills/`) — the default install:** re-run the installer, which re-downloads the latest and overwrites in place (no restart needed):
@@ -125,7 +128,7 @@ Read `$INSTALL_DIR/CHANGELOG.md`. Summarize the entries between `OLD_VERSION` an
 version as 3–6 user-facing bullets (skip internal refactors). Format:
 
 ```
-orbit v{new} — upgraded from v{old}!
+orbit v{new} — upgraded from v{old}! (commit {sha})
 
 What's new:
 - …
@@ -133,6 +136,10 @@ What's new:
 Then re-run /orbit if you want existing projects to pick up template improvements
 (it merges; it won't clobber your scaffolded files).
 ```
+
+Include `{sha}` (from Step 3's `$_SHA`, when the install is a git checkout) — it's the concrete,
+checkable record of what's now running, since this is a floating-branch install, not a signed
+release.
 
 ### Step 6: continue
 

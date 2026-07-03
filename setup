@@ -7,8 +7,10 @@
 #
 # The clone IS the skill dir, so there's nothing to copy — setup just makes the helpers
 # executable, exposes the orbit-upgrade sub-skill at the top level so /orbit-upgrade resolves,
-# and prints what landed. No restart: Claude Code discovers skills live. Updates are `git pull`
-# (via /orbit-upgrade). Idempotent and safe to re-run.
+# and prints what landed (incl. the resolved commit, so you have a checkable record of exactly
+# what's installed). No restart: Claude Code discovers skills live. Updates are a fetch + reset
+# to the latest commit on the tracked branch (via /orbit-upgrade), not a merge — local edits to
+# the installed copy are stashed first, never silently discarded. Idempotent and safe to re-run.
 #
 set -euo pipefail
 
@@ -21,6 +23,7 @@ chmod +x "$HERE"/scripts/*.py 2>/dev/null || true
 chmod +x "$HERE"/assets/checks/*.py 2>/dev/null || true
 
 VER="$(tr -d '[:space:]' < "$HERE/VERSION" 2>/dev/null || echo '?')"
+SHA="$(git -C "$HERE" rev-parse --short HEAD 2>/dev/null || echo 'not a git checkout')"
 
 # 2. is this a valid install location? (~/.claude/skills/orbit) — decide BEFORE touching anything
 #    outside $HERE, so a mis-placed clone leaves no stray symlinks in the parent dir.
@@ -49,4 +52,5 @@ else
   printf '   For /orbit to load, this must be at %s/skills/orbit. Re-clone there.\n' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
   printf '   (Skipped the /orbit-upgrade symlink — not installing into a non-skills dir.)\n'
 fi
-printf '   Update: /orbit-upgrade (git pull).  Uninstall: %s\n' "$UNINSTALL"
+printf '   Commit: %s\n' "$SHA"
+printf '   Update: /orbit-upgrade (fetch + reset to latest).  Uninstall: %s\n' "$UNINSTALL"
