@@ -3,6 +3,26 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.26.1
+
+**Hardening — three reproduced P1s in the visibility system, fixed.**
+
+- **⚠️ Secret leak (privacy):** a key pasted into a prompt (`sk-proj-…`, `ghp_…`, `AKIA…`, a JWT,
+  `token: …`) landed verbatim in `.orbit/activity.jsonl` — the redaction only stripped control
+  chars. `_redact` (route.py + orbit-hook) now scrubs known secret shapes + labeled key/value pairs
+  to `[redacted]` *before* logging, and the dashboard scrubs again at render (defense in depth).
+  Benign prompts are unchanged.
+- **Subdirectory:** working inside e.g. `packages/app`, the hooks looked for `.orbit/` in the cwd
+  and missed the repo-root scaffold (no telemetry; the status line showed only `ctx%`). `orbit-hook`,
+  `route.py`, `orbit-statusline`, and `design-gate.py` now resolve the nearest `.orbit/` by walking
+  up from the cwd / the edited file (the status line prefers Claude's `workspace.project_dir`).
+- **Run isolation:** the dashboard pulled proof events from the whole log regardless of run, so a
+  fresh run could show `65%: test pass` from a *prior* run's proof. `orbit-status` now scopes events
+  to the current `run_id`; a fresh run with a stale passing-test proof correctly reads a neutral 50%.
+
+New `tests/test_visibility_hardening.py` + a subdir case in `test_design_gate.py`; 21 test files +
+the coherence gate all green.
+
 ## 0.26.0
 
 **A manager-visible team board.** 0.25.0 made the telemetry real, but the on-screen view was still
