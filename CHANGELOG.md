@@ -3,6 +3,33 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.26.0
+
+**A manager-visible team board.** 0.25.0 made the telemetry real, but the on-screen view was still
+checklist-shaped. This turns it team-shaped: who's working now, who's queued, and what the active
+one is doing — the standup a manager actually wants to see.
+
+- **`.orbit/agents.json`** — a live team roster (display name, one-line responsibility, task,
+  status, `started_at`, `last_event_at`, mission, last message), maintained in `activity.py`.
+  `emit()` folds every signal into it (so `orbit-hook` feeds it for free), and a new
+  **`set_team([...])`** lets the orchestrator declare the plan up front, so the board shows who's
+  **queued** and their job — not just whoever's already talking. Known spine roles carry human names
+  + responsibilities.
+- **`orbit-status`** grew a **Working now / Queued** team board *above* the checklist: each active
+  agent shows its human name, a live `active 4m 52s` clock, its task, mission, last signal, and who's
+  up next; queued agents show their job. Escalating quiet tiers — `quiet 1m` → `long step` →
+  `possibly stuck` (60/180/300s). New **`--team`** mode renders just the board (for printing inline);
+  `--json` now includes the roster.
+- **`orbit-statusline`** surfaces the active agent by human name + elapsed + quiet:
+  `🛰 F-S1 · Frontend Engineer 4m52s · 3/9 · quiet 72s · ctx 38%`.
+- **`orbit-hook`** drives the roster from SubagentStart/Stop and attributes a tool edit to whoever's
+  *active* (from `run.json`) instead of a phantom "builder".
+- **Guidance**: the orchestrator declares the team (`set_team`) before dispatching and prints the
+  inline board (`orbit-status --team`) before a long sub-agent wait — the user is never left on only
+  "waiting for background agent." Sub-agents emit a standup-style status (no chain-of-thought).
+- New `tests/test_team_board.py`; 19 test files + coherence all green; fully fail-safe (a garbage
+  `agents.json` never crashes any view).
+
 ## 0.25.0
 
 **Long runs now feel alive, measurable, and trustworthy.** A full run-visibility system: what's
