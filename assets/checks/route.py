@@ -135,18 +135,38 @@ def classify(prompt: str) -> str:
     return "ambiguous"
 
 
+_CONTROL = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|[\x00-\x1f\x7f]")  # ANSI escapes + control chars
+
+
+def _redact(text: str, cap: int = 80) -> str:
+    """A privacy-safe, dashboard-safe summary of a prompt: strip ANSI escapes + control chars
+    (so a prompt can't inject terminal codes into the live view), collapse whitespace, cap length.
+    We log a short redacted summary for context, never the full raw prompt."""
+    t = _CONTROL.sub(" ", str(text or ""))
+    t = re.sub(r"\s+", " ", t).strip()
+    return (t[: cap - 1] + "…") if len(t) > cap else t
+
+
 def emit_activity(cwd: Path, kind: str, prompt: str) -> None:
-    """Best-effort: let the system 'act first' visibly — log the routing decision to the stream."""
+    """Best-effort: let the system 'act first' visibly — log the routing DECISION to the stream.
+    Stores a redacted, control-stripped summary, never the raw prompt (privacy + no ANSI injection)."""
     try:
         orbit = cwd / ".orbit"
         if not orbit.is_dir():
             return
-        line = {  # same schema as activity.py so scripts/orbit-status can render it
+        run_id = ""
+        try:                                     # best-effort: tie the event to the current run
+            run_id = json.loads((orbit / "run.json").read_text()).get("run_id", "")
+        except Exception:
+            pass
+        line = {  # schema 2 — same shape activity.py writes, so scripts/orbit-status renders it
+            "schema": 2,
             "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "run_id": run_id,
             "role": "dispatcher",
             "phase": "route",
             "status": "start" if kind == "task" else "info",
-            "msg": f"routing decision: {kind} — {prompt[:80]}",
+            "msg": f"routing: {kind} — {_redact(prompt)}",
         }
         with (orbit / "activity.jsonl").open("a") as f:
             f.write(json.dumps(line) + "\n")
