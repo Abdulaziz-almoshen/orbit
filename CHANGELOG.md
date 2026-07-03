@@ -3,6 +3,52 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.24.1
+
+**⚠️ Security — the guard's flagged-wrapper and home-path parsing had real gaps.** An independent
+review confirmed four live bypasses: `sudo -E git push --force`, `env -i git push --force`,
+`echo x | xargs -I{} sh -c "git push --force"`, and `rm -rf ~/.ssh` all returned empty (allow)
+output. Root cause: `_strip_wrappers` only stripped the wrapper's *name* (`sudo`, `env`, `xargs`),
+not the wrapper's *own flags* — so `-E`/`-i`/`-I{}` were left sitting where the real command name
+should be, and every downstream `is_git()`/`_push()` check silently failed. Separately, the
+catastrophic/sensitive `rm` checks only recognized absolute paths, not home-relative ones like
+`~/.ssh`. Both are fixed: wrapper-flag stripping now handles known value-taking flags (as a
+separate token, inline, or bundled in a getopt-style short cluster like `-Eu`) for `sudo`/`env`/
+`xargs`, and `~/`/`$HOME/`-relative dotfile/dotdir paths are now recognized as sensitive. Guard
+tests: 59 → **72 cases**, one per closed gap plus the realistic variants around it.
+
+Also from that review:
+
+- **Docs now match reality.** README claimed "8 automated test files" (actually 12 at release
+  time, now 13); Self-update said "auto-upgrade is on by default" with no mention of the
+  first-time consent-once ask that's actually implemented, and repeatedly called the update
+  mechanism "a `git pull`" when it's `git fetch` + `git reset --hard` (local edits are stashed,
+  not merged — a real difference if you've hand-modified the installed copy). All three fixed to
+  describe the actual, current behavior. `orbit-uninstall`'s "everything is removable" claim is
+  corrected to name what's actually left for manual review (`.claude/agents/*.md`, `CLAUDE.md`) —
+  the script itself already documented this; only the README oversold it.
+- **The hero moved the "works now vs. stub" disclosure up.** "It runs on your own orchestrator"
+  read as a day-one claim for the portable `loop.py` path, whose `dispatch()` is a stub. The hero
+  line is softened and a callout right after the intro states the Claude Code path works today
+  while the portable path needs one wire-up — instead of that disclosure living only deep in the
+  Safety table.
+- **A compact command map**, added right after Install: `/orbit`, `/orbit:orbit-run`,
+  `scripts/orbit-status --follow`, `orbit-uninstall`, `/orbit-upgrade` in one table instead of
+  scattered across the doc.
+- **The project-local hook trust boundary, named honestly.** `.claude/settings.json` points hooks
+  at files tracked inside the product repo — anyone with commit access can modify `guard.py`
+  itself. This is inherent to Claude Code's project-local hook model, not fixed here, but now:
+  documented plainly with concrete mitigation advice (CODEOWNERS on `.orbit/checks/` +
+  `.claude/settings.json`), and a new **`scripts/verify-hooks.py --target <repo>`** that hashes a
+  repo's installed hooks against what your current Orbit install ships and flags drift —
+  detection, not prevention, and labeled as such.
+- **Resolved-commit visibility.** `install.sh`, `./setup`, and `/orbit-upgrade` now print the
+  resolved commit SHA after every install/upgrade — a concrete, checkable record of what's
+  running, since installs track a mutable branch, not a signed release. Signed tags + checksum
+  verification would be stronger and are named as a real next step, not claimed as done.
+- New `tests/test_verify_hooks.py`. Suite is now 13 files + the coherence gate, all green;
+  `claude plugin validate` passes.
+
 ## 0.24.0
 
 **Prototype-before-develop, scoped to the work that deserves it.** The Designer's style-prototype
