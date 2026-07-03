@@ -132,27 +132,40 @@ so if the task tools aren't called you can still see it via `orbit-status` (belo
 ```
 
 **Headless only — your own orchestrator (Gemini, cron, CI)** — there's no chat to pin a
-checklist into, so run `scripts/orbit-status --follow` for a live, color-coded dashboard
-(press **Ctrl-C** to stop):
+checklist into, so run `scripts/orbit-status --follow` for a live dashboard (**Ctrl-C** to stop):
 
 ```text
-🛰  ORBIT — live status   .orbit
+🛰  Orbit Run  build settings screen
+Lifecycle  Discover › Plan › [Build] › Verify › Safety › Report
+Progress   [######----] 5/9 tasks   cycle 2   11m elapsed
+
+Active
+  builder   15:38:14   editing settings form
 
 Checklist
-  ✓ [orchestrator] plan cycle 1
-  ✓ [data]         validate inputs
-  ▸ [analyst]      derive candidate output
-  ○ [safety]       gate the output
-  ○ [reviewer]     check vs success criteria
+  ✓ [dispatcher] classify request
+  ▸ [builder]    implement settings UI
+  ○ [qa-engineer] run proof checks
 
-Now  [analyst] act — scoring 412 validated rows
-
-Thread (who said what)
-  20:14:02 ✓ [orchestrator] plan: planned 5 tasks for cycle 1
-  20:14:09 ▸ [data]         act: fetching + validating inputs
-  20:14:15 ✓ [data]         act: 412 rows, schema OK
-  20:14:15 ▸ [analyst]      act: scoring 412 validated rows
+Budget      cost $0.42   41000 tokens
+Confidence  76%: test, review pass; safety pending
+Last event  0s ago [builder] editing settings form
 ```
+
+**A one-line status line, too.** On install Orbit wires a Claude Code `statusLine` (only if you
+don't already have one) — the run at a glance, every couple of seconds:
+
+```text
+🛰 build · builder · 5/9 · ctx 38% · $0.42 · cache 61% · conf 76%
+```
+
+Everything here is fed **mechanically** by a telemetry hook (`orbit-hook`) on Claude Code's real
+run events (sub-agent start/stop, native task create/complete, tool edits/failures, notifications)
+— so it stays live even if a role forgets to narrate. Dashboard modes: `--compact` (a 3-line
+summary), `--json` (machine-readable), `--no-ansi` (plain, also honors `NO_COLOR`). **Confidence**
+is evidence-based (tests/review/safety/QA passing = up; a failure or blocker = down), not a vibe.
+When a run needs a decision in a headless context, it writes a **decision card** the dashboard pins
+(`❓ Decision needed …` with options + a recommendation) and the status line shows `⚠ needs input`.
 
 **On the Claude desktop app / claude.ai web** — there's no pinned panel or terminal, so Orbit
 **renders the team board inline in chat every cycle** (a compact emoji-colored checklist + who's
@@ -359,6 +372,7 @@ guarantee and a suggestion:
 | **Token + cost budgets** | ✅ **binds on the runner** | `ralph_loop.sh` meters `claude -p --output-format json`; `loop.py` tracks + persists spend across `--resume`. `move_money` is `FORBIDDEN` (raises). |
 | **Router classification** (`UserPromptSubmit` → `route.py`) | ⚖️ **system decides, model executes** | A deterministic keyword classifier picks the lane (task→loop / question→direct) and injects it every turn — that call is the system's. But the model still *runs* the loop; a hook can't spawn the sub-agents itself. |
 | **Roles, playbooks, the review/QA gates** | 📋 **advisory** | Prompt-driven discipline the model follows reliably — strong, but not mechanically enforced. |
+| **Telemetry / status line** (`orbit-hook`, `orbit-status`, `orbit-statusline`) | 👁️ **observe-only** | A hook collector on Claude Code's real run events feeds the live dashboard + status line. Never blocks a tool, never logs a raw prompt (redacted), fails open, wired from the trusted install path. Records what happened; changes nothing. |
 | **Design gate** (the Designer's prototype-before-develop flow, frontend repos) | ⚖️ **advisory determination + a coarse hook ask** | The HEAVY-vs-TRIVIAL call and the 2–5 prototype build are model judgment, same as any routing call. A `PreToolUse` hook (`design-gate.py`, `Edit\|Write\|MultiEdit`) backstops the *silent skip*: it asks (never denies) once per cycle if a UI production file is touched with no `design/approved.json` or `.orbit/design/TRIVIAL` on record. It's a **coarse traceability backstop** — it can only see the file path, not the content, so it catches "no design process happened," not "the wrong prototype won." |
 | **`loop.py dispatch()`** (your own-model path) | 🔌 **stub** | An honest seam: raises until you wire it to Gemini/etc. The Claude Code subagent path is what works today. |
 
@@ -395,9 +409,11 @@ whose brakes actually bind — and that part is proven, not asserted:
   actual command output pasted in (no mock-ups).
 - 🧪 **[Evals](docs/evals.md)** — harness invariants that pass **3/3** (deterministic, runnable now)
   plus an honest, still-empty task-quality A/B table. We publish real numbers or none — never faked.
-- ✅ **13 automated test files + the coherence gate** — guard schema + 70+ bypass/wrapper cases,
+- ✅ **18 automated test files + the coherence gate** — guard schema + 70+ bypass/wrapper cases,
   router accuracy (69/69), budget persistence, migration safety, install/uninstall behavior,
-  scaffold idempotency, config-vs-code consistency, hook-drift detection. `bash tests/run.sh`.
+  scaffold idempotency, config-vs-code consistency, hook-drift detection, telemetry schema +
+  prompt redaction, the hook collector, the dashboard/status line, confidence + lifecycle, and
+  decision cards. `bash tests/run.sh`.
 
 The [binds / advisory / stub table](#safety--what-binds-and-what-doesnt) above is the honest map of
 what's enforced vs. what's prompt-discipline. If that trade sounds useful, **you're exactly the early
@@ -414,12 +430,14 @@ orbit/                          ← this repo == the skill dir (clones to ~/.cla
 ├── CHANGELOG.md                # what "what's new" reads from
 ├── bin/
 │   ├── orbit-preamble          # the skill's STEP 0 in one command (resolve + version check)
+│   ├── orbit-hook              # telemetry collector wired to Claude Code run events (trusted-install)
 │   ├── orbit-update-check      # prints UPGRADE_AVAILABLE / JUST_UPGRADED / nothing
 │   └── orbit-uninstall         # removes the Orbit scaffold from a product repo
 ├── references/                 # methodology, templates, roles, loop design, observability,
 │                               #   hooks/enforcement, profiles, playbooks (the skill library)
-├── assets/                     # loop.py, loop.config.json, activity.py, ralph_loop.sh,
-│                               #   orbit-status, checks/guard.py + route.py, qa/ tools, role adapters
+├── assets/                     # loop.py, loop.config.json, activity.py (schema-2 telemetry +
+│                               #   run.json), confidence.py, lifecycle.py, ralph_loop.sh,
+│                               #   orbit-status, orbit-statusline.py, checks/*, qa/ tools, role adapters
 ├── scripts/scaffold.py         # lays down the deterministic skeleton (Phase 2)
 ├── scripts/check-coherence.py  # the coherence gate (no phantom skills / roster drift)
 ├── scripts/verify-hooks.py     # detects drift between a repo's installed hooks and this install
