@@ -96,6 +96,8 @@ FILE_PLAN = [
     ("loop.config.json", ".orbit/loop.config.json", None),
     ("loop.py",          ".orbit/loop.py",          0o755),
     ("activity.py",      ".orbit/activity.py",      None),
+    ("confidence.py",    ".orbit/confidence.py",    None),   # evidence-based delivery confidence
+    ("lifecycle.py",     ".orbit/lifecycle.py",     None),   # mode detection + phase strip
     ("ralph_loop.sh",    "scripts/ralph_loop.sh",     0o755),
     ("orbit-status",     "scripts/orbit-status",      0o755),
     ("checks/guard.py",  ".orbit/checks/guard.py",    0o755),  # placed, NOT wired (see skill Phase 6a)
