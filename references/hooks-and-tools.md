@@ -92,8 +92,11 @@ gets no say. If a safety rule is non-negotiable, it must be a hook; otherwise yo
 suggestion and called it a guarantee.
 
 A `PreToolUse` hook is a small program: it reads the tool call as JSON on **stdin** and prints
-a decision on **stdout** — `{}` to allow, or `{"permissionDecision":"deny"|"ask","message":"…"}`
-to block (`deny`) or pause for the human (`ask`). State (e.g. a frozen boundary) lives in an
+a decision on **stdout** — print **nothing** to allow, or, to block (`deny`) or pause for the
+human (`ask`), the exact envelope current Claude Code reads:
+`{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"|"ask","permissionDecisionReason":"…"}}`.
+(The old top-level `{"permissionDecision":…}` shape is silently ignored by the binary — a
+malformed decision does nothing, so always test the hook against a real `claude -p` session.) State (e.g. a frozen boundary) lives in an
 external file read on every call, so the rule binds across turns and fresh contexts. Register
 it in `.claude/settings.json` under `hooks.PreToolUse` with a matcher (e.g. `Bash`). Confirm
 the exact field names against current Claude Code hook docs before shipping — a malformed hook

@@ -227,9 +227,13 @@ python3 "$ORBIT/scripts/scaffold.py" --target . --surfaces <detected> [--install
   works as an alias for `--surfaces web`.)
 - Add **`--install-hooks`** to wire the safety hooks now (or leave it for Phase 6a).
 - It **never overwrites** — existing files are left untouched and reported, so a re-run is safe.
+  The **one exception is a security migration**: a repo scaffolded before 0.23.0 has a `guard.py`
+  whose blocks Claude Code silently ignored and a `route.py` that crashed the dashboard — the
+  scaffolder replaces those *known-old* files (backing each up + announcing it), and only *warns*
+  (never clobbers) if you'd edited them. Tell the user plainly when this fires.
 
 This replaces hand-authoring ~20 files. The **universal spine** (dispatcher, orchestrator,
-product-discovery, market-researcher, planner, reviewer, reporter, safety-gate) is the same every
+product-discovery, market-researcher, planner, reviewer, qa-engineer, reporter, safety-gate) is the same every
 project; the **specialists vary by the code** (the per-surface engineers + the conditional Designer).
 Everything is in place and working — **don't re-author any of it.**
 

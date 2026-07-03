@@ -48,6 +48,17 @@ def role_color(role: str) -> str:
     return ROLE_COLORS.get(key, "\033[37m")
 
 
+def actor(e) -> str:
+    """The speaker — accept 'role' (current schema) or 'who' (legacy) or fall back."""
+    return e.get("role") or e.get("who") or "?"
+
+
+def fmt_ts(e) -> str:
+    """HH:MM:SS from an ISO ts; tolerate ints/odd values without crashing."""
+    ts = str(e.get("ts", ""))
+    return ts[11:19] if len(ts) >= 19 and "T" in ts else ts[:8]
+
+
 def load_tasks():
     try:
         return json.loads(TASKS.read_text())
@@ -58,9 +69,17 @@ def load_tasks():
 def load_events(n):
     try:
         lines = [l for l in ACTIVITY.read_text().splitlines() if l.strip()]
-        return [json.loads(l) for l in lines[-n:]]
     except Exception:
         return []
+    out = []
+    for l in lines[-n:]:
+        try:
+            ev = json.loads(l)
+            if isinstance(ev, dict):
+                out.append(ev)
+        except Exception:
+            continue  # a bad line must never kill the dashboard
+    return out
 
 
 def render(tail: int) -> str:
@@ -83,9 +102,10 @@ def render(tail: int) -> str:
 
     if events:
         e = events[-1]
-        col = role_color(e.get("role", ""))
+        who = actor(e)
+        col = role_color(who)
         ph = e.get("phase", "")
-        out.append(f"{B}Now{RST}  {col}{B}[{e.get('role', '?')}]{RST} "
+        out.append(f"{B}Now{RST}  {col}{B}[{who}]{RST} "
                    f"{ph + ' — ' if ph else ''}{e.get('msg', '')}")
         out.append("")
 
@@ -93,12 +113,15 @@ def render(tail: int) -> str:
     if not events:
         out.append(f"  {DIM}(waiting for activity…){RST}")
     for e in events:
-        col = role_color(e.get("role", ""))
-        ts = e.get("ts", "")[11:19]
-        badge = EVENT_BADGE.get(e.get("status", "info"), "·")
-        ph = e.get("phase", "")
-        out.append(f"  {DIM}{ts}{RST} {col}{badge} [{e.get('role', '?')}]{RST} "
-                   f"{ph + ': ' if ph else ''}{e.get('msg', '')}")
+        try:
+            who = actor(e)
+            col = role_color(who)
+            badge = EVENT_BADGE.get(e.get("status", "info"), "·")
+            ph = e.get("phase", "")
+            out.append(f"  {DIM}{fmt_ts(e)}{RST} {col}{badge} [{who}]{RST} "
+                       f"{ph + ': ' if ph else ''}{e.get('msg', '')}")
+        except Exception:
+            continue  # one malformed event never breaks the whole render
     return "\n".join(out)
 
 

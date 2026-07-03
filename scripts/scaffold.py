@@ -25,11 +25,51 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import shutil
 import time
 from pathlib import Path
+
+# Hooks that shipped with a defect in <0.23.0 and must be re-provisioned in existing repos.
+# We only auto-replace a file that is BYTE-IDENTICAL to a known-old shipped version (never a
+# user-modified one — those get a warning with manual instructions).
+HOOK_MIGRATIONS = [
+    {"src": "checks/guard.py", "dst": ".orbit/checks/guard.py",
+     "old_marker": b'"permissionDecision": decision',      # top-level (Claude Code ignores it)
+     "old_hashes": {"0c5eb314a1dc64ad408adeb0d2170644f9bc48eeb343b562fbe6bf17fb098013"},
+     "why": "its deny/ask decisions were silently ignored by Claude Code — blocks did nothing"},
+    {"src": "checks/route.py", "dst": ".orbit/checks/route.py",
+     "old_marker": b'"who":',                               # old event schema
+     "old_hashes": {"39040718046c1e57aede2eab41291c874da37392507693205f80ec880cae1584",
+                    "3cdb8b75d49da422b8b09504e3f612f6e6b3d539d41ee35923aa98ef1c21c77b",
+                    "6e821feb7f8b2c400d1f1254a0f5fef2d225ab8858af5bde0c226987f62f8ec8"},
+     "why": "its event log crashed the orbit-status dashboard"},
+]
+
+
+def migrate_hooks(target: Path, created, warnings):
+    """Replace known-old shipped hook files in an existing repo (security/correctness fixes).
+    Never touches a locally-modified file — those are warned about with manual instructions."""
+    for m in HOOK_MIGRATIONS:
+        dst = target / m["dst"]
+        if not dst.exists():
+            continue                                        # fresh file — normal _place copies the new one
+        content = dst.read_bytes()
+        if m["old_marker"] not in content:
+            continue                                        # already the new version (or unrelated) — leave it
+        src = ASSETS / m["src"]
+        if hashlib.sha256(content).hexdigest() in m["old_hashes"]:
+            bak = dst.with_name(dst.name + f".bak.{int(time.time())}")
+            bak.write_bytes(content)
+            dst.write_bytes(src.read_bytes())
+            dst.chmod(0o755)
+            created.append(f"{m['dst']}  (⚠ FIXED — {m['why']}; old version → {bak.name})")
+        else:
+            warnings.append(
+                f"{m['dst']} looks OLD but was locally modified — NOT auto-replaced. "
+                f"({m['why'].capitalize()}.) Fix: diff it against {src} and port your changes.")
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
 ASSETS = SKILL_ROOT / "assets"
@@ -220,10 +260,13 @@ def main():
         surfaces.append("web")
     engineers, has_ui = resolve_engineers(surfaces)
 
-    created, skipped = [], []
+    created, skipped, warnings = [], [], []
 
     for d in DIRS:
         (target / d).mkdir(parents=True, exist_ok=True)
+
+    # 0. migrate known-old shipped hooks in an existing repo (before the never-overwrite copy below)
+    migrate_hooks(target, created, warnings)
 
     # 1. engine files
     for src_rel, dst_rel, mode in FILE_PLAN:
@@ -281,6 +324,10 @@ def main():
         print("\nSkipped (already present or missing source):")
         for s in skipped:
             print("  -", s)
+    if warnings:
+        print("\n⚠️  ACTION NEEDED:")
+        for w in warnings:
+            print("  ! ", w)
 
     print(
         "\nThe skeleton is down. The ONLY thing left to author by hand is the project-specific part:\n"

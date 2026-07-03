@@ -7,15 +7,16 @@ Once Orbit is installed in a repo, Claude Code runs this BEFORE the model sees e
 decision as a live instruction every turn. This is what makes Orbit control the project instead of
 being an optional rule the model may or may not follow.
 
-- TASK (build / fix / add / implement / change the product) → inject: route it through the loop.
-- QUESTION (status / explanation) → inject: answer directly, no loop.
-- AMBIGUOUS → inject: ask one clarifying question, then route per CLAUDE.md §10.
+- TASK (build / fix / add / implement / an operational command, incl. polite "can you…") → route through the loop.
+- QUESTION (status / explanation / "how do I…") → answer directly, no loop.
+- ACK / negation / slash-command / short reply ("yes", "go ahead", "don't…", "/orbit") → inject nothing.
+- AMBIGUOUS → inject a SOFT directive: decide the lane yourself; only ask if genuinely blocked.
 
-Honest scope: the hook DECIDES routing deterministically and forces the directive into context every
-turn (that part is the system's, guaranteed). The model still *executes* the loop — Claude Code can't
-make a hook run the sub-agent team itself. But a per-turn, front-of-context, system-issued directive
-is a real control layer, not a passive memory rule. It FAILS OPEN: any error → no injection, prompt
-proceeds untouched. It never blocks a prompt.
+Honest scope: classification is a fast, **deterministic English-keyword matcher** (not an LLM, not
+NLP) — non-English or unusual phrasing falls to the soft "ambiguous" directive rather than being
+forced. The hook DECIDES the lane and injects the directive every turn (that part is the system's,
+guaranteed); the model still *executes* the loop — a hook can't run the sub-agent team itself. It
+FAILS OPEN: any error → no injection, prompt proceeds untouched. It never blocks a prompt.
 """
 from __future__ import annotations
 
@@ -25,24 +26,44 @@ import sys
 import time
 from pathlib import Path
 
-# Verbs/phrases that mean "change the product" → route through the loop.
+# A bare acknowledgment / confirmation / short reply → the loop must NOT interject.
+ACK_PAT = re.compile(
+    r"^\s*(y|yes|yep|yeah|no|nope|ok|okay|k|sure|sounds good|go ahead|go for it|proceed|"
+    r"continue|do it|please do|makes sense|got it|great|perfect|nice|thanks|thank you|ty|thx|"
+    r"lgtm|ship it|approved|correct|right|agreed|option\s+\w+|[a-d1-9])\s*[.!)]*\s*$",
+    re.IGNORECASE,
+)
+
+# Verbs that mean "change the product / do operational work" → route through the loop.
 TASK_PAT = re.compile(
     r"\b("
     r"build|implement|add|create|make|develop|fix|debug|refactor|rewrite|write|"
     r"set\s?up|scaffold|migrate|redesign|re-?design|port|integrate|optimi[sz]e|"
     r"rename|remove|delete|drop|update|change|modify|replace|convert|generate|"
-    r"wire|hook\s?up|deploy|ship|build\s?out|start\s+(?:dev|development|building|implementing)"
+    r"wire|hook\s?up|deploy|ship|build\s?out|"
+    r"run|execute|install|uninstall|commit|push|merge|rebase|revert|bump|release|tag|"
+    r"test|retest|verify|translate|move|extract|split|configure|connect|disconnect|"
+    r"upgrade|downgrade|format|lint|clean|seed|mock|stub|document|benchmark|profile|"
+    r"roll\s?back|start\s+(?:dev|development|building|implementing)"
     r")\b",
     re.IGNORECASE,
 )
 
-# Interrogative / status openers → answer directly.
+# A polite request that WRAPS an action ("can you fix…", "please add…") → still a task.
+POLITE_PAT = re.compile(
+    r"^\s*(please\s+)?(can|could|would|will|would you mind)\s+(you\s+)?(please\s+)?", re.IGNORECASE,
+)
+
+# Genuine info-seeking openers → answer directly. (NO can/could/would/will — those are requests.)
 QUESTION_PAT = re.compile(
-    r"^\s*(what|whats|what's|why|how|when|where|who|which|is|are|am|do|does|did|"
-    r"can|could|should|would|will|has|have|explain|show|list|tell\s+me|describe|"
-    r"status|are\s+we|is\s+it)\b",
+    r"^\s*(what|whats|what's|why|how|when|where|who|which|is|are|am|do|does|did|should|"
+    r"has|have|explain|describe|clarify|walk\s+me|status|is\s+it|is\s+there)\b",
     re.IGNORECASE,
 )
+
+# Leading negation of an action → the user is deferring/declining; don't route it as work-to-do.
+NEGATION_PAT = re.compile(r"^\s*(don'?t|do not|no need to|never mind|nevermind|stop|hold off|not yet)\b",
+                          re.IGNORECASE)
 
 TASK_CTX = (
     "[orbit] SYSTEM ROUTING DECISION — this message is a TASK. Route it through the loop. "
@@ -65,25 +86,47 @@ QUESTION_CTX = (
     "roles, no ceremony. Read .orbit/STATE.md only if it helps."
 )
 AMBIGUOUS_CTX = (
-    "[orbit] SYSTEM ROUTING DECISION — ambiguous. Ask exactly ONE clarifying question — via the "
-    "AskUserQuestion tool (2-4 selectable options, your recommendation FIRST labeled '(Recommended)', "
-    "a one-line trade-off per option; NEVER a question buried in prose). Then route per CLAUDE.md §10 "
-    "(task → loop; question → direct). Lean to the loop if it would change the product."
+    "[orbit] routing: unclassified — decide the lane yourself per CLAUDE.md §10 (task → loop; "
+    "question → answer directly). Do NOT force a question. Only if a genuinely blocking ambiguity "
+    "stops you from proceeding, ask ONE AskUserQuestion (2-4 selectable options, your recommendation "
+    "FIRST labeled '(Recommended)', a one-line trade-off each — never a question buried in prose)."
+)
+
+
+_INFO_OPENER = re.compile(
+    r"^\s*(explain|describe|clarify|walk\s+me|show|list|tell|what|whats|what's|how|why|when|"
+    r"where|who|which)\b", re.IGNORECASE,
 )
 
 
 def classify(prompt: str) -> str:
     p = prompt.strip()
-    if not p or p.startswith("/"):          # slash-commands / empty → don't interfere
+    if not p or p.startswith("/"):              # slash-commands / empty → don't interfere
         return "skip"
+    if ACK_PAT.match(p):                          # "yes" / "ok" / "go ahead" / "option 2" → say nothing
+        return "skip"
+    if NEGATION_PAT.match(p):                     # "don't build X yet" → not work-to-do; don't interject
+        return "skip"
+
     has_task = bool(TASK_PAT.search(p))
-    looks_question = bool(QUESTION_PAT.match(p)) or p.rstrip().endswith("?")
-    if has_task and not looks_question:
+    ends_q = p.rstrip().endswith("?")
+    opener_q = bool(QUESTION_PAT.match(p))
+    polite = POLITE_PAT.match(p)
+
+    if polite:                                    # "can you <X>" — a request, not an interrogative
+        if has_task:
+            return "task"                         # "can you fix the bug?" → task
+        rem = p[polite.end():]
+        return "question" if _INFO_OPENER.match(rem) else "ambiguous"  # "can you explain…" → question
+
+    if opener_q:                                  # "how do I add X?" / "what does Y do?" → answer
+        return "question"
+    if has_task:                                  # imperative action → loop
         return "task"
-    if has_task and looks_question:          # "how do I add X?" — asking, not commanding
+    if ends_q:                                    # a trailing '?' with no task verb → a question
         return "question"
-    if looks_question:
-        return "question"
+    if len(p.split()) < 4:                        # short, no verb, not a question → don't interject
+        return "skip"
     return "ambiguous"
 
 
@@ -93,9 +136,9 @@ def emit_activity(cwd: Path, kind: str, prompt: str) -> None:
         orbit = cwd / ".orbit"
         if not orbit.is_dir():
             return
-        line = {
-            "ts": int(time.time()),
-            "who": "dispatcher",
+        line = {  # same schema as activity.py so scripts/orbit-status can render it
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "role": "dispatcher",
             "phase": "route",
             "status": "start" if kind == "task" else "info",
             "msg": f"routing decision: {kind} — {prompt[:80]}",
