@@ -3,6 +3,52 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.25.0
+
+**Long runs now feel alive, measurable, and trustworthy.** A full run-visibility system: what's
+happening, who's active, how far along, what it's spending, how confident it is, and any decision
+it's waiting on — fed **mechanically** by a hook collector on Claude Code's real run events, so it
+stays live even when a role forgets to narrate. (Every hook event and status-line field was
+verified against the current Claude Code docs before building.)
+
+- **Schema-2 telemetry + an atomic `run.json` snapshot.** Events carry run_id + optional
+  tokens/cost/confidence_delta/proof/files; `.orbit/run.json` is a compact, atomically-written
+  (temp + os.replace) summary — phase, active role, done/total, elapsed, budget totals, confidence,
+  blocked question — maintained by O(1) accumulators. Backward-compatible with schema-1 events.
+- **`bin/orbit-hook` — a telemetry collector** wired to SubagentStart/Stop, TaskCreated/Completed
+  (it mirrors the *native* Claude Code checklist into `.orbit/tasks.json`, so done/total is real),
+  PostToolUse (file edits only), PostToolUseFailure, PostToolBatch, Stop, Notification. Observe-only
+  (never blocks a tool, never returns a permission decision), never logs a raw prompt, fails open.
+  Wired from the **trusted install path** — not copied into the repo — so editing the product repo
+  can't alter the collector (addresses the project-local-hook trust boundary).
+- **A one-line status line** (`orbit-statusline.py`) fusing Claude's status JSON (context %, cost,
+  cache reuse — honestly labeled, not "tokens saved" — model) with `run.json`. Wired only if you
+  don't already have a status line; never overwrites yours.
+- **A rich `orbit-status` dashboard**: lifecycle phase strip (mode-aware), progress bar, active
+  roles, budget, evidence-based confidence with a reason, and stall detection (30s / 90s). New
+  modes: `--compact`, `--json`, `--no-ansi` (honors `NO_COLOR`).
+- **Evidence-based confidence** (`confidence.py`): +tests/lint/review/safety/QA pass, −failing
+  test / blocker / large unreviewed diff / safety concern, off a neutral 50 — with a plain reason,
+  never a fabricated 100.
+- **Lifecycle modes** (`lifecycle.py`): feature / bug / design / refactor / data, detected from the
+  task so the dashboard shows the right phase strip instead of "Discover → Plan → Build" for a
+  one-line fix.
+- **Decision cards** (the headless equivalent of AskUserQuestion): `activity.ask()` writes
+  `.orbit/pending-question.json` (title, why, options, recommended); the dashboard pins it and the
+  status line shows `⚠ needs input`; `activity.resolve_question()` clears it. (Interactive path
+  still uses the AskUserQuestion tool.)
+- **Deliverable-report templates** (`deliverable-reports.md`, loaded by the Reporter): the report
+  spine (what changed · proof · confidence · risks · files · next) per lifecycle mode, pulling REAL
+  numbers, with honesty rules (a CONCERNS/failing gate is never "DONE").
+- **Privacy**: `route.py` no longer logs the raw prompt — it stores a redacted, control-and-ANSI-
+  stripped summary (no terminal injection into the live view). An adversarial review confirmed the
+  system's invariants (fail-open, no-raw-prompts, observe-only, atomic writes, trusted-install
+  import) hold; two low-severity defense-in-depth items (OSC-sequence stripping, render-time
+  sanitization) were fixed.
+- **Tests**: +6 suites (observability schema-2, orbit-hook, statusline, dashboard, confidence+
+  lifecycle, decision cards) — 18 files + the coherence gate, all green. `orbit-uninstall` removes
+  every new hook/status-line surface; the status-line/telemetry rows are in the honest binds table.
+
 ## 0.24.1
 
 **⚠️ Security — the guard's flagged-wrapper and home-path parsing had real gaps.** An independent
