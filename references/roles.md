@@ -18,19 +18,29 @@ default; rename and re-scope each role to the real subtasks of the product you'r
 | **Product Discovery Manager** *(planning phase, substantial lane)* | De-risk the *bet* before building: frame the **outcome** + the user's **job**, map opportunities from evidence, kill the four risks (value/usability/feasibility/viability), name the **riskiest assumption + cheapest test**. Extends clarify-and-challenge with evidence. Loads `product-discovery`. | clarified intent, repo/analytics, market brief | `discovery-brief.md` |
 | **Market & Competitive Researcher** *(planning phase, substantial lane)* | What already exists, what the user would use instead, where the gap is — a **reuse-vs-build verdict**, graded feature matrix, positioning. Timeboxed, cited. Runs in **parallel** with discovery. Loads `market-and-competitive-research`. Distinct from Input/Research below. | the JTBD/intent, the web, deps | `market-brief.md` |
 | **Planner** *(planning phase, substantial lane)* | Turn the validated, de-risked bet into the **plan of record** — thin vertical slices, sequenced by dependency + risk, a proof bar per slice, hand-off specs. Emits **decision briefs** in the standard format up to the Orchestrator. Loads `planning-and-decision-briefs`. | discovery + market briefs, §3 criteria | `plan.md` + decision briefs |
-| **Input / Research Specialist** | Gather, clean, and validate the **data inputs** the work consumes; guarantee they're complete and fresh. (Supply-side data — *not* the demand-side Market Researcher above.) | external sources, input-validation skill | validated inputs + a quality report |
+| **Input / Research Specialist** *(optional — provision when the domain has a distinct data-intake lane)* | Gather, clean, and validate the **data inputs** the work consumes; guarantee they're complete and fresh. (Supply-side data — *not* the demand-side Market Researcher above.) | external sources, `input-validation` skill *(author per domain)* | validated inputs + a quality report |
 | **Builder / Executor** | Produce the core output of the product from the validated inputs. (On a frontend repo, implements the Designer's Design Plan.) | validated inputs, the domain skill, design-plan | candidate output + rationale |
 | **Designer** *(frontend repos only — see `profiles/frontend.md`)* | On any UI request, **first** run the mandatory **style-prototype gate**: shortlist 2–4 of the 67 styles, build a standalone HTML prototype of each, open them, let the user **pick** — then turn the chosen style into a distinctive, production-grade **Design Plan** (tokens + layout + signature) grounded in the product's world. Loads `design-methodology` + `design-styles` (the 67-style catalog) + `anti-ai-aesthetics`. | the brief, design source of truth | HTML prototypes → a Design Plan for the Builder |
-| **Analyst** | Derive, transform, or evaluate as the domain requires; add context the Builder needs. | inputs, prior outputs | analysis notes |
+| **Analyst** *(optional — provision when the domain needs a distinct analysis lane)* | Derive, transform, or evaluate as the domain requires; add context the Builder needs. | inputs, prior outputs | analysis notes |
 | **Safety / Compliance** | Check the output is safe, permitted, and free of unreviewed side effects; block anything forbidden. **Veto power.** | candidate output, safety-rules skill | approved-or-rejected output + reason |
 | **Reviewer / Evaluator** | Quality gate before "done": check the output against §3 success criteria and **prove** it (run tests/validators, not eyeball); catch errors/regressions across correctness, security, concurrency, migrations, performance, tests, API-contract, maintainability. Loads `technical-review` (severity×confidence gate, **quote-the-line** verification, blast-radius judgment). On UI work, also apply the **Design Distinctiveness** gate — *and confirm the mandatory style-prototype selection happened* (a UI change with no user-picked style + previews doesn't pass). **Enforces ADRs**: an architectural change in the diff with no corresponding ADR in `.orbit/decisions/` is a finding, and each accepted ADR's Confirmation check runs as part of the gate. **Gate power.** (Reviews the *diff*; the QA Engineer validates the *product* — both must pass.) | all outputs, success criteria, the diff, `.orbit/decisions/` | pass/fail + evidence-backed findings |
 | **QA Engineer** | Validate the **product against the requirements** — requirement by requirement, user story by user story; on UI work, pixel-by-pixel vs the approved design. Builds a **Requirements Traceability Matrix** (every ID → test → verdict → evidence; PASS/CONCERNS/FAIL/WAIVED). **Report-only** (never fixes). Loads `qa-validation`. **Gate power** — a P0 FAIL or score <85 means not done. | the Planner's requirements/EARS criteria, the running app, `design/approved.json` + `DESIGN.md` | the RTM report + verdict |
-| **Reporter** | Turn results into clear, decision-ready outputs/explanations. | everything above, output-formatting skill | reports, summaries |
+| **Reporter** | Turn results into clear, decision-ready outputs/explanations. | everything above, `output-formatting` skill *(author per domain)* | reports, summaries |
 
 Two roles hold special power and must always exist: **Safety/Compliance** can veto any
 action (it is the safety gate), and **Reviewer/Evaluator** decides whether a cycle's
 output is good enough to count as progress (it is the quality gate). The Orchestrator may
 delegate freely but cannot overrule either gate without a human.
+
+**Which roles `/orbit` always provisions — the universal spine** (dispatcher, orchestrator,
+product-discovery, market-researcher, planner, reviewer, qa-engineer, reporter, safety-gate):
+Dispatcher, Orchestrator, Product Discovery Manager, Market & Competitive Researcher, Planner,
+Reviewer, QA Engineer, Reporter, Safety/Compliance — plus **one Builder/Engineer per detected surface** (web →
+Frontend Engineer, api → Backend Engineer, etc.). This list is canonical in
+`scripts/scaffold.py` → `ROLES_CORE` + `SURFACE_ENGINEERS`; `scripts/check-coherence.py`
+enforces that every role named here maps to something the scaffolder creates. The roles marked
+*(optional)* above (Input/Research Specialist, Analyst) are **not** in the spine — provision
+them by hand when a domain genuinely has a separate data-intake or analysis lane.
 
 ## Skill library — provision skills to a role when you create it
 

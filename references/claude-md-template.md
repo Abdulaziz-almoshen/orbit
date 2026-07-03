@@ -86,13 +86,13 @@ several executors, one safety gate, one quality gate.)
 when to use. Replace these with the knowledge your product re-derives every run. Note: these
 are playbooks, not "durable skills" in the orchestration sense — those are workflows on your
 execution engine. See `references/durable-execution.md`.)
-- `.orbit/skills/<domain-knowledge>.md` — the core how-to of the product's main task.
-- `.orbit/skills/input-validation.md` — quality checks on inputs before use.
+- `.orbit/skills/<domain-knowledge>.md` — the core how-to of the product's main task. *(author per domain)*
+- `.orbit/skills/input-validation.md` — quality checks on inputs before use. *(author per domain — not provisioned)*
+- `.orbit/skills/quality-review.md` — the product-specific rubric the Reviewer applies. *(author per domain — not provisioned)*
+- `.orbit/skills/output-formatting.md` — clear, decision-ready outputs. *(author per domain — not provisioned)*
 - `.orbit/skills/technical-review.md` — the Reviewer's technical quality gate (severity×confidence,
   quote-the-line verification, blast-radius judgment); provisioned from the library.
-- `.orbit/skills/quality-review.md` — the product-specific rubric/criteria the Reviewer applies.
-- `.orbit/skills/safety-rules.md` — what's forbidden, what needs a human.
-- `.orbit/skills/output-formatting.md` — clear, decision-ready outputs.
+- `.orbit/skills/safety-rules.md` — what's forbidden, what needs a human; provisioned from the library.
 - `.orbit/skills/active-learning.md` — how the system learns from corrections + major changes (the gate).
 - `.orbit/skills/product-discovery.md` — de-risk the bet before building (outcome, opportunity tree, four risks).
 - `.orbit/skills/market-and-competitive-research.md` — what exists / reuse-vs-build / the gap (timeboxed, cited).
@@ -153,10 +153,18 @@ covers clarifications, decision briefs, spec approval, the taste batch, style pi
 accept/reject. (Headless fallback: a set-off `❓ DECISION NEEDED` block with lettered options.)
 
 **Never silently edit a source-of-truth file**; if you act outside the loop, say so and add a
-`[decision]` line to `.orbit/STATE.md`. (A `UserPromptSubmit` hook — `.orbit/checks/route.py` —
-classifies **every** message *deterministically* and injects this routing decision before you
-respond: the call is the **system's**, not yours, and it's present every turn. You still execute the
-loop. The §8 safety hook is the hard wall that can stop a tool; it binds in every lane.)
+`[decision]` line to `.orbit/STATE.md`.
+
+**Router ↔ Dispatcher precedence (what binds, what decides).** A `UserPromptSubmit` hook —
+`.orbit/checks/route.py` — runs on **every** message and injects a deterministic classification
+(`skip` / `task` / `question` / `ambiguous`) as context *before you respond*. That injection is
+**mechanical and always present** — the hook fires every turn, no model in the loop. But it's a
+keyword matcher, not NLP, so it's the **default lane, not the last word**: treat it as the lane to
+take unless you have a concrete reason it's wrong (e.g. it tagged a genuine task `question`), in
+which case **override it and say why in one line**. The **Dispatcher** role is the authority that
+ratifies or overrides — the hook proposes, the Dispatcher/you disposes. The §8 safety hook is
+different in kind: it's a **hard wall** that can actually stop a tool call, and it binds in every
+lane regardless of classification.
 
 ## 11. Active learning  (the system gets sharper as you use it)
 In the loop's **UPDATE** phase — and right after a **user correction** — run the active-learning

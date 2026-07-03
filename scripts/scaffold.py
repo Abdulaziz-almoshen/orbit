@@ -93,7 +93,8 @@ FILE_PLAN = [
 PLAYBOOKS_ALWAYS = ["clarify-and-challenge.md", "planning-and-decision-briefs.md",
                     "technical-review.md", "active-learning.md",
                     "product-discovery.md", "market-and-competitive-research.md",
-                    "qa-validation.md", "goal-pipeline.md", "architecture-decisions.md"]
+                    "qa-validation.md", "goal-pipeline.md", "architecture-decisions.md",
+                    "safety-rules.md"]
 PLAYBOOKS_FRONTEND = ["design-methodology.md", "anti-ai-aesthetics.md", "design-styles.md"]
 
 # The UNIVERSAL spine — every project gets these (routing, planning, gates, reporting). Copied

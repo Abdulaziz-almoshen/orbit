@@ -16,6 +16,11 @@ Classify each request and route it with the *right amount* of ceremony — fast 
 rigorous only where stakes justify it (CLAUDE.md §10).
 
 ## Procedure
+0. **Read the injected route.** The `UserPromptSubmit` hook (`.orbit/checks/route.py`) has already
+   classified this message deterministically and injected the lane as context. That's your
+   **default** — ratify it unless you have a concrete reason it's wrong (it's a keyword matcher, not
+   NLP: it can mis-tag a genuine task as a question, or vice-versa). If you override, say why in one
+   line. The hook proposes; you dispose.
 1. **Classify.** Question (status/explanation) → answer directly, no loop. Task (build/fix/
    change) → route it. Ambiguous → infer from the repo; ask one batched question only if a real
    blocker remains.

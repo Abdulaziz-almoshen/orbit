@@ -1,0 +1,26 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # The whole suite: guard schema + fail-open, router accuracy, loop durability,
+      # migration safety, observability, and the coherence gate (no phantom skills /
+      # roster drift). This is the evidence behind the "binds, not just claims" story.
+      - name: Run test suite
+        run: bash tests/run.sh
+      - name: Validate the plugin manifest
+        run: |
+          if command -v claude >/dev/null 2>&1; then
+            claude plugin validate .
+          else
+            echo "claude CLI not present on the runner — skipping plugin validate"
+          fi
