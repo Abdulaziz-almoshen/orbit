@@ -19,7 +19,7 @@ bash evals/run-eval.sh
 
 ## A. Harness invariants — real results
 
-**Run:** Orbit v0.22.1 · `python3` · macOS · 2026-07-03 · no network. Each case seeds a scratch repo
+**Run:** Orbit v0.23.1 · `python3` · macOS · 2026-07-03 · no network. Each case seeds a scratch repo
 with the eval's real files, runs `scaffold.py --install-hooks`, and checks six invariants (including
 live hook I/O — the guard actually denying a force-push, the router actually injecting a lane).
 

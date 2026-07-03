@@ -2,7 +2,7 @@
 
 **What this is:** a captured, reproducible walkthrough of the *harness* Orbit stands up on a real
 repo — with **real command output**, not a mock-up. Every block below is copy-pasted from an actual
-run (Orbit v0.22.1, macOS, `python3`). The commands to reproduce it are at the bottom.
+run (Orbit v0.23.1, macOS, `python3`). The commands to reproduce it are at the bottom.
 
 **What this is *not* (yet):** a transcript of a fully autonomous, multi-hour product build. That
 requires a live model driving the loop, and we won't paste a synthetic one and call it real —

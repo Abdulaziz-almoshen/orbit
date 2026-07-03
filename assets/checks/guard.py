@@ -6,28 +6,44 @@ Claude Code runs this BEFORE a Bash tool call; if it returns a "deny" decision t
 never executes — the model gets no say. That's the difference between a guarantee and a
 suggestion: prose in CLAUDE.md is advisory and can be silently skipped; this hook binds.
 
-It is installed by default when /orbit sets up a repo (announced, with a one-line removal via
-orbit-uninstall). Remove it anytime.
-
 Protocol (Claude Code ≥ 2.1): read the PreToolUse JSON on stdin; print NOTHING to allow, or
     {"hookSpecificOutput": {"hookEventName": "PreToolUse",
                             "permissionDecision": "deny"|"ask",
                             "permissionDecisionReason": "..."}}
-to block ("deny") or pause for a human ("ask"). We match the parsed ARGV of EACH command
-segment (splitting `cd x && git push --force`, stripping `sudo`/`env`, recursing into
-`sh -c "..."`) — never a substring. Fail OPEN: any error allows the command, because a guard
-must never brick your shell.
+to block ("deny") or pause for a human ("ask"). Confirmed against the current hooks reference
+(hookSpecificOutput.permissionDecision + permissionDecisionReason; the old top-level shape is
+ignored). Fail OPEN: any error allows the command, because a guard must never brick your shell.
+
+WHAT IT CATCHES — and its honest threat model. This guard is built to stop the *obvious and
+accidental* dangerous command a fallible agent might emit, and the *common ways intent gets
+hidden* — it does NOT claim to defeat a determined obfuscator (nothing at the shell layer can:
+one can always write a script file, `python -c "os.system(...)"`, or fetch+run). So it:
+  • parses EACH command segment's argv (splitting `&&`/`||`/`;`/`|`/`&` and newlines),
+  • collapses `\\`-newline line-continuations first,
+  • strips leading env-assignments (`X=1 …`), `sudo`/`env`/`nohup`/`xargs`/…, and subshell/brace
+    wrappers (`( … )`, `{ …; }`), and recurses into `sh -c "…"` (incl. `-lc`/`-xc`), `eval …`,
+    and command-substitutions `$( … )` / backticks so a wrapped force-push is still caught,
+  • FAILS CLOSED to "ask" when a command's identity is genuinely un-inspectable (its name is a
+    shell variable, or a downloader is piped straight into a shell) — ask, never silently allow.
+Deliberate self-obfuscation (`G="git push --force"; $G …`, runtime aliases, base64|sh) is out of
+scope by design and documented as such — the guard asks on the un-inspectable forms it can see.
+
+Customize the RULES block for YOUR repo (deploys, migrations, data deletes, secret branches).
 """
-import hashlib
 import json
+import re
 import shlex
 import sys
 
 _OPERATORS = {"&&", "||", ";", "|", "&"}
-_WRAPPERS = {"sudo", "nohup", "command", "builtin", "exec", "time", "doas"}
+_WRAPPERS = {"sudo", "nohup", "command", "builtin", "exec", "time", "doas", "xargs"}
 _SHELLS = {"sh", "bash", "zsh", "dash", "ksh"}
+_GROUPS = {"(", ")", "{", "}"}
+_ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")            # NAME=value env-assignment prefix
+_COMBINED_C = re.compile(r"^-[a-z]*c$")                       # -c, -lc, -xc … (shell command flag)
 
 
+# --- predicates over a segment's argv tokens ---------------------------------------------
 def is_git(t):
     return bool(t) and t[0] == "git"
 
@@ -54,36 +70,150 @@ def _hard_force(t):
     return any(x.startswith("+") and len(x) > 1 for x in t[pi + 1:])  # +refspec = a forced push
 
 
-# --- customize for YOUR repo -------------------------------------------------------------
-# Each rule: (decision, reason, predicate(argv_tokens) -> bool). "deny" = never allowed;
-# "ask" = pause for human approval. Matched per command segment; first match (deny beats ask).
+def _short_flags(t):
+    """Union of clustered short flags, e.g. `-rf` -> {'r','f'} (long flags handled separately)."""
+    out = set()
+    for x in t:
+        if x.startswith("-") and not x.startswith("--") and len(x) > 1:
+            out.update(x[1:])
+    return out
+
+
+def _rm_rf(t):
+    if not (t and t[0] == "rm"):
+        return False
+    sf, longs = _short_flags(t), set(t)
+    rec = "r" in sf or "R" in sf or "--recursive" in longs
+    force = "f" in sf or "--force" in longs
+    return rec and force
+
+
+_CATASTROPHIC = {"/", "/*", "~", "~/", "$HOME", "$HOME/", "*", ".", "./", "..", "../"}
+
+
+def _rm_targets(t):
+    return [x for x in t[1:] if not x.startswith("-")]
+
+
+def _rm_catastrophic(t):
+    if not _rm_rf(t):
+        return False
+    tg = _rm_targets(t)
+    if not tg:                                               # `rm -rf` with targets from stdin/glob
+        return False                                        # -> handled as "sensitive" (ask), not deny
+    for x in tg:
+        s = x.rstrip("/")
+        if x in _CATASTROPHIC or s in ("", "/", "~", "$HOME", "*", ".", ".."):
+            return True
+        if x.startswith("/") and x.strip("/").count("/") == 0:   # a top-level system dir: /etc, /usr…
+            return True
+    return False
+
+
+def _rm_sensitive(t):
+    if not _rm_rf(t):
+        return False
+    tg = _rm_targets(t)
+    if not tg:
+        return True                                         # target-less recursive-force delete → ask
+    for x in tg:
+        s = x.rstrip("/")
+        if s.startswith(".") or ".git" in x or ".orbit" in x or x.startswith("/") or x.startswith("$"):
+            return True
+    return False
+
+
+def _reset_hard(t):
+    return is_git(t) and "reset" in t and "--hard" in t
+
+
+def _git_clean(t):
+    return is_git(t) and "clean" in t and ("f" in _short_flags(t) or "--force" in t)
+
+
+def _to_device(t):
+    return any(re.match(r"of=/dev/(sd|nvme|disk|hd|mmcblk)", x) for x in t)
+
+
+def _mkfs(t):
+    return bool(t) and (t[0].startswith("mkfs") or t[0] in ("fdisk", "parted"))
+
+
+def _ambiguous_git_force(t):
+    # a git command with a force flag but no visible `push` subcommand, whose intent is hidden in
+    # a shell variable — we can't confirm it's safe, so pause.
+    return is_git(t) and ("--force" in t or "-f" in t) and "push" not in t and any("$" in x for x in t)
+
+
+def _var_command(t):
+    # the command's NAME is an unresolved shell variable ($X / ${X}) — un-inspectable → ask.
+    return bool(t) and (t[0].startswith("$") or t[0].startswith("${"))
+
+
+# --- RULES: (decision, reason, predicate). Ordered DENY-first; first match per segment wins. ---
+# Customize for YOUR repo — e.g. deploys, frozen migrations, data deletes, secret-branch pushes:
+#   ("deny", "the DB schema is frozen — no migrations.", lambda t: is_git(t) is False and "migrate" in t),
+#   ("ask",  "deploys are a human checkpoint.",          lambda t: t[:1] == ["deploy"]),
 RULES = [
     ("deny", "force-push rewrites shared history and is not allowed. Open a normal PR instead.",
      lambda t: _push(t) and _hard_force(t) and not _force_with_lease(t) and not _dry_run(t)),
+    ("deny", "`git push --mirror` can force-overwrite and delete every remote ref — not allowed.",
+     lambda t: _push(t) and "--mirror" in t and not _dry_run(t)),
+    ("deny", "`rm -rf` on a root/home/system path is catastrophic and irreversible.",
+     _rm_catastrophic),
+    ("deny", "writing with `dd` to a raw disk device destroys the disk.",
+     _to_device),
+    ("deny", "`mkfs`/`fdisk`/`parted` reformats a disk — never run this from an agent loop.",
+     _mkfs),
     ("ask",  "force-with-lease is a human-approval checkpoint here — confirm before pushing.",
      lambda t: _push(t) and _force_with_lease(t) and not _dry_run(t)),
+    ("ask",  "deleting a remote branch (`push --delete` / `push :branch`) — confirm the target.",
+     lambda t: _push(t) and not _dry_run(t)
+        and ("--delete" in t or "-d" in t or any(x.startswith(":") and len(x) > 1 for x in t))),
     ("ask",  "git push is a human-approval checkpoint here — confirm before pushing.",
      lambda t: _push(t) and not _dry_run(t)),
     ("ask",  "merging into the default branch is a human-approval checkpoint.",
      lambda t: is_git(t) and t[1:2] == ["merge"]
         and any(b in t for b in ("master", "main", "origin/master", "origin/main"))),
-    # Add your repo's own FORBIDDEN / ASK actions here, e.g.:
-    #   ("deny", "the DB schema is frozen.", lambda t: (not is_git(t)) and "migrate" in t),
-    #   ("ask",  "deploys need a human.",    lambda t: t[:1] == ["deploy"]),
+    ("ask",  "`git reset --hard` discards uncommitted work irreversibly — confirm.",
+     _reset_hard),
+    ("ask",  "`git clean -f` deletes untracked/ignored files irreversibly — confirm.",
+     _git_clean),
+    ("ask",  "a recursive, forced `rm` of a hidden/absolute/.git/.orbit path is irreversible — confirm.",
+     _rm_sensitive),
+    ("ask",  "a git command with a force flag whose intent is hidden in a variable — confirm it's not a force-push.",
+     _ambiguous_git_force),
+    ("ask",  "this command's name is an unresolved shell variable — I can't verify what it runs; confirm it's safe.",
+     _var_command),
 ]
-# -----------------------------------------------------------------------------------------
 
 _SEVERITY = {"deny": 2, "ask": 1}
 
 
+def _max(a, b):
+    if b is None:
+        return a
+    if a is None:
+        return b
+    return a if _SEVERITY[a[0]] >= _SEVERITY[b[0]] else b
+
+
 def _strip_wrappers(t):
+    """Peel leading env-assignments, sudo/env/xargs/… wrappers, and subshell/brace punctuation."""
     while t:
-        if t[0] in _WRAPPERS:
+        tok = t[0]
+        if tok in _GROUPS:                                  # ( … ) or { …; } group punctuation
             t = t[1:]
             continue
-        if t[0] == "env":
+        if _ASSIGN.match(tok):                              # X=1 git …  (env-assignment prefix)
             t = t[1:]
-            while t and "=" in t[0] and not t[0].startswith("-"):
+            continue
+        if tok in _WRAPPERS:
+            t = t[1:]
+            continue
+        if tok == "env":
+            t = t[1:]
+            while t and _ASSIGN.match(t[0]) and not t[0].startswith("-"):
                 t = t[1:]
             continue
         break
@@ -98,7 +228,7 @@ def _tokenize(line):
 
 
 def _segments(cmd):
-    """Split a command string into argv lists, one per shell segment (&&, ||, ;, |, & and newlines)."""
+    """Split a command string into argv lists, one per shell segment (&&, ||, ;, |, & + newlines)."""
     out = []
     for line in cmd.split("\n"):
         line = line.strip()
@@ -125,27 +255,85 @@ def _segments(cmd):
     return out
 
 
+def _inner_commands(cmd):
+    """Yield command strings hidden inside `( … )`, `$( … )`, `` `…` ``. Single-quoted regions are
+    skipped (bash does no expansion there), so a quoted example isn't a false positive."""
+    subs, i, n = [], 0, len(cmd)
+    while i < n:
+        c = cmd[i]
+        if c == "'":                                        # skip single-quoted span (no expansion)
+            j = cmd.find("'", i + 1)
+            i = (j + 1) if j != -1 else n
+            continue
+        if c == "`":
+            j = cmd.find("`", i + 1)
+            if j != -1:
+                subs.append(cmd[i + 1:j])
+                i = j + 1
+                continue
+        if c == "(":                                        # ( subshell ), $( ), <( ), >( )
+            depth, j = 1, i + 1
+            while j < n and depth:
+                if cmd[j] == "(":
+                    depth += 1
+                elif cmd[j] == ")":
+                    depth -= 1
+                j += 1
+            subs.append(cmd[i + 1:j - 1])
+            i = j
+            continue
+        i += 1
+    return subs
+
+
+def _shell_c_arg(t):
+    """If argv is a shell invoked with -c/-lc/-xc …, return the command string it runs, else None."""
+    if not t or t[0] not in _SHELLS:
+        return None
+    for i in range(1, len(t)):
+        if t[i] == "-c" or _COMBINED_C.match(t[i]):
+            return t[i + 1] if i + 1 < len(t) else None
+    return None
+
+
 def evaluate(cmd, _depth=0):
     """Return the most severe (decision, reason) triggered by any segment, or None to allow."""
-    if _depth > 4:
+    if _depth > 6 or not cmd:
         return None
+    cmd = cmd.replace("\\\n", "")                           # bash line-continuation joins with NO space
     best = None
-    for seg in _segments(cmd):
+
+    # 1. recurse into hidden sub-commands (subshells / substitutions / backticks)
+    for inner in _inner_commands(cmd):
+        best = _max(best, evaluate(inner, _depth + 1))
+
+    segs = _segments(cmd)
+
+    # 2. cross-segment: a downloader piped straight into a shell = unreviewed remote code
+    names = []
+    for s in segs:
+        st = _strip_wrappers(list(s))
+        names.append(st[0] if st else "")
+    if any(n in ("curl", "wget", "fetch") for n in names) and any(n in _SHELLS for n in names):
+        best = _max(best, ("ask", "piping a downloaded script straight into a shell (curl|sh) runs "
+                                  "unreviewed remote code — confirm the source."))
+
+    # 3. per-segment argv rules (recursing into sh -c / eval)
+    for seg in segs:
         t = _strip_wrappers(list(seg))
         if not t:
             continue
-        if t[0] in _SHELLS and "-c" in t:                 # sh -c "..." → evaluate the payload
-            i = t.index("-c")
-            if i + 1 < len(t):
-                sub = evaluate(t[i + 1], _depth + 1)
-                if sub and (best is None or _SEVERITY[sub[0]] > _SEVERITY[best[0]]):
-                    best = sub
+        sc = _shell_c_arg(t)
+        if sc is not None:                                  # sh -c "…" / bash -lc "…"
+            best = _max(best, evaluate(sc, _depth + 1))
+            continue
+        if t[0] == "eval":                                  # eval <string> → evaluate the string
+            best = _max(best, evaluate(" ".join(t[1:]), _depth + 1))
             continue
         for decision, reason, pred in RULES:
             try:
                 if pred(t):
-                    if best is None or _SEVERITY[decision] > _SEVERITY[best[0]]:
-                        best = (decision, reason)
+                    best = _max(best, (decision, reason))
                     break
             except Exception:
                 continue

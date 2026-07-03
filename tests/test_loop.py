@@ -69,12 +69,35 @@ def main():
     if loop.needs_human("unknown_action", cfg) is not True:
         fails.append("unknown action should default to requiring a human")
 
+    # 4. --resume must NOT double-count budget, and must continue the cycle counter (not reset to 1)
+    with tempfile.TemporaryDirectory() as d:
+        ckpt = os.path.join(d, "steps.jsonl")
+        cfg = {
+            "hard_limits": {"max_iterations": 2, "token_budget": {"per_run": 10_000_000, "per_cycle": 0},
+                            "cost_budget_usd": {"per_run": 1e9}, "max_runtime_seconds": 1e9,
+                            "gate_failure_streak": 99},
+            "paths": {"stop_sentinel": os.path.join(d, "STOP"), "state": os.path.join(d, "STATE.md"),
+                      "claude_md": os.path.join(d, "CLAUDE.md"), "checkpoints": ckpt},
+            "approval_checkpoints": {}, "eval_gates": {}, "run_goal": "x",
+        }
+        loop.dispatch = lambda *a, **k: {"summary": "ok", "tokens": 100, "cost_usd": 1.0}
+        loop.evaluate_gates = lambda *a, **k: {"input": True, "quality": True, "safety": True, "reasons": {}}
+        loop.run(cfg, resume=False)                       # runs 2 cycles → 200 tokens
+        after_first = loop.Steps(loop.Path(ckpt)).last_budget
+        if not after_first or after_first.get("tokens") != 200:
+            fails.append(f"first run should spend 200 tokens over 2 cycles, got {after_first}")
+        loop.run(cfg, resume=True)                          # must NOT re-add the cached cycles
+        after_resume = loop.Steps(loop.Path(ckpt)).last_budget
+        if after_resume and after_resume.get("tokens") != 200:
+            fails.append(f"--resume double-counted budget: expected 200, got {after_resume.get('tokens')}")
+
     if fails:
         print("FAIL: loop")
         for f in fails:
             print("  -", f)
         sys.exit(1)
-    print("PASS: loop (truncated-line resilience + budget persistence + approval enforcement)")
+    print("PASS: loop (truncated-line resilience + budget persistence + approval enforcement + "
+          "resume no-double-count)")
 
 
 if __name__ == "__main__":

@@ -64,15 +64,25 @@ def main():
     # --- C. no phantom skill loads in shipped agent templates ----------------------
     agents_dir = os.path.join(ROOT, "assets", "claude-agents")
     skill_ref = re.compile(r"\.orbit/skills/([A-Za-z0-9_-]+)\.md")
+    loaded = set()                                          # every playbook some agent references
     for fn in sorted(os.listdir(agents_dir)):
         if not fn.endswith(".md"):
             continue
         text = _read("assets", "claude-agents", fn)
         for name in skill_ref.findall(text):
+            loaded.add(name)
             if name in provisioned or name in AUTHOR_PER_DOMAIN:
                 continue
             fails.append(f"[C] {fn} loads .orbit/skills/{name}.md — not provisioned and not "
                          f"author-per-domain (phantom skill)")
+
+    # --- E. no DEAD provisioning: every always-provisioned playbook is loaded by some agent ----
+    # (the reverse of C — catches a playbook copied into every repo that no role ever reads).
+    always = {pb[:-3] if pb.endswith(".md") else pb for pb in sc.PLAYBOOKS_ALWAYS}
+    for name in sorted(always):
+        if name not in loaded:
+            fails.append(f"[E] playbook '{name}.md' is provisioned into every repo (PLAYBOOKS_ALWAYS) "
+                         f"but no agent template loads it — dead provisioning (wire it to a role or drop it)")
 
     # --- D. the documented spine matches ROLES_CORE --------------------------------
     core = set(sc.ROLES_CORE)

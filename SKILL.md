@@ -337,10 +337,13 @@ floor most users skip. Wire them as part of setup and **announce exactly what yo
 original footgun wasn't "installed without a prompt" — it was "installed *silently* with no findable
 off-switch." Announce + easy removal fixes that.)
 
-1. Edit `.orbit/checks/guard.py` so its `RULES` match *this* repo's truly-dangerous actions (parse
-   argv precisely). `deny` only the irreversible/forbidden (force-push, secrets-branch push, schema
-   migration); `ask` for reversible-but-risky (normal push, deploy, `rm -rf`). `route.py` works out
-   of the box; tune its verb lists only if the domain has unusual phrasing.
+1. `.orbit/checks/guard.py` ships hardened defaults that already `deny` force-push / `push --mirror`
+   / `rm -rf` of a root-or-system path / disk wipes and `ask` before a plain push / `reset --hard` /
+   `clean -f` / `curl | sh` (and sees through subshells, `sh -lc`, env-prefixes, substitutions). **Add
+   this repo's own rules** to the `RULES` block — `deny` its irreversible/forbidden actions (a
+   secret-branch push, a frozen-schema migration), `ask` its reversible-but-risky ones (a deploy).
+   Parse argv precisely; don't loosen the defaults. `route.py` works out of the box; tune its verb
+   lists only if the domain has unusual phrasing.
 2. **Wire both by default** — run `python3 "$ORBIT/scripts/scaffold.py" --target . --install-hooks`
    (with `ORBIT` resolved as in Phase 2; or, in the same `scaffold.py` run from Phase 2, just pass
    `--install-hooks` then). It backs up `.claude/settings.json`, merges each hook idempotently, and

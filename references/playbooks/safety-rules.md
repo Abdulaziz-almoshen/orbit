@@ -6,8 +6,10 @@ catastrophic shell commands; this playbook is the broader judgment the Safety ro
 cycle's output before it's allowed to count. Veto power — nothing ships past a Safety block.
 
 ## The two enforcement layers (know which is which)
-- **Binding (mechanical):** `.orbit/checks/guard.py` (PreToolUse hook) — denies force-push /
-  secrets-branch push, asks before a plain push, before *any* tool runs, model has no say. And
+- **Binding (mechanical):** `.orbit/checks/guard.py` (PreToolUse hook) — denies force-push,
+  `push --mirror`, `rm -rf` of a root/system path, and disk wipes; asks before a plain push,
+  `reset --hard`, `curl | sh`, and other irreversible-but-recoverable commands — before *any* tool
+  runs, model has no say (a repo adds its own deploy/migration/secret-branch rules). And
   `loop.config.json` → `approval_checkpoints` (`move_money: FORBIDDEN`, etc.) enforced by the runner.
 - **Advisory (your judgment, here):** everything the guard/config can't pattern-match — data
   exposure, unreviewed side effects, scope/permission violations, unsafe generated content.

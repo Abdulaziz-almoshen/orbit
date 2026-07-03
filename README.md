@@ -13,7 +13,7 @@ One command sets it up. It runs on your own orchestrator. It updates itself.
 
 <br/>
 
-![version](https://img.shields.io/badge/version-0.23.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.23.1-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![self-updating](https://img.shields.io/badge/self--updating-yes-22863a)
@@ -31,8 +31,9 @@ Right now you **babysit** your AI: re-explaining the project every session, watc
 drift, never quite sure what it's doing — or whether it'll do something it can't undo. Orbit
 ends that. It turns your repo into a **system that runs itself**: it remembers, it routes
 your work through a small team of specialists that check each other, it shows you who's
-doing what **live**, and a **safety hook blocks the catastrophic** (force-push, secrets-branch
-push) before it runs. One command sets it up — it reads your repo and asks almost nothing.
+doing what **live**, and a **safety hook blocks the catastrophic** (force-push, `rm -rf` of a
+root/system path, a disk wipe) and pauses on the risky (a plain push, `reset --hard`) before it
+runs. One command sets it up — it reads your repo and asks almost nothing.
 (What binds vs. what's advisory is spelled out honestly in [Safety](#safety--what-binds-and-what-doesnt).)
 
 ## Install
@@ -60,7 +61,7 @@ the exact same clone + `./setup`. More options (marketplace plugin, "let Claude 
 | Re-explain your project every chat | It **remembers** — goals, decisions, conventions, progress (in `CLAUDE.md` + `STATE.md`) |
 | One agent does everything, you catch the mess later | A **team** — plan → build → **safety gate** → **quality gate** — that checks its own work |
 | A wall of text; you're not sure what's happening | A **live checklist** of who's working, crossing itself off as it goes |
-| It free-edits, force-pushes, maybe breaks your DB | A guard **physically blocks** the catastrophic; irreversible actions are *proposed*, never done alone |
+| It free-edits, force-pushes, wipes a directory | A guard **blocks** the catastrophic (force-push, `rm -rf /`, disk wipes) and **pauses** the risky; irreversible actions are *proposed*, never done alone. Add your repo's own rules (deploys, migrations) in one line |
 | A crash → it starts over and re-burns tokens | **Checkpointed** — resumes from the last finished step (on the `loop.py` runner / a durable engine; the dev loop restarts the cycle) |
 | It does exactly what you typed, bugs and all | It **plans like a senior** — clarifies, challenges weak assumptions, writes a decision brief, proposes a better approach |
 | Generic, templated UI that screams "AI made this" | On frontend repos a real **Designer** stands up — a distinctive, on-brand Design Plan, not slop |
@@ -319,8 +320,8 @@ guarantee and a suggestion:
 
 | Layer | Status | What it is |
 |---|---|---|
-| **Safety wall** (`PreToolUse` → `guard.py`) | ✅ **binds** | Blocks force-push / secrets-branch push, asks before a plain push — *before* the tool runs, model has no say. Splits `cd x && git push --force`, recurses `sh -c`. (Verified against the real harness; covered by `tests/test_guard.py`.) |
-| **Iteration + runtime caps** (`ralph_loop.sh`) | ✅ **binds** | The loop physically stops at the cap. |
+| **Safety wall** (`PreToolUse` → `guard.py`) | ✅ **binds** | Denies force-push, `push --mirror`, `rm -rf` of a root/home/system path, and disk wipes (`dd`/`mkfs` to a device); asks before a plain push, `reset --hard`, `clean -f`, `rm -rf` of a hidden/`.git`/`.orbit`/absolute path, and `curl \| sh` — *before* the tool runs, model has no say. Sees through `cd x && …`, `sudo`/`env X=1 …`, subshells `( )`, brace groups, `\`-newline continuations, `$( )`/backticks, and `sh -lc` (recurses). **Threat model:** it stops obvious/accidental danger and common obfuscation and asks when a command is un-inspectable — it does *not* claim to defeat deliberate self-obfuscation (a script file, `python -c`, runtime aliases); nothing at the shell layer can. Add your repo's deploy/migration/secret-branch rules in one line. (59-case `tests/test_guard.py`.) |
+| **Iteration + runtime caps** (`ralph_loop.sh`) | ✅ **binds** | The runner stops the loop at the cap (max iterations, runtime, the STOP sentinel, and the gate-failure streak). |
 | **Token + cost budgets** | ✅ **binds on the runner** | `ralph_loop.sh` meters `claude -p --output-format json`; `loop.py` tracks + persists spend across `--resume`. `move_money` is `FORBIDDEN` (raises). |
 | **Router classification** (`UserPromptSubmit` → `route.py`) | ⚖️ **system decides, model executes** | A deterministic keyword classifier picks the lane (task→loop / question→direct) and injects it every turn — that call is the system's. But the model still *runs* the loop; a hook can't spawn the sub-agents itself. |
 | **Roles, playbooks, the review/QA gates** | 📋 **advisory** | Prompt-driven discipline the model follows reliably — strong, but not mechanically enforced. |

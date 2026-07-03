@@ -93,7 +93,9 @@ the state file ready for the next human (or scheduled) kickoff.
   product is, what's been done, what's next, and what bar to clear.
 - No single agent is responsible for everything; work fans out to named roles.
 - Domain knowledge is in skills, not smeared through prose.
-- The loop physically cannot run unbounded or take an irreversible action alone.
+- The loop cannot run unbounded (the runner's iteration/runtime/token/cost caps bind), and an
+  irreversible action is gated — by the binding `PreToolUse` guard on the Claude Code path, and by
+  `needs_human()` on the portable path — so it's *proposed*, not taken alone.
 - Running production on the user's own orchestrator (e.g. Gemini) needs none of the Claude
   Code adapter — the core is portable.
 

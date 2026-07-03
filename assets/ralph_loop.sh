@@ -6,9 +6,12 @@
 # restart a FRESH agent each cycle and let CLAUDE.md + STATE.md carry the memory. Each
 # iteration is a clean `claude -p` invocation that reads state, does ONE cycle, and writes
 # state back. This script is the brake: it enforces loop.config.json's hard limits in plain
-# bash — iterations, runtime, and (via `claude -p --output-format json`) the per-run token +
-# cost budgets — so the loop physically cannot run unbounded. If the JSON usage fields are
-# unavailable, it says so and falls back to the iteration + runtime caps.
+# bash — max iterations, max runtime, the STOP sentinel, and (via `claude -p --output-format
+# json`) the per-run AND per-cycle token + cost budgets, plus the gate-failure streak (counted
+# from "GATE_FAILED" lines the agent writes to STATE.md) — so the loop cannot run unbounded or
+# thrash. If the JSON usage fields are unavailable it says so and falls back to iterations +
+# runtime + streak. (The one limit it cannot enforce is the model's honesty about a gate failing;
+# that self-report is inherent to the fresh-agent-per-cycle model and is documented, not hidden.)
 #
 # Usage:  scripts/ralph_loop.sh [path/to/loop.config.json]
 # Stop early at any time:  touch .orbit/STOP   (or Ctrl-C)
@@ -24,6 +27,9 @@ MAX_ITERS="$(read_cfg "['hard_limits']['max_iterations']" 50)"
 MAX_RUNTIME="$(read_cfg "['hard_limits']['max_runtime_seconds']" 3600)"
 TOKEN_BUDGET="$(read_cfg "['hard_limits']['token_budget']['per_run']" 0)"
 COST_BUDGET="$(read_cfg "['hard_limits']['cost_budget_usd']['per_run']" 0)"
+TOKEN_PER_CYCLE="$(read_cfg "['hard_limits']['token_budget']['per_cycle']" 0)"
+COST_PER_CYCLE="$(read_cfg "['hard_limits']['cost_budget_usd']['per_cycle']" 0)"
+GATE_STREAK_MAX="$(read_cfg "['hard_limits']['gate_failure_streak']" 0)"
 STOP_SENTINEL="$(read_cfg "['paths']['stop_sentinel']" .orbit/STOP)"
 STATE_FILE="$(read_cfg "['paths']['state']" .orbit/STATE.md)"
 
@@ -32,6 +38,8 @@ ITER=1
 COST_SPENT=0
 TOKENS_SPENT=0
 PARSE_OK=1
+GATE_STREAK=0
+PREV_GATE_FAILS=0
 
 # float/int compare via python: returns 0 (true) if $1 >= $2 and $2 > 0
 over() { python3 -c "import sys; a,b=float('$1'),float('$2'); sys.exit(0 if b>0 and a>=b else 1)"; }
@@ -49,7 +57,9 @@ Run exactly ONE cycle of the self-prompting loop, then stop:
    .orbit/activity.py; keep the checklist current (TaskCreate/TaskUpdate, and .orbit/tasks.json for
    the orbit-status dashboard) so a watcher can see who's talking and what's done.
 4. EVALUATE: check the output against CLAUDE.md section 3 and the eval gates in
-   .orbit/loop.config.json (input / quality / safety). Safety has veto power.
+   .orbit/loop.config.json (input / quality / safety). Safety has veto power. If an eval gate
+   FAILS this cycle, append the line "GATE_FAILED: <which gate + why>" to STATE.md (the runner
+   counts consecutive gate failures and stops the loop after the configured streak).
 5. UPDATE: overwrite STATE.md's snapshot/queue/handoffs, append one line to the cycle log
    and any new decisions.
 6. DECIDE: if the run goal is met -> write the line "RUN_GOAL_MET" at the end of STATE.md.
@@ -61,7 +71,7 @@ money). Never take an irreversible, financial, or outward-facing action without 
 propose it via STATE.md instead. Then STOP; do not start another cycle yourself.
 EOF
 
-echo "Ralph loop starting: max_iters=$MAX_ITERS max_runtime=${MAX_RUNTIME}s token_budget=$TOKEN_BUDGET cost_budget=\$$COST_BUDGET"
+echo "Ralph loop starting: max_iters=$MAX_ITERS max_runtime=${MAX_RUNTIME}s token_budget=$TOKEN_BUDGET/run ($TOKEN_PER_CYCLE/cycle) cost_budget=\$$COST_BUDGET/run gate_streak=$GATE_STREAK_MAX"
 echo "Tip: in another pane, run  scripts/orbit-status --follow  to watch live (Ctrl-C to stop)."
 
 while :; do
@@ -102,6 +112,9 @@ except Exception: print('FAIL')")"
     C="${STATS%% *}"; T="${STATS##* }"
     COST_SPENT="$(python3 -c "print($COST_SPENT + $C)")"
     TOKENS_SPENT="$(python3 -c "print($TOKENS_SPENT + $T)")"
+    # per-CYCLE budget: a single cycle blowing its cap is a runaway signal — stop the loop.
+    if over "$T" "$TOKEN_PER_CYCLE"; then echo "[STOP] cycle $ITER exceeded per-cycle token budget ($TOKEN_PER_CYCLE) — used $T"; break; fi
+    if over "$C" "$COST_PER_CYCLE"; then echo "[STOP] cycle $ITER exceeded per-cycle cost budget (\$$COST_PER_CYCLE) — used \$$C"; break; fi
   fi
 
   # --- check the sentinels the agent may have written to STATE.md -------------------
@@ -109,6 +122,13 @@ except Exception: print('FAIL')")"
     if grep -q "RUN_GOAL_MET" "$STATE_FILE"; then echo "[DONE] run goal met"; break; fi
     if grep -q "AWAITING_HUMAN" "$STATE_FILE"; then
       echo "[PAUSE] awaiting human:"; grep "AWAITING_HUMAN" "$STATE_FILE"; break
+    fi
+    # gate-failure streak: count NEW "GATE_FAILED" lines this cycle; stop after N in a row.
+    GATE_FAILS="$(grep -c "GATE_FAILED" "$STATE_FILE" 2>/dev/null || echo 0)"
+    if [ "$GATE_FAILS" -gt "$PREV_GATE_FAILS" ]; then GATE_STREAK=$((GATE_STREAK + 1)); else GATE_STREAK=0; fi
+    PREV_GATE_FAILS="$GATE_FAILS"
+    if [ "$GATE_STREAK_MAX" -gt 0 ] && [ "$GATE_STREAK" -ge "$GATE_STREAK_MAX" ]; then
+      echo "[STOP] gate-failure streak ($GATE_STREAK ≥ $GATE_STREAK_MAX) — the loop isn't making progress"; break
     fi
   fi
 

@@ -215,9 +215,11 @@ def run(cfg: dict, resume: bool = False):
     if not resume and ckpt.exists():
         ckpt.unlink()
     steps = Steps(ckpt)
-    if resume and steps.last_budget:                 # restore spend so per-run caps survive a restart
-        budget.tokens = steps.last_budget.get("tokens", 0)
+    resumed = set(steps.done)                        # steps already completed BEFORE this run
+    if resume and steps.last_budget:                 # restore spend + cycle so per-run caps + the
+        budget.tokens = steps.last_budget.get("tokens", 0)     # iteration counter survive a restart
         budget.cost_usd = steps.last_budget.get("cost_usd", 0.0)
+        cycle = int(steps.last_budget.get("cycle", 1))          # don't reset to 1 (would re-count)
 
     while True:
         # DECIDE (pre-check): does any hard limit say stop before we even start?
@@ -240,11 +242,21 @@ def run(cfg: dict, resume: bool = False):
         emit("orchestrator", "act", "start", "delegating to specialist(s)", cycle=cycle)
         # Checkpointed: on resume, a completed act is NOT re-dispatched (no re-charged model
         # call, no duplicate side effect) — its result is read back from the checkpoint.
-        result = steps.run(f"c{cycle}:act", lambda: dispatch("orchestrator", task, context, cfg))
+        act_name = f"c{cycle}:act"
+        result = steps.run(act_name, lambda: dispatch("orchestrator", task, context, cfg))
         emit("orchestrator", "act", "done", result.get("summary", "(no summary)"), cycle=cycle)
-        budget.tokens += result.get("tokens", 0)
-        budget.cost_usd += result.get("cost_usd", 0.0)
-        steps.save_budget(budget, cycle)             # persist spend so --resume can't reset caps to zero
+        if act_name not in resumed:                  # only meter a FRESH dispatch — a cycle restored
+            spent = int(result.get("tokens", 0) or 0)   # from the checkpoint is already in the
+            budget.tokens += spent                      # restored budget, so re-adding double-counts
+            budget.cost_usd += float(result.get("cost_usd", 0.0) or 0.0)
+            steps.save_budget(budget, cycle)         # persist spend so --resume can't reset caps to zero
+            # per-CYCLE budget: a single cycle blowing its cap is a runaway signal — stop the loop.
+            per_cycle = cfg["hard_limits"].get("token_budget", {}).get("per_cycle", 0)
+            if per_cycle and spent >= per_cycle:
+                reason = f"cycle {cycle} exceeded per-cycle token budget ({per_cycle}) — used {spent}"
+                emit("orchestrator", "decide", "blocked", f"STOP — {reason}", cycle=cycle)
+                on_run_end({"cfg": cfg, "budget": budget, "reason": reason})
+                return
 
         # Approval enforcement: a tagged side-effect action is gated by config. FORBIDDEN never
         # runs (loop stops); "human"/threshold pauses for approval. This is the point that makes

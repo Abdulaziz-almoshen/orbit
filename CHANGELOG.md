@@ -3,6 +3,45 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.23.1
+
+**⚠️ Security — the safety guard is now hard to slip past, and it grew real teeth.** 0.23.0 fixed
+the guard's *output shape* (blocks finally registered), but an independent adversarial review found
+its *coverage* was still narrow and several one-token tricks walked right through: a subshell
+`(git push --force)`, a brace group `{ …; }`, a `\`-newline continuation, `$( … )`/backticks, an
+env-assignment prefix (`GIT_SSH_COMMAND=x git push --force`), and `bash -lc "…"` all evaded the
+force-push deny — and it caught **zero** non-git destructive commands. This release rewrites the
+matcher to see through all of those (it collapses line-continuations, strips env-assignment/subshell/
+brace/`sudo`/`env` wrappers, and recurses into `sh -lc`, `eval`, and command-substitutions), and
+ships **default non-git teeth**: it denies `rm -rf` of a root/home/system path, `push --mirror`, and
+disk wipes (`dd`/`mkfs` to a device), and asks before `reset --hard`, `clean -f`, `rm -rf` of a
+hidden/`.git`/`.orbit`/absolute path, and `curl | sh`. When a command's identity is genuinely
+un-inspectable (its name is a shell variable), it **asks** rather than silently allowing. The guard
+test suite went from 30 to **59 cases**, one per closed bypass. **Honest threat model, stated in the
+README:** it stops obvious/accidental danger and common obfuscation — it does *not* claim to defeat
+deliberate self-obfuscation (a script file, `python -c`, runtime aliases); nothing at the shell layer
+can. **Re-run `/orbit`** to upgrade an existing repo's guard (the migration now carries 0.23.0 hooks
+forward too, with a backup; a locally-customized guard is warned about, never overwritten).
+
+Also, honesty and enforcement caught up to the claims:
+
+- **The binds table no longer over-claims.** The old table said the guard "blocks secrets-branch
+  push" (there was no such rule) and the hero said it "physically blocks… your DB" (it didn't). Both
+  are rewritten to describe exactly what the default guard does, with a one-line pointer to add your
+  own deploy/migration/secret-branch rules.
+- **The runner enforces every configured limit.** `ralph_loop.sh` now also enforces the **per-cycle**
+  token/cost budgets and the **gate-failure streak** (from `GATE_FAILED` lines the agent writes), not
+  just per-run + iterations + runtime. `loop.py` enforces the per-cycle token budget too.
+- **`loop.py --resume` no longer corrupts its own budget.** It restored spend and then re-added each
+  memoized cycle's tokens (100→200) and reset the cycle counter to 1; both are fixed — a restored
+  cycle is never re-metered, and the counter continues where it left off.
+- **No more dead provisioning or inert config.** `active-learning.md` was copied into every repo but
+  no role loaded it — now the Orchestrator does. `token_budget.per_cycle` was shipped but unread —
+  now enforced. `check-coherence.py` is bidirectional (catches provisioned-but-never-loaded), and a
+  new `test_config_consistency.py` fails if the config ships a knob no runner reads.
+- **More tests.** New `test_uninstall.py`, `test_scaffold_idempotency.py`, and
+  `test_config_consistency.py`; the suite is now 12 files, all run by `tests/run.sh` + CI.
+
 ## 0.23.0
 
 **⚠️ Security/correctness fix — the safety guard now actually binds.** Earlier versions' `guard.py`
