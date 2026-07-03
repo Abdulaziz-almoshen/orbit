@@ -11,3 +11,4 @@ __pycache__/
 # Local-only planning + eval artifacts (never published)
 BEGINNER-MODE.md
 orbit-workspace/
+TECHNICAL-PLAN.md
