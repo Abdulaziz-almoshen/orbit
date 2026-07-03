@@ -41,6 +41,18 @@ The Designer's **approved prototype** (`design/approved.json` + `DESIGN.md` toke
    (body ≥16px, WCAG AA 4.5:1, 44px targets, spacing on the 4/8px scale), not vibes.
 2. **Screenshot diff:** render build and prototype at the same viewports (375/768/1440), mask dynamic
    regions, diff at ~1% threshold; emit the diff image as evidence and a multi-axis fidelity score.
+
+**How to run the pixel pass — the executor, and its fallbacks.** Orbit ships thin **helpers, not a
+bundled browser**, in `.orbit/qa/` (frontend repos only):
+- `.orbit/qa/extract-tokens.py <url> --compare DESIGN.md` → token-by-token PASS/FAIL for step 1.
+- `.orbit/qa/snapshot.py screenshot <url> --out build.png --viewport 375x812` then
+  `.orbit/qa/snapshot.py diff build.png approved.png --threshold 0.01 --out diff.png` → step 2.
+
+These need **Playwright** (`pip install playwright && playwright install chromium`); the `diff`
+subcommand is pure-python and needs nothing. When Playwright isn't installed, prefer this fallback
+chain, in order: **(1)** an installed browser MCP tool → **(2)** gstack `/browse` if present →
+**(3)** a manual screenshot + `snapshot.py diff`. The helpers exit 2 with the install line (never a
+traceback), so a missing browser degrades the check — it never crashes the cycle.
 3. **Intentional change?** Never self-approve a visual delta — batch the diffs into **one
    `AskUserQuestion`** (per-change options: Accept / Reject, with the diff evidence linked and your
    recommendation labeled "(Recommended)"); accepted changes advance the baseline. Never a prose ask.

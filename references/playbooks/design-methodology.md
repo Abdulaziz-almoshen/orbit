@@ -98,5 +98,9 @@ Real content only, never lorem ipsum.
 
 **The verification triangle** closes the loop: approved prototype (the *target*) → Builder builds *to*
 it → the **QA Engineer** machine-verifies build-vs-target (token assertions from computed styles +
-screenshot diffs at 375/768/1440 — see `qa-validation.md`). The Reviewer's **Design Distinctiveness**
-gate still applies (see `roles.md`). A UI change with no `approved.json` behind it is a finding.
+screenshot diffs at 375/768/1440 — see `qa-validation.md`). Orbit ships thin helpers for this in
+`.orbit/qa/` (`extract-tokens.py --compare DESIGN.md`, `snapshot.py screenshot|diff`) — **helpers,
+not a bundled browser**: they use Playwright if installed and otherwise fall back to a browser MCP /
+gstack `/browse` / a manual capture (they exit cleanly, never crash the cycle). The Reviewer's
+**Design Distinctiveness** gate still applies (see `roles.md`). A UI change with no `approved.json`
+behind it is a finding.

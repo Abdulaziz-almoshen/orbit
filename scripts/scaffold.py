@@ -97,6 +97,12 @@ PLAYBOOKS_ALWAYS = ["clarify-and-challenge.md", "planning-and-decision-briefs.md
                     "safety-rules.md"]
 PLAYBOOKS_FRONTEND = ["design-methodology.md", "anti-ai-aesthetics.md", "design-styles.md"]
 
+# QA visual-fidelity helpers (screenshot / pixel-diff / computed-token extraction). Frontend-only,
+# since they act on a rendered UI. Helpers, not a bundled browser — they degrade gracefully when
+# Playwright isn't installed. Placed executable into .orbit/qa/. (src under assets/qa/ -> dst rel.)
+QA_FRONTEND = [("qa/snapshot.py", ".orbit/qa/snapshot.py"),
+               ("qa/extract-tokens.py", ".orbit/qa/extract-tokens.py")]
+
 # The UNIVERSAL spine — every project gets these (routing, planning, gates, reporting). Copied
 # verbatim to .claude/agents/<role>.md and, frontmatter-stripped, to .orbit/roles/<role>.md.
 ROLES_CORE = ["dispatcher", "orchestrator", "product-discovery", "market-researcher", "planner",
@@ -296,6 +302,12 @@ def main():
         else:
             shutil.copytree(styles_src, styles_dst)
             created.append(f".orbit/skills/design-styles/  ({len(list(styles_dst.glob('*.md')))} styles)")
+
+    # 3c. QA visual-fidelity helpers (UI surfaces only) -> .orbit/qa/
+    if has_ui:
+        (target / ".orbit/qa").mkdir(parents=True, exist_ok=True)
+        for src_rel, dst_rel in QA_FRONTEND:
+            _place(ASSETS / src_rel, target / dst_rel, created, skipped, 0o755)
 
     # 4a. the universal spine -> .claude/agents/ (verbatim) + .orbit/roles/ (frontmatter-stripped)
     for role in ROLES_CORE:

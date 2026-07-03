@@ -100,6 +100,11 @@ execution engine. See `references/durable-execution.md`.)
 - `.orbit/skills/goal-pipeline.md` — goal → spec → story DAG → run-until-green → polish (2 human gates).
 - `.orbit/skills/architecture-decisions.md` — the CTO hat: ADRs in `.orbit/decisions/`, boring-tech bar.
 
+**QA executors** (frontend repos only — *tools*, not playbooks; helpers, not a bundled browser):
+- `.orbit/qa/snapshot.py` — `screenshot` / pixel-`diff` / `console` capture. Playwright if installed,
+  else exits 2 with the install line; `diff` is pure-python. Fallback: browser MCP → gstack `/browse` → manual.
+- `.orbit/qa/extract-tokens.py` — computed-style tokens → JSON; `--compare DESIGN.md` = token-by-token PASS/FAIL.
+
 ## 8. Stop Conditions & Safety Rules  ← the most important section
 Hard limits (enforced by `.orbit/loop.config.json`; the loop must honor them):
 - Max iterations per run: N.
