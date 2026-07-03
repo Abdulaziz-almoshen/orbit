@@ -112,7 +112,7 @@ PLAYBOOKS_ALWAYS = ["clarify-and-challenge.md", "planning-and-decision-briefs.md
                     "technical-review.md", "active-learning.md",
                     "product-discovery.md", "market-and-competitive-research.md",
                     "qa-validation.md", "goal-pipeline.md", "architecture-decisions.md",
-                    "safety-rules.md"]
+                    "safety-rules.md", "deliverable-reports.md"]
 PLAYBOOKS_FRONTEND = ["design-methodology.md", "anti-ai-aesthetics.md", "design-styles.md"]
 
 # QA visual-fidelity helpers (screenshot / pixel-diff / computed-token extraction). Frontend-only,

@@ -166,6 +166,45 @@ def clear_block() -> None:
         _write_atomic(RUN, snap)
 
 
+# --------------------------------------------------------------------------- decision cards
+PENDING = ORBIT_DIR / "pending-question.json"
+
+
+def ask(title: str, why: str = "", recommended: str = "", options=None) -> None:
+    """Record a decision card (the headless equivalent of AskUserQuestion) to
+    .orbit/pending-question.json, pin it on run.json, and log a blocked event. `options` is a list
+    of {"id", "label", "tradeoff"}. On the interactive path, use the AskUserQuestion tool instead —
+    this is what makes a pending decision visible in orbit-status when there's no chat to ask in."""
+    card = {
+        "schema": SCHEMA,
+        "ts": _now(),
+        "run_id": current_run_id(),
+        "title": title or "Decision needed",
+        "why": why or "",
+        "recommended": recommended or "",
+        "options": [o for o in (options or []) if isinstance(o, dict)],
+    }
+    _write_atomic(PENDING, card)
+    emit("human", "decide", "blocked", f"decision needed: {card['title']}")
+    snap = _read_json(RUN, {})                    # set the CLEAN title last (emit set it to the msg)
+    if not snap:
+        snap = new_run()
+    snap["blocked_question"] = card["title"]
+    _write_atomic(RUN, snap)
+
+
+def resolve_question(answer: str = "") -> None:
+    """Clear a pending decision card once it's answered (unblocks the run)."""
+    try:
+        if PENDING.exists():
+            PENDING.unlink()
+    except Exception:
+        pass
+    clear_block()
+    if answer:
+        emit("human", "decide", "info", f"decision: {answer}")
+
+
 # --------------------------------------------------------------------------- events + tasks
 def emit(role: str, phase: str = "", status: str = "info", msg: str = "",
          cycle=None, task_id=None, tokens=None, cost_usd=None,

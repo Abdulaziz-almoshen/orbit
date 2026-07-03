@@ -28,6 +28,7 @@ ORBIT_DIR = Path(os.environ.get("ORBIT_DIR", ".orbit"))
 TASKS = ORBIT_DIR / "tasks.json"
 ACTIVITY = ORBIT_DIR / "activity.jsonl"
 RUN = ORBIT_DIR / "run.json"
+PENDING = ORBIT_DIR / "pending-question.json"
 
 _NO_COLOR = bool(os.environ.get("NO_COLOR")) or "--no-ansi" in sys.argv
 DIM = "" if _NO_COLOR else "\033[2m"
@@ -164,6 +165,7 @@ def _snapshot(run, events):
         "tokens": run.get("tokens", 0), "cost_usd": run.get("cost_usd", 0.0),
         "confidence": score, "confidence_reason": reason,
         "blocked_question": run.get("blocked_question"),
+        "pending_question": _load(PENDING, None),
         "elapsed_s": _age(run.get("started_ts")), "last_event_age_s": _age(run.get("last_ts")),
     }
 
@@ -199,9 +201,20 @@ def render_full(run, tasks, events, tail):
                    f"cycle {cyc}   {el} elapsed")
         out.append("")
 
-    blocked = run.get("blocked_question")
-    if blocked:
-        out.append(f"{c('ylw')}{B}⚠ Needs input{RST}  {blocked}")
+    card = _load(PENDING, None)
+    if isinstance(card, dict) and card.get("title"):
+        out.append(f"{c('ylw')}{B}❓ Decision needed{RST}  {card['title']}")
+        if card.get("why"):
+            out.append(f"  {DIM}{card['why']}{RST}")
+        for o in card.get("options", []):
+            if not isinstance(o, dict):
+                continue
+            oid = o.get("id", "")
+            rec = f" {c('grn')}(recommended){RST}" if oid and oid == card.get("recommended") else ""
+            out.append(f"    {B}{oid}{RST} {o.get('label', '')}{rec}  {DIM}{o.get('tradeoff', '')}{RST}")
+        out.append("")
+    elif run.get("blocked_question"):
+        out.append(f"{c('ylw')}{B}⚠ Needs input{RST}  {run['blocked_question']}")
         out.append("")
 
     active = _active_roles(events)
