@@ -144,22 +144,68 @@ _CONTROL = re.compile(
     r"|[\x00-\x1f\x7f\x9b]"
 )
 
+# Known secret shapes — replaced with [redacted] so a key pasted into a prompt never lands in the
+# activity log. Bias to over-redact: a false positive costs a garbled word, a miss leaks a key.
+_SECRET_PREFIX = re.compile(
+    r"\bsk-(?:proj|ant|live|test)-[A-Za-z0-9_\-]{6,}"    # OpenAI/Anthropic/Stripe project keys
+    r"|\b(?:sk|pk|rk)-[A-Za-z0-9]{16,}"                  # generic sk-/pk-/rk- keys
+    r"|\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{16,}"       # GitHub tokens
+    r"|\bgithub_pat_[A-Za-z0-9_]{20,}"
+    r"|\bAKIA[0-9A-Z]{16}\b"                             # AWS access key id
+    r"|\bASIA[0-9A-Z]{16}\b"
+    r"|\bxox[baprs]-[A-Za-z0-9\-]{10,}"                  # Slack
+    r"|\bAIza[0-9A-Za-z_\-]{20,}"                        # Google API key
+    r"|\beyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{4,}"  # JWT
+    r"|-----BEGIN [A-Z ]*PRIVATE KEY-----",
+    re.IGNORECASE,
+)
+# labeled secrets: keep the label, redact the value — `token: abc123` → `token: [redacted]`
+_SECRET_KV = re.compile(
+    r"(?i)\b(api[_-]?key|access[_-]?key|secret(?:[_-]?key)?|token|password|passwd|pwd|bearer|authorization)"
+    r"(\s*[:=]\s*|\s+)([^\s'\"]{6,})"
+)
+
+
+def _scrub_secrets(t: str) -> str:
+    t = _SECRET_PREFIX.sub("[redacted]", t)
+    t = _SECRET_KV.sub(lambda m: f"{m.group(1)}{m.group(2)}[redacted]", t)
+    return t
+
 
 def _redact(text: str, cap: int = 80) -> str:
     """A privacy-safe, dashboard-safe summary of a prompt: strip ANSI/terminal escapes + control
-    chars (so a prompt can't inject terminal codes or leave OSC framing in the live view), collapse
-    whitespace, cap length. We log a short redacted summary for context, never the full raw prompt."""
+    chars (no terminal injection / OSC framing), scrub anything that looks like a secret (API keys,
+    tokens, JWTs, private keys), collapse whitespace, cap length. We log a short redacted summary for
+    context, never the full raw prompt — and never a key that happened to be in it."""
     t = _CONTROL.sub(" ", str(text or ""))
+    t = _scrub_secrets(t)
     t = re.sub(r"\s+", " ", t).strip()
     return (t[: cap - 1] + "…") if len(t) > cap else t
 
 
+def _find_orbit(start: Path) -> Path:
+    """Find the nearest .orbit/ from `start` upward (so working in packages/app still records to the
+    repo-root scaffold). Prefers $CLAUDE_PROJECT_DIR when it points at a scaffolded repo. None if none."""
+    import os
+    proj = os.environ.get("CLAUDE_PROJECT_DIR")
+    if proj and (Path(proj) / ".orbit").is_dir():
+        return Path(proj) / ".orbit"
+    try:
+        cur = Path(start).resolve()
+    except Exception:
+        return None
+    for p in [cur, *cur.parents]:
+        if (p / ".orbit").is_dir():
+            return p / ".orbit"
+    return None
+
+
 def emit_activity(cwd: Path, kind: str, prompt: str) -> None:
     """Best-effort: let the system 'act first' visibly — log the routing DECISION to the stream.
-    Stores a redacted, control-stripped summary, never the raw prompt (privacy + no ANSI injection)."""
+    Stores a redacted, secret-scrubbed, control-stripped summary, never the raw prompt."""
     try:
-        orbit = cwd / ".orbit"
-        if not orbit.is_dir():
+        orbit = _find_orbit(cwd)
+        if orbit is None or not orbit.is_dir():
             return
         run_id = ""
         try:                                     # best-effort: tie the event to the current run

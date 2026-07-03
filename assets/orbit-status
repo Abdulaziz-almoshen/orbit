@@ -25,19 +25,28 @@ import sys
 import time
 from pathlib import Path
 
-# Defense-in-depth: strip any ANSI/terminal escapes + control chars from message text before it
-# reaches the terminal — the writers (route.py/orbit-hook/activity.py) already redact, but a legacy
-# or hand-edited activity.jsonl line must never inject codes into the live view either.
+# Defense-in-depth: strip any ANSI/terminal escapes + control chars AND scrub anything that looks
+# like a secret before it reaches the terminal — the writers redact, but a legacy or hand-edited
+# activity.jsonl line must never inject codes or display a leaked key.
 _STRIP = re.compile(
     r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?"
     r"|\x1b[\^_P][^\x1b]*(?:\x1b\\)?"
     r"|\x1b\[[0-9;?]*[ -/]*[@-~]"
     r"|[\x00-\x1f\x7f\x9b]"
 )
+_SECRET = re.compile(
+    r"\bsk-(?:proj|ant|live|test)-[A-Za-z0-9_\-]{6,}"
+    r"|\b(?:sk|pk|rk)-[A-Za-z0-9]{16,}"
+    r"|\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{16,}|\bgithub_pat_[A-Za-z0-9_]{20,}"
+    r"|\bAKIA[0-9A-Z]{16}\b|\bASIA[0-9A-Z]{16}\b|\bxox[baprs]-[A-Za-z0-9\-]{10,}"
+    r"|\bAIza[0-9A-Za-z_\-]{20,}"
+    r"|\beyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{4,}",
+    re.IGNORECASE,
+)
 
 
 def safe(text):
-    return _STRIP.sub(" ", str(text if text is not None else "")).strip()
+    return _SECRET.sub("[redacted]", _STRIP.sub(" ", str(text if text is not None else ""))).strip()
 
 ORBIT_DIR = Path(os.environ.get("ORBIT_DIR", ".orbit"))
 TASKS = ORBIT_DIR / "tasks.json"
@@ -390,7 +399,11 @@ def render(mode, tail):
     if not isinstance(run, dict):
         run = {}
     tasks = _load(TASKS, [])
-    events = load_events(max(tail, 40))
+    # RUN ISOLATION: scope events to the CURRENT run_id so an old run's proof/thread can't leak
+    # into this run's confidence or dashboard. An event with no run_id (legacy schema-1) is kept.
+    rid = run.get("run_id")
+    events_all = load_events(max(tail, 400))
+    events = [e for e in events_all if e.get("run_id", rid) == rid] if rid else events_all
     agents = load_agents()
     if mode == "json":
         return json.dumps({"run": _snapshot(run, events), "agents": agents,

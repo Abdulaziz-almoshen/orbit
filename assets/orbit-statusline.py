@@ -34,6 +34,19 @@ def _get(d, *path, default=None):
     return cur
 
 
+def _find_orbit(start):
+    """Nearest .orbit/ from `start` upward, so the status line still finds the repo-root scaffold
+    when Claude is working in a subdir. None if none found."""
+    try:
+        cur = Path(start).resolve()
+    except Exception:
+        return None
+    for p in [cur, *cur.parents]:
+        if (p / ".orbit").is_dir():
+            return p / ".orbit"
+    return None
+
+
 def _age_seconds(iso_ts):
     """Seconds since an ISO 'YYYY-MM-DDTHH:MM:SSZ', or None if unparseable."""
     try:
@@ -117,16 +130,22 @@ def main():
             claude = {}
     except Exception:
         claude = {}
-    project = claude.get("cwd") or _get(claude, "workspace", "current_dir") \
-        or os.environ.get("CLAUDE_PROJECT_DIR") or "."
+    # Prefer the ORIGINAL project dir (repo root) over cwd, then walk up — so a subdir still finds it.
+    orbit = None
+    for cand in (_get(claude, "workspace", "project_dir"), claude.get("cwd"),
+                 _get(claude, "workspace", "current_dir"), os.environ.get("CLAUDE_PROJECT_DIR"), "."):
+        if cand:
+            orbit = _find_orbit(cand)
+            if orbit:
+                break
     try:
-        run = json.loads((Path(project) / ".orbit" / "run.json").read_text())
+        run = json.loads((orbit / "run.json").read_text()) if orbit else {}
         if not isinstance(run, dict):
             run = {}
     except Exception:
         run = {}
     try:
-        agents = json.loads((Path(project) / ".orbit" / "agents.json").read_text())
+        agents = json.loads((orbit / "agents.json").read_text()) if orbit else {}
         if not isinstance(agents, dict):
             agents = {}
     except Exception:

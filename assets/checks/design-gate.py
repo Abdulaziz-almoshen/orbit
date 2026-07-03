@@ -51,6 +51,32 @@ def _is_ui_production_file(file_path: str) -> bool:
     return True
 
 
+def _repo_root(start, file_path: str) -> Path:
+    """The scaffolded repo root (parent of .orbit/) — resolved by walking up from the file being
+    edited, then the cwd, then $CLAUDE_PROJECT_DIR. So editing packages/app/x.tsx still finds the
+    root design record instead of over-asking. Falls back to `start`."""
+    cands = []
+    if file_path:
+        try:
+            cands.append(Path(file_path).resolve().parent)
+        except Exception:
+            pass
+    if start:
+        cands.append(Path(start))
+    proj = os.environ.get("CLAUDE_PROJECT_DIR")
+    if proj:
+        cands.append(Path(proj))
+    for base in cands:
+        try:
+            here = Path(base).resolve()
+        except Exception:
+            continue
+        for p in [here, *here.parents]:
+            if (p / ".orbit").is_dir():
+                return p
+    return Path(start or ".")
+
+
 def _has_design_record(root: Path) -> bool:
     """A HEAVY approval or a TRIVIAL triage marker exists anywhere in the repo. Existence-based
     (see the module docstring's honest limitation) — not tied to the specific file being edited."""
@@ -120,7 +146,7 @@ def main():
         file_path = (data.get("tool_input") or {}).get("file_path") or ""
         if not file_path or not _is_ui_production_file(file_path):
             return  # allow — not a UI production file this gate cares about
-        root = Path(data.get("cwd") or ".")
+        root = _repo_root(data.get("cwd") or ".", file_path)   # find the repo root, even from a subdir
         if _has_design_record(root):
             return  # allow — a design decision trail exists
         cur = _current_cycle(root)

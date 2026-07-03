@@ -32,12 +32,48 @@ _CONTROL = re.compile(
     r"|[\x00-\x1f\x7f\x9b]"
 )
 
+# Known secret shapes → [redacted], so a key in a tool arg / notification never lands in the log.
+_SECRET_PREFIX = re.compile(
+    r"\bsk-(?:proj|ant|live|test)-[A-Za-z0-9_\-]{6,}"
+    r"|\b(?:sk|pk|rk)-[A-Za-z0-9]{16,}"
+    r"|\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{16,}"
+    r"|\bgithub_pat_[A-Za-z0-9_]{20,}"
+    r"|\bAKIA[0-9A-Z]{16}\b|\bASIA[0-9A-Z]{16}\b"
+    r"|\bxox[baprs]-[A-Za-z0-9\-]{10,}"
+    r"|\bAIza[0-9A-Za-z_\-]{20,}"
+    r"|\beyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{4,}"
+    r"|-----BEGIN [A-Z ]*PRIVATE KEY-----",
+    re.IGNORECASE,
+)
+_SECRET_KV = re.compile(
+    r"(?i)\b(api[_-]?key|access[_-]?key|secret(?:[_-]?key)?|token|password|passwd|pwd|bearer|authorization)"
+    r"(\s*[:=]\s*|\s+)([^\s'\"]{6,})"
+)
+
 # PostToolUse fires on EVERY tool — only these carry signal worth a line in the thread.
 _FILE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 
 
+def _find_orbit(start):
+    """Nearest .orbit/ from `start` upward (so working in a subdir still records to the repo-root
+    scaffold). Prefers $CLAUDE_PROJECT_DIR when it points at a scaffolded repo. None if none found."""
+    proj = os.environ.get("CLAUDE_PROJECT_DIR")
+    if proj and (Path(proj) / ".orbit").is_dir():
+        return Path(proj) / ".orbit"
+    try:
+        cur = Path(start).resolve()
+    except Exception:
+        return None
+    for p in [cur, *cur.parents]:
+        if (p / ".orbit").is_dir():
+            return p / ".orbit"
+    return None
+
+
 def _redact(text, cap=80):
     t = _CONTROL.sub(" ", str(text or ""))
+    t = _SECRET_PREFIX.sub("[redacted]", t)
+    t = _SECRET_KV.sub(lambda m: f"{m.group(1)}{m.group(2)}[redacted]", t)
     t = re.sub(r"\s+", " ", t).strip()
     return (t[: cap - 1] + "…") if len(t) > cap else t
 
@@ -115,10 +151,9 @@ def main():
     if not isinstance(data, dict):
         return
     event = data.get("hook_event_name") or ""
-    project = data.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or "."
-    orbit_dir = Path(project) / ".orbit"
-    if not orbit_dir.is_dir():
-        return                                              # Orbit not scaffolded here — do nothing
+    orbit_dir = _find_orbit(data.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or ".")
+    if orbit_dir is None:
+        return                                              # Orbit not scaffolded here (or any parent)
 
     # Import the TRUSTED install's activity.py (single source of truth for schema + snapshot),
     # pointed at the PROJECT's .orbit/. Never import project-local code from this trusted script.

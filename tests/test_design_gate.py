@@ -66,6 +66,16 @@ def main():
         if decision_of(out) is not None:
             failures.append(f"approved.json present but still asked: {out!r}")
 
+    # --- 2b. editing a UI file in a SUBDIR finds the root design record (no over-ask) ----
+    with tempfile.TemporaryDirectory() as d:
+        os.makedirs(os.path.join(d, ".orbit", "design"))
+        os.makedirs(os.path.join(d, "packages", "app", "src"))
+        open(os.path.join(d, ".orbit", "design", "TRIVIAL"), "w").write("triage: trivial\n")
+        sub = os.path.join(d, "packages", "app")           # cwd is the subdir, .orbit is at root
+        rc, out = run(edit("Edit", os.path.join(sub, "src", "Btn.tsx"), sub))
+        if decision_of(out) is not None:
+            failures.append(f"subdir edit missed the root design record (over-asked): {out!r}")
+
     # --- 3. a TRIVIAL marker exists -> allow ---------------------------------------------
     with tempfile.TemporaryDirectory() as d:
         os.makedirs(os.path.join(d, ".orbit", "design"))
