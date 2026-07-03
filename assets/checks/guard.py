@@ -20,13 +20,19 @@ hidden* — it does NOT claim to defeat a determined obfuscator (nothing at the 
 one can always write a script file, `python -c "os.system(...)"`, or fetch+run). So it:
   • parses EACH command segment's argv (splitting `&&`/`||`/`;`/`|`/`&` and newlines),
   • collapses `\\`-newline line-continuations first,
-  • strips leading env-assignments (`X=1 …`), `sudo`/`env`/`nohup`/`xargs`/…, and subshell/brace
-    wrappers (`( … )`, `{ …; }`), and recurses into `sh -c "…"` (incl. `-lc`/`-xc`), `eval …`,
-    and command-substitutions `$( … )` / backticks so a wrapped force-push is still caught,
+  • strips leading env-assignments (`X=1 …`), `sudo`/`env`/`nohup`/`xargs`/… **including their own
+    flags** (`sudo -E`, `env -i`, `xargs -I{}` no longer leave a flag sitting where the real
+    command name belongs), and subshell/brace wrappers (`( … )`, `{ …; }`), and recurses into
+    `sh -c "…"` (incl. `-lc`/`-xc`), `eval …`, and command-substitutions `$( … )` / backticks so a
+    wrapped force-push is still caught,
+  • recognizes home-relative sensitive paths (`~/.ssh`, `$HOME/.aws`, …), not just absolute ones,
   • FAILS CLOSED to "ask" when a command's identity is genuinely un-inspectable (its name is a
     shell variable, or a downloader is piped straight into a shell) — ask, never silently allow.
-Deliberate self-obfuscation (`G="git push --force"; $G …`, runtime aliases, base64|sh) is out of
-scope by design and documented as such — the guard asks on the un-inspectable forms it can see.
+Residual limit, stated honestly: wrapper-flag stripping is a KNOWN-flag list (`sudo`/`env`/`xargs`'s
+documented value-taking flags), not a full grammar — an unrecognized value-taking flag on one of
+these wrappers can still misparse which token is the command. Deliberate self-obfuscation
+(`G="git push --force"; $G …`, runtime aliases, base64|sh) is out of scope by design and documented
+as such — the guard asks on the un-inspectable forms it can see.
 
 Customize the RULES block for YOUR repo (deploys, migrations, data deletes, secret branches).
 """
@@ -41,6 +47,20 @@ _SHELLS = {"sh", "bash", "zsh", "dash", "ksh"}
 _GROUPS = {"(", ")", "{", "}"}
 _ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")            # NAME=value env-assignment prefix
 _COMBINED_C = re.compile(r"^-[a-z]*c$")                       # -c, -lc, -xc … (shell command flag)
+
+# Known VALUE-taking flags for the wrappers we strip — so `sudo -u root git push --force` or
+# `xargs -I{} sh -c "..."` don't leave a flag/value token sitting where the real command name
+# should be (which silently defeats every downstream check). Anything else starting with "-"
+# is treated as flag-only and dropped whole — best-effort, same philosophy as the rest of this
+# file: narrow the common cases, never crash, never worse than before.
+_WRAPPER_VALUE_FLAGS = {
+    "sudo": {"-u", "-g", "-p", "-r", "-h", "-C", "-U", "--user", "--group", "--prompt",
+             "--role", "--type", "--close-from", "--host"},
+    "env":  {"-u", "-C", "-S", "-P", "--unset", "--chdir", "--split-string"},
+    "xargs": {"-I", "-L", "-l", "-n", "-P", "-s", "-a", "-E", "-d",
+              "--delimiter", "--max-lines", "--max-args", "--max-procs", "--max-chars",
+              "--arg-file", "--eof-str", "--replace"},
+}
 
 
 # --- predicates over a segment's argv tokens ---------------------------------------------
@@ -89,10 +109,19 @@ def _rm_rf(t):
 
 
 _CATASTROPHIC = {"/", "/*", "~", "~/", "$HOME", "$HOME/", "*", ".", "./", "..", "../"}
+_HOME_PREFIXES = ("~/", "$HOME/")
 
 
 def _rm_targets(t):
     return [x for x in t[1:] if not x.startswith("-")]
+
+
+def _home_subpath(x):
+    """The part after `~/` or `$HOME/`, or None if x doesn't start with either."""
+    for p in _HOME_PREFIXES:
+        if x.startswith(p):
+            return x[len(p):]
+    return None
 
 
 def _rm_catastrophic(t):
@@ -119,6 +148,9 @@ def _rm_sensitive(t):
     for x in tg:
         s = x.rstrip("/")
         if s.startswith(".") or ".git" in x or ".orbit" in x or x.startswith("/") or x.startswith("$"):
+            return True
+        sub = _home_subpath(x)                               # ~/.ssh, ~/.aws, $HOME/.gnupg, …
+        if sub is not None and (sub == "" or sub.startswith(".")):
             return True
     return False
 
@@ -198,8 +230,40 @@ def _max(a, b):
     return a if _SEVERITY[a[0]] >= _SEVERITY[b[0]] else b
 
 
+def _strip_flags(t, value_flags):
+    """Consume a run of dash-flags at the front of t. A flag in value_flags eats its value too —
+    as a separate token (`-u root`), inline-short (`-I{}`), inline-long (`--user=root`), or as
+    the LAST option in a bundled short cluster (`-Eu` = -E, then -u; getopt convention allows a
+    value-taking short option only in the last position of a bundle, so its value is the next
+    token). Anything else starting with `-` is assumed flag-only and dropped whole (best-effort —
+    an unrecognized value-flag can still misparse, but that's strictly better than not trying)."""
+    short_value_flags = {vf for vf in value_flags if not vf.startswith("--") and len(vf) == 2}
+    while t and t[0].startswith("-"):
+        tok = t[0]
+        if tok in value_flags:                              # exact match: value is the NEXT token
+            t = t[1:]
+            if t:
+                t = t[1:]
+            continue
+        if any(tok.startswith(vf + "=") for vf in value_flags if vf.startswith("--")):
+            t = t[1:]                                        # --user=root (value inline)
+            continue
+        if any(tok.startswith(vf) and len(tok) > len(vf) for vf in value_flags if not vf.startswith("--")):
+            t = t[1:]                                        # -I{} / -uroot (value inline)
+            continue
+        if re.match(r"^-[A-Za-z]{2,}$", tok) and f"-{tok[-1]}" in short_value_flags:
+            t = t[1:]                                        # -Eu -> -E flag-only, -u takes a value
+            if t:
+                t = t[1:]
+            continue
+        t = t[1:]                                            # flag-only (known or not) — drop it
+    return t
+
+
 def _strip_wrappers(t):
-    """Peel leading env-assignments, sudo/env/xargs/… wrappers, and subshell/brace punctuation."""
+    """Peel leading env-assignments, sudo/env/xargs/… wrappers (INCLUDING the wrapper's own
+    flags, so `sudo -E`, `env -i`, `xargs -I{}` don't leave a flag sitting where the real
+    command name belongs), and subshell/brace punctuation."""
     while t:
         tok = t[0]
         if tok in _GROUPS:                                  # ( … ) or { …; } group punctuation
@@ -208,13 +272,15 @@ def _strip_wrappers(t):
         if _ASSIGN.match(tok):                              # X=1 git …  (env-assignment prefix)
             t = t[1:]
             continue
-        if tok in _WRAPPERS:
-            t = t[1:]
-            continue
         if tok == "env":
             t = t[1:]
             while t and _ASSIGN.match(t[0]) and not t[0].startswith("-"):
-                t = t[1:]
+                t = t[1:]                                    # env FOO=1 BAR=2 cmd
+            t = _strip_flags(t, _WRAPPER_VALUE_FLAGS["env"])  # env -i / -u NAME / -C dir …
+            continue
+        if tok in _WRAPPERS:
+            t = t[1:]
+            t = _strip_flags(t, _WRAPPER_VALUE_FLAGS.get(tok, set()))
             continue
         break
     return t

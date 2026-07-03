@@ -4,7 +4,8 @@ Tests for assets/checks/guard.py — the PreToolUse safety hook.
 
 Verifies (a) the decision logic across the rule set — including the wrap/hide bypasses
 (subshell, brace group, line-continuation, command-substitution, env-prefix, `sh -lc`, eval,
-variable indirection) and the non-git destructive defaults (rm -rf, reset --hard, clean,
+variable indirection, flagged wrappers like `sudo -E`/`env -i`/`xargs -I{}`, and home-relative
+sensitive paths like `~/.ssh`) and the non-git destructive defaults (rm -rf, reset --hard, clean,
 dd-to-device, curl|sh) — and (b) that the OUTPUT VALIDATES against the schema Claude Code
 actually reads: hookSpecificOutput.{hookEventName=PreToolUse, permissionDecision in
 {deny,ask}, permissionDecisionReason}.
@@ -104,6 +105,21 @@ CASES = [
     ("git push --mirror origin",                         "deny"),      # can force-overwrite every ref
     ("git push origin :main",                            "ask"),       # delete remote branch
     ("echo $(date)",                                     None),        # benign substitution → allow
+
+    # --- bypass regression (v0.24.x): flagged wrappers + home-relative sensitive paths ---
+    ("sudo -E git push --force",                         "deny"),      # sudo's OWN flag (-E), not a value
+    ("sudo -u root git push --force",                    "deny"),      # sudo -u <value> (two tokens)
+    ("sudo --user=root git push --force",                "deny"),      # sudo --user=value (inline long)
+    ("sudo -Eu root git push --force",                   "deny"),      # bundled short cluster, -u last (getopt)
+    ("env -i git push --force",                          "deny"),      # env's OWN flag (-i)
+    ("env -u PATH git push --force",                     "deny"),      # env -u <value> (two tokens)
+    ('echo x | xargs -I{} sh -c "git push --force"',     "deny"),      # xargs -I<value> inline, sh -c payload
+    ('echo x | xargs -I {} sh -c "git push --force"',    "deny"),      # xargs -I <value> (two tokens)
+    ("rm -rf ~/.ssh",                                    "ask"),       # home-relative dotdir, not just absolute
+    ("rm -rf ~/.aws",                                    "ask"),
+    ("rm -rf $HOME/.gnupg",                              "ask"),
+    ("rm -rf ~/.ssh/id_rsa",                             "ask"),       # a file inside the sensitive dir
+    ("rm -rf ~/Downloads",                               None),       # an ordinary home subdir → allow
 ]
 
 ROBUSTNESS = [
