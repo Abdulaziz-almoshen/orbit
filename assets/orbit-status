@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
 """
-orbit-status — live "who's talking + checklist" dashboard for an Orbit run.
+orbit-status — live run dashboard for an Orbit run (the headless equivalent of the pinned
+Claude Code checklist). Reads the telemetry activity.py writes:
 
-Run it in a second terminal pane while the loop runs:
-
-    scripts/orbit-status --follow     # redraws ~1/s, like a pinned dashboard
-    scripts/orbit-status              # one-shot snapshot
-    scripts/orbit-status --tail 40    # show the last N thread lines
-
-It reads the event stream written by activity.py:
+    .orbit/run.json         the compact snapshot (phase, active role, progress, budget, confidence)
     .orbit/tasks.json       the checklist
     .orbit/activity.jsonl   the who-said-what thread
 
-Stdlib only; no install. Set ORBIT_DIR to point at a different state dir.
+Modes:
+    scripts/orbit-status              one-shot snapshot
+    scripts/orbit-status --follow     redraw ~1/s, like a pinned dashboard
+    scripts/orbit-status --compact    a 3-line summary (for a narrow pane)
+    scripts/orbit-status --json       machine-readable snapshot (run + tasks + confidence)
+    scripts/orbit-status --no-ansi    plain text (also honors NO_COLOR=1)
+    scripts/orbit-status --tail 40    show the last N thread lines
+
+Stdlib only. FULLY DEFENSIVE — a missing/garbage run.json or one bad event line never crashes it.
+Set ORBIT_DIR to point at a different state dir.
 """
 import json
 import os
@@ -23,47 +27,45 @@ from pathlib import Path
 ORBIT_DIR = Path(os.environ.get("ORBIT_DIR", ".orbit"))
 TASKS = ORBIT_DIR / "tasks.json"
 ACTIVITY = ORBIT_DIR / "activity.jsonl"
+RUN = ORBIT_DIR / "run.json"
 
-DIM = "\033[2m"; B = "\033[1m"; RST = "\033[0m"
+_NO_COLOR = bool(os.environ.get("NO_COLOR")) or "--no-ansi" in sys.argv
+DIM = "" if _NO_COLOR else "\033[2m"
+B = "" if _NO_COLOR else "\033[1m"
+RST = "" if _NO_COLOR else "\033[0m"
+_C = {"red": "\033[31m", "grn": "\033[32m", "ylw": "\033[33m", "cyn": "\033[36m", "mag": "\033[35m"}
+
+
+def c(name):
+    return "" if _NO_COLOR else _C.get(name, "")
+
+
 ROLE_COLORS = {
     "dispatcher": "\033[96m", "router": "\033[96m",
     "orchestrator": "\033[35m", "pm": "\033[35m", "planner": "\033[35m",
-    "product-discovery": "\033[94m", "discovery": "\033[94m",
-    "market-researcher": "\033[36m", "market": "\033[36m",
-    "data": "\033[36m", "input": "\033[36m", "research": "\033[36m",
-    "builder": "\033[32m", "executor": "\033[32m", "writer": "\033[32m", "engineer": "\033[32m",
-    "designer": "\033[95m",
-    "analyst": "\033[34m", "technical": "\033[34m",
-    "safety": "\033[31m", "compliance": "\033[31m", "risk": "\033[31m",
-    "reviewer": "\033[33m", "evaluator": "\033[33m", "editor": "\033[33m",
-    "qa-engineer": "\033[93m", "qa": "\033[93m",
-    "reporter": "\033[37m", "human": "\033[1;33m",
+    "product-discovery": "\033[94m", "market-researcher": "\033[36m",
+    "data": "\033[36m", "input": "\033[36m",
+    "builder": "\033[32m", "executor": "\033[32m", "engineer": "\033[32m", "frontend-engineer": "\033[32m",
+    "designer": "\033[95m", "analyst": "\033[34m",
+    "safety": "\033[31m", "reviewer": "\033[33m", "qa-engineer": "\033[93m", "qa": "\033[93m",
+    "reporter": "\033[37m", "human": "\033[1;33m", "subagent": "\033[36m",
 }
 TASK_MARK = {"done": "✓", "in_progress": "▸", "pending": "○", "skipped": "⊘"}
-EVENT_BADGE = {"done": "✓", "start": "▸", "blocked": "✗", "info": "·"}
+EVENT_BADGE = {"done": "✓", "start": "▸", "blocked": "✗", "failed": "✗", "info": "·"}
 
 
-def role_color(role: str) -> str:
+def role_color(role):
+    if _NO_COLOR:
+        return ""
     key = (role or "").lower().replace("/", " ").split()[0] if role else ""
     return ROLE_COLORS.get(key, "\033[37m")
 
 
-def actor(e) -> str:
-    """The speaker — accept 'role' (current schema) or 'who' (legacy) or fall back."""
-    return e.get("role") or e.get("who") or "?"
-
-
-def fmt_ts(e) -> str:
-    """HH:MM:SS from an ISO ts; tolerate ints/odd values without crashing."""
-    ts = str(e.get("ts", ""))
-    return ts[11:19] if len(ts) >= 19 and "T" in ts else ts[:8]
-
-
-def load_tasks():
+def _load(path, default):
     try:
-        return json.loads(TASKS.read_text())
+        return json.loads(path.read_text())
     except Exception:
-        return []
+        return default
 
 
 def load_events(n):
@@ -78,56 +80,208 @@ def load_events(n):
             if isinstance(ev, dict):
                 out.append(ev)
         except Exception:
-            continue  # a bad line must never kill the dashboard
+            continue
     return out
 
 
-def render(tail: int) -> str:
-    tasks = load_tasks()
-    events = load_events(tail)
-    out = [f"{B}🛰  ORBIT — live status{RST}   {DIM}{ORBIT_DIR}{RST}", ""]
+def actor(e):
+    return e.get("role") or e.get("who") or "?"
+
+
+def fmt_ts(e):
+    ts = str(e.get("ts", ""))
+    return ts[11:19] if len(ts) >= 19 and "T" in ts else ts[:8]
+
+
+def _age(iso_ts):
+    try:
+        t = time.strptime(str(iso_ts), "%Y-%m-%dT%H:%M:%SZ")
+        return max(0, int(time.time() - time.mktime(t) + time.timezone))
+    except Exception:
+        return None
+
+
+def _fmt_dur(secs):
+    if secs is None:
+        return "?"
+    if secs < 60:
+        return f"{secs}s"
+    if secs < 3600:
+        return f"{secs // 60}m"
+    return f"{secs // 3600}h{(secs % 3600) // 60}m"
+
+
+def _bar(done, total, width=10):
+    if not total:
+        return "[" + "-" * width + "]"
+    fill = int(round(width * done / total))
+    return "[" + "#" * fill + "-" * (width - fill) + "]"
+
+
+def _confidence(run, events):
+    """(score, reason) — computed from proof events via the confidence module if provisioned,
+    else the running value on run.json."""
+    proofs = [e.get("proof") for e in events if isinstance(e.get("proof"), dict)]
+    blockers = 1 if run.get("blocked_question") else 0
+    try:
+        sys.path.insert(0, str(ORBIT_DIR))
+        import confidence  # noqa: E402
+        r = confidence.evaluate(proofs, blockers=blockers)
+        return r["score"], r["reason"]
+    except Exception:
+        s = run.get("confidence")
+        return (s, f"{s}%") if isinstance(s, (int, float)) else (None, "")
+
+
+def _lifecycle_strip(run):
+    mode = run.get("mode") or "feature"
+    phase = run.get("phase") or ""
+    try:
+        sys.path.insert(0, str(ORBIT_DIR))
+        import lifecycle  # noqa: E402
+        return lifecycle.strip(mode, phase)
+    except Exception:
+        return mode
+
+
+def _active_roles(events):
+    """Roles whose latest event is start/info (working) — 'done'/'failed' clears them."""
+    last = {}
+    for e in events:
+        r = actor(e)
+        if r and r != "?":
+            last[r] = (e.get("status", ""), e.get("msg", ""), e.get("ts", ""))
+    return [(r, msg, ts) for r, (st, msg, ts) in last.items() if st in ("start", "info")]
+
+
+def _snapshot(run, events):
+    """The machine-readable summary for --json."""
+    score, reason = _confidence(run, events)
+    return {
+        "run_id": run.get("run_id"), "mode": run.get("mode"), "phase": run.get("phase"),
+        "active_role": run.get("active_role"), "cycle": run.get("cycle"),
+        "tasks_done": run.get("tasks_done", 0), "tasks_total": run.get("tasks_total", 0),
+        "tokens": run.get("tokens", 0), "cost_usd": run.get("cost_usd", 0.0),
+        "confidence": score, "confidence_reason": reason,
+        "blocked_question": run.get("blocked_question"),
+        "elapsed_s": _age(run.get("started_ts")), "last_event_age_s": _age(run.get("last_ts")),
+    }
+
+
+def render_compact(run, tasks, events):
+    done, total = run.get("tasks_done", 0), run.get("tasks_total", 0)
+    score, _ = _confidence(run, events)
+    seg = [f"{B}🛰 {run.get('phase') or run.get('mode') or 'orbit'}{RST}"]
+    if run.get("blocked_question"):
+        seg.append(f"{c('ylw')}⚠ needs input{RST}")
+    if total:
+        seg.append(f"{_bar(done, total)} {done}/{total}")
+    if isinstance(run.get("cost_usd"), (int, float)):
+        seg.append(f"${run['cost_usd']:.2f}")
+    if score is not None:
+        seg.append(f"conf {int(score)}%")
+    line = "  ".join(seg)
+    ev = events[-1] if events else None
+    tail = f"\n{DIM}last: {fmt_ts(ev)} [{actor(ev)}] {ev.get('msg','')}{RST}" if ev else ""
+    return line + tail
+
+
+def render_full(run, tasks, events, tail):
+    out = []
+    goal = run.get("goal") or ""
+    out.append(f"{B}🛰  Orbit Run{RST}  {DIM}{goal}{RST}".rstrip())
+    if run:
+        out.append(f"{B}Lifecycle{RST}  {_lifecycle_strip(run)}")
+        done, total = run.get("tasks_done", 0), run.get("tasks_total", 0)
+        cyc = run.get("cycle", 0)
+        el = _fmt_dur(_age(run.get("started_ts")))
+        out.append(f"{B}Progress{RST}   {_bar(done, total)} {done}/{total} tasks   "
+                   f"cycle {cyc}   {el} elapsed")
+        out.append("")
+
+    blocked = run.get("blocked_question")
+    if blocked:
+        out.append(f"{c('ylw')}{B}⚠ Needs input{RST}  {blocked}")
+        out.append("")
+
+    active = _active_roles(events)
+    out.append(f"{B}Active{RST}")
+    if not active:
+        out.append(f"  {DIM}(idle){RST}")
+    for r, msg, ts in active[-6:]:
+        col = role_color(r)
+        out.append(f"  {col}{r}{RST}  {DIM}{fmt_ts({'ts': ts})}{RST}  {msg}")
+    out.append("")
 
     out.append(f"{B}Checklist{RST}")
     if not tasks:
         out.append(f"  {DIM}(no tasks yet){RST}")
-    for t in tasks:
+    for t in (tasks or []):
+        if not isinstance(t, dict):
+            continue
         mark = TASK_MARK.get(t.get("status", "pending"), "○")
         owner = t.get("owner", "")
         own = f"{role_color(owner)}[{owner}]{RST} " if owner else ""
         line = f"  {mark} {own}{t.get('title', '')}"
-        if t.get("status") == "done":
-            line = f"{DIM}{line}{RST}"
-        out.append(line)
+        out.append(f"{DIM}{line}{RST}" if t.get("status") == "done" else line)
     out.append("")
 
-    if events:
-        e = events[-1]
-        who = actor(e)
-        col = role_color(who)
-        ph = e.get("phase", "")
-        out.append(f"{B}Now{RST}  {col}{B}[{who}]{RST} "
-                   f"{ph + ' — ' if ph else ''}{e.get('msg', '')}")
+    if run:
+        cost = run.get("cost_usd", 0.0)
+        toks = run.get("tokens", 0)
+        out.append(f"{B}Budget{RST}     cost ${cost:.2f}   {toks} tokens")
+        score, reason = _confidence(run, events)
+        if score is not None:
+            col = c("grn") if score >= 75 else c("ylw") if score >= 50 else c("red")
+            out.append(f"{B}Confidence{RST} {col}{reason}{RST}")
         out.append("")
 
+    # last event + stall detection
+    ev = events[-1] if events else None
+    if ev:
+        age = _age(ev.get("ts")) or 0
+        note = ""
+        if age >= 90:
+            note = f"  {c('red')}(possibly stalled — last event {_fmt_dur(age)} ago){RST}"
+        elif age >= 30:
+            note = f"  {c('ylw')}(still waiting on the active agent){RST}"
+        out.append(f"{B}Last event{RST}  {DIM}{_fmt_dur(age)} ago{RST} "
+                   f"{role_color(actor(ev))}[{actor(ev)}]{RST} {ev.get('msg','')}{note}")
+
+    out.append("")
     out.append(f"{B}Thread{RST} {DIM}(who said what){RST}")
     if not events:
         out.append(f"  {DIM}(waiting for activity…){RST}")
-    for e in events:
+    for e in events[-tail:]:
         try:
             who = actor(e)
-            col = role_color(who)
             badge = EVENT_BADGE.get(e.get("status", "info"), "·")
             ph = e.get("phase", "")
-            out.append(f"  {DIM}{fmt_ts(e)}{RST} {col}{badge} [{who}]{RST} "
+            out.append(f"  {DIM}{fmt_ts(e)}{RST} {role_color(who)}{badge} [{who}]{RST} "
                        f"{ph + ': ' if ph else ''}{e.get('msg', '')}")
         except Exception:
-            continue  # one malformed event never breaks the whole render
+            continue
     return "\n".join(out)
+
+
+def render(mode, tail):
+    run = _load(RUN, {})
+    if not isinstance(run, dict):
+        run = {}
+    tasks = _load(TASKS, [])
+    events = load_events(max(tail, 40))
+    if mode == "json":
+        return json.dumps({"run": _snapshot(run, events),
+                           "tasks": tasks if isinstance(tasks, list) else []}, indent=2)
+    if mode == "compact":
+        return render_compact(run, tasks, events)
+    return render_full(run, tasks, events, tail)
 
 
 def main():
     argv = sys.argv[1:]
     follow = "--follow" in argv or "-f" in argv
+    mode = "json" if "--json" in argv else "compact" if "--compact" in argv else "full"
     tail = 20
     if "--tail" in argv:
         try:
@@ -135,12 +289,12 @@ def main():
         except Exception:
             pass
     if not follow:
-        print(render(tail))
+        print(render(mode, tail))
         return
     try:
         while True:
-            sys.stdout.write("\033[2J\033[H")  # clear screen + cursor home
-            sys.stdout.write(render(tail) + "\n")
+            sys.stdout.write("\033[2J\033[H")
+            sys.stdout.write(render(mode, tail) + "\n")
             sys.stdout.flush()
             time.sleep(1)
     except KeyboardInterrupt:
