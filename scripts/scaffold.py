@@ -104,6 +104,7 @@ FILE_PLAN = [
 
     ("checks/guard.py",  ".orbit/checks/guard.py",    0o755),  # placed, NOT wired (see skill Phase 6a)
     ("checks/route.py",  ".orbit/checks/route.py",    0o755),  # the UserPromptSubmit router (Phase 6a)
+    ("checks/orbit-stop-check.py", ".orbit/checks/orbit-stop-check.py", 0o755),  # Stop: observability backstop
     ("checks/learn.py",  ".orbit/checks/learn.py",    0o755),  # the active-learning ledger helper
 ]
 
@@ -159,6 +160,7 @@ DIRS = [
 GUARD_CMD = 'python3 "$CLAUDE_PROJECT_DIR/.orbit/checks/guard.py"'
 ROUTE_CMD = 'python3 "$CLAUDE_PROJECT_DIR/.orbit/checks/route.py"'
 DESIGN_GATE_CMD = 'python3 "$CLAUDE_PROJECT_DIR/.orbit/checks/design-gate.py"'
+STOP_CHECK_CMD = 'python3 "$CLAUDE_PROJECT_DIR/.orbit/checks/orbit-stop-check.py"'
 # The telemetry collector is wired from the TRUSTED Orbit INSTALL (not copied into the repo), so
 # editing the product repo can't alter it — unlike guard/route/design-gate, which are project-local
 # BECAUSE they're meant to be customized per repo (the guard's RULES block especially).
@@ -292,6 +294,15 @@ def install_hooks(target: Path, has_ui: bool = False) -> None:
                     "hooks": [{"type": "command", "command": DESIGN_GATE_CMD}]})
         added.append("PreToolUse[matcher=Edit|Write|MultiEdit] → design-gate.py   "
                      "(design: ask once/cycle if a UI edit has no design record)")
+
+    # Stop → orbit-stop-check.py: the observability backstop. Fails loudly (blocks once) if a routed
+    # task did real work but never made the board visible (no .orbit/tasks.json / set_team) — i.e. it
+    # ran as a black box instead of Orbit's checklist. Conservative + fail-open (see the hook header).
+    stop = hooks.setdefault("Stop", [])
+    if not any("orbit-stop-check.py" in json.dumps(e) for e in stop):
+        stop.append({"hooks": [{"type": "command", "command": STOP_CHECK_CMD}]})
+        added.append("Stop → orbit-stop-check.py            "
+                     "(observability: block once if a task ran without a visible checklist)")
 
     # Telemetry collector (observe-only, fail-open) across the run-lifecycle events → makes long
     # runs visible in orbit-status / the status line without the model having to remember to emit.

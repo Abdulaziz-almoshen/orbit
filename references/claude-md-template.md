@@ -158,9 +158,15 @@ prompts itself *and* stays fast: most requests don't need ceremony, so don't pay
     schema/data/security/payments; wide blast radius) → run the full loop, and run the
     **thinking in parallel**: infer from the repo, generate 2–3 approaches, and scan risks
     **concurrently**, then synthesize and act via the roles in `.claude/agents/` (Dispatcher →
-    specialists → Safety → Reviewer → Reporter). Drive the TaskCreate/TaskUpdate checklist.
-    Parallel beats serial here — same wall-clock as one pass, but sharper (more perspectives
-    at once). This is where the system is *smarter*, not slower.
+    specialists → Safety → Reviewer → Reporter), dispatched with the **Task tool**. **Make the board
+    visible FIRST** — `set_team` + `set_tasks` + `TaskCreate` — *before* spawning any specialist, so
+    the user sees who owns each step from the start. Drive the TaskCreate/TaskUpdate checklist and
+    write `.orbit/tasks.json` + `.orbit/activity.jsonl`. **Do NOT run the task through the native
+    `Workflow(...)` background runner** — it is a black-box job that bypasses the checklist, the
+    visible owner, and the `.orbit/` telemetry; a task isn't "running through Orbit" unless the user
+    can see who owns each step and what's done / in progress. Parallel beats serial here — same
+    wall-clock as one pass, but sharper (more perspectives at once). This is where the system is
+    *smarter*, not slower.
 
   You pick the lane by **judgment, not a command**. When genuinely unsure, take the heavier
   lane for anything touching data/security/money or hard to undo; otherwise default to fast.

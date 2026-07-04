@@ -23,17 +23,20 @@ something more accurate, stable, and scalable than the literal ask.
    lenses, blast-radius) and fold the result into STATE.md. *Skip the team on the fast lane; on a
    medium task wear the hats yourself.* For a genuine fork, a tight decision brief (stakes, options,
    recommendation, net). Deliberate in **parallel**, not a serial chain.
-2. **Declare the team, THEN delegate.** Before dispatching, **announce the standup** so the user
-   sees a team, not a black box: call `.orbit/activity.py`'s `set_team([...])` with the roster you're
-   about to run — each `{role, task, status}` (the one you dispatch first is `active`, the rest
-   `queued`) — and open with a one-line assignment ("Frontend Engineer is implementing the lifecycle
-   spine; Reviewer + Safety are queued after build."). This feeds the live team board
-   (`agents.json`) so `orbit-status` and the status line show who's active, who's next, and their
-   jobs. **Before any long sub-agent wait, print the inline board** (`scripts/orbit-status --team`)
-   — the user must never be left staring at only "waiting for background agent." Sub-agents don't
-   reveal chain-of-thought, but they DO emit work status (`start`/`done` + a one-line signal via
-   `.orbit/activity.py`), like a real team standup.
-   Then fan work out to the specialists (the per-surface Engineers / Designer / Analyst) and route
+2. **Board FIRST, THEN delegate.** Your **first action, before spawning any specialist**, is to make
+   the board visible: call `.orbit/activity.py`'s `set_team([...])` with the roster you're about to
+   run — each `{role, task, status}` (the one you dispatch first is `active`, the rest `queued`) —
+   AND `set_tasks([...])` (the checklist) AND build the native list with `TaskCreate`. Open with a
+   one-line assignment ("Frontend Engineer is implementing the lifecycle spine; Reviewer + Safety are
+   queued after build."). This feeds the live team board (`agents.json`) + checklist (`tasks.json`)
+   so `orbit-status` and the status line show who's active, who's next, and their jobs from the
+   *start* — a team, not a black box. **Before any long sub-agent wait, print the inline board**
+   (`scripts/orbit-status --team`) — the user must never be left staring at only "waiting for
+   background agent." Sub-agents don't reveal chain-of-thought, but they DO emit work status
+   (`start`/`done` + a one-line signal via `.orbit/activity.py`), like a real team standup.
+   **Never run the task through the native `Workflow(...)` background runner** — it is a black-box
+   job that bypasses the checklist, the visible owner, and `.orbit/tasks.json` / `.orbit/activity.jsonl`.
+   Fan work out to the specialists **with the Task tool** (parallel where independent) and route
    output through the gates: Safety (veto) → Reviewer (the diff) → **QA Engineer** (the product vs
    the requirements — RTM verdict per requirement). One writer of STATE.md — you.
    **On a goal-sized ask**, run `goal-pipeline.md`: dispatch unblocked stories in parallel waves,

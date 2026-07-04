@@ -396,6 +396,15 @@ user sees is **what you print in chat.** Therefore **do THREE things every cycle
    the Claude Code IDE/CLI. **`Task*`, NOT `TodoWrite`** (off by default ≥ v2.1.142). Drive it from
    the MAIN orchestrator. Best-effort and surface-specific — that's why steps 1–2 are the floor.
 
+> **Never run an Orbit task through the native `Workflow(...)` background runner.** It executes a
+> black-box job (`Running in background · /workflows to monitor`) that bypasses this entire model —
+> no role-tagged checklist, no visible owner, no `.orbit/tasks.json` / `.orbit/activity.jsonl`. A task
+> isn't "running through Orbit" unless the user can see **who owns each step and what's done / in
+> progress.** Dispatch sub-agents with the **Task tool** and drive the board yourself; make it visible
+> **first**, before spawning specialists. (This ban is enforced: the `Stop → orbit-stop-check.py` hook
+> blocks once, loudly, if a routed task did real work but wrote no board. `Workflow(...)` is fine for
+> *developing Orbit itself* — just never as the run path for a scaffolded repo's tasks.)
+
 Per surface: **IDE/CLI** → the pinned native list (step 3) + the inline board; **desktop app / web**
 → the inline board (step 2) is what's visible; **headless / own-orchestrator** → `scripts/orbit-status
 --follow` (Ctrl-C to stop) off the step-1 files. Each role announces itself: `emit` a `start` on

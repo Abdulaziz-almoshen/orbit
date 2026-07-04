@@ -3,6 +3,36 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.27.2
+
+**The run contract now forbids the black-box runner — and enforces it.** Orbit's core promise is
+*watch the team work*: a task runs through a visible, role-tagged checklist with a current owner and
+`.orbit/tasks.json` + `.orbit/activity.jsonl`, driven by the main orchestrator. The gap this closes:
+nothing in the contract said *not* to use Claude's native `Workflow(...)` background runner — which
+executes an opaque job (`Running in background · /workflows to monitor`) that bypasses the entire
+board. That silently reduces Orbit to "a fancy prompt."
+
+- **The ban is now explicit on every run-contract surface** — `commands/orbit-run.md`, the
+  Orchestrator role, the router's injected TASK context (`route.py`), the CLAUDE.md template §10, and
+  `SKILL.md`'s observability phase all state: **do NOT run an Orbit task through `Workflow(...)`**; use
+  the **Task tool** for sub-agents and drive the checklist yourself. (It stays fine for developing
+  Orbit itself.)
+- **Board FIRST.** The orchestrator now makes the board visible — `set_team` + `set_tasks` +
+  `TaskCreate` — as its *first* action, before spawning any specialist, so the user sees who owns each
+  step immediately, not after the work is done.
+- **Enforced by a new Stop hook** — `.orbit/checks/orbit-stop-check.py`. When a routed task did real
+  work but wrote **no board** (no `.orbit/tasks.json`, no `set_team`), it **fails loudly**: records an
+  observability-gap event and blocks the stop once, telling the model to make the board visible.
+  Conservative + fail-open by design (the guard-hardening lesson): it fires only on *substantial* work
+  with a *completely absent* board, blocks at most once per route (`stop_hook_active` + a per-route
+  marker), stays silent on trivial/no-work turns and answered questions, and any error → allow. The
+  router (`route.py`) drops a `.last-task-route` anchor so the hook can tell a task ran; `orbit-uninstall`
+  strips the hook like the others.
+- New `tests/test_run_contract.py` (the Workflow ban on all surfaces + board-first + the Stop hook's
+  gap/silent/fail-open behavior + the scaffolder placing and wiring it). Live acceptance: a real
+  route → black-box run **blocks**, a run that wrote the board **stays silent**. Full suite (22 files)
+  + coherence + `claude plugin validate` green.
+
 ## 0.27.1
 
 **Guard: fixes the reported `$B` browse false-positive, then two adversarial red-team passes harden it

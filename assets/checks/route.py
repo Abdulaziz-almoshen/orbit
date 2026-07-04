@@ -81,9 +81,12 @@ TASK_CTX = (
     "labeled '(Recommended)' — never a question buried in prose.** If the goal and the plan are genuinely sound and you have nothing "
     "material to add, say so in ONE line and proceed — never manufacture friction, never rubber-stamp "
     "when you do have a better read. Then run read→plan→act→evaluate→update→decide via the roles in "
-    ".claude/agents/. Small/clear/reversible → just do it (no review theater). Drive the "
-    "TaskCreate/TaskUpdate checklist + write .orbit/tasks.json + .orbit/activity.jsonl. Do NOT "
-    "free-edit a source-of-truth file outside the loop."
+    ".claude/agents/ (use the Task tool for sub-agents). Small/clear/reversible → just do it (no "
+    "review theater). Drive the TaskCreate/TaskUpdate checklist + write .orbit/tasks.json + "
+    ".orbit/activity.jsonl — make the board visible FIRST, before spawning specialists. Do NOT run "
+    "the task through the native Workflow(...) background runner (it bypasses the checklist, the "
+    "visible owner, and .orbit/ telemetry — the user must see who owns each step). Do NOT free-edit a "
+    "source-of-truth file outside the loop."
 )
 QUESTION_CTX = (
     "[orbit] ROUTING — default lane: QUESTION. Answer it directly: no loop, no roles, no ceremony "
@@ -223,6 +226,8 @@ def emit_activity(cwd: Path, kind: str, prompt: str) -> None:
         }
         with (orbit / "activity.jsonl").open("a") as f:
             f.write(json.dumps(line) + "\n")
+        if kind == "task":                       # anchor for the Stop observability hook — touched
+            (orbit / ".last-task-route").write_text(line["ts"])   # AFTER the append (newest at route)
     except Exception:
         pass
 
