@@ -3,6 +3,31 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.26.3
+
+**Guard now resolves a `$VAR` command name — killing a false positive AND closing a real bypass.**
+Two fixes to `assets/checks/guard.py`, both about a command whose *name* is a shell variable:
+
+- **False positive (the reported annoyance).** The safe idiom `B=/path/to/tool; $B goto …` (as
+  emitted by gstack's browse) made the guard *ask* every time, because it saw the command name as an
+  un-inspectable `$B`. The guard now builds a `{VAR: value}` map from **flat literal assignments in
+  the same command** and resolves `$B` to the real tool → benign → **allowed, no prompt**. Only flat
+  literals resolve: a value with `$`/`` ` ``/`$(` (another var or a substitution) **or** a shell
+  control operator (`;`, `|`, `&`, `<`, `>`, `(`, `)`) is left un-resolvable and keeps its *ask* —
+  so `X="foo; rm -rf /"; $X` can't smuggle a hidden command in as args. A var reassigned to a
+  different literal is treated as ambiguous and also stays *ask*.
+- **The symmetric bypass.** The very same shape used to *hide* danger — `RM="rm -rf"; $RM /` or
+  `G="git push --force"; $G origin main` — previously only asked (documented as "self-obfuscation out
+  of scope"). It now resolves to the real command and **denies**.
+- **A deny-bypass in the tokenizer, found while testing this.** `shlex(punctuation_chars=True)`
+  returns a *run* of punctuation as one token, so `);` glued a subshell-close to a `;` and hid the
+  separator — `X=$(echo hi); rm -rf /` split into a single segment and slipped past the rules as an
+  **allow**. `_tokenize` now re-splits compound punctuation (keeping `&&`, `>&`, `&>`, … whole so
+  `2>&1` isn't misread as a background `&`), so the `;` is seen and `rm -rf /` denies.
+
+Fail-open and the deny-first precedence are unchanged. `tests/test_guard.py` grows to 78 cases
+(6 new regressions covering both directions of resolution, the smuggling defense, and the `);` split).
+
 ## 0.26.2
 
 **Marketplace install is now a first-class path for telemetry.** The telemetry hook is wired from

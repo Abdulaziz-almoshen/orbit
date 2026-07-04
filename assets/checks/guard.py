@@ -26,13 +26,17 @@ one can always write a script file, `python -c "os.system(...)"`, or fetch+run).
     `sh -c "…"` (incl. `-lc`/`-xc`), `eval …`, and command-substitutions `$( … )` / backticks so a
     wrapped force-push is still caught,
   • recognizes home-relative sensitive paths (`~/.ssh`, `$HOME/.aws`, …), not just absolute ones,
+  • RESOLVES a `$VAR` command name when the variable was assigned a static literal in the SAME
+    command (`B=/path/tool; $B goto …` → the real tool → allowed; `RM="rm -rf"; $RM /` → the real
+    command → denied). This kills the common false positive (assign-a-path-then-reuse-it) AND
+    catches danger hidden the same way — both used to only "ask",
   • FAILS CLOSED to "ask" when a command's identity is genuinely un-inspectable (its name is a
-    shell variable, or a downloader is piped straight into a shell) — ask, never silently allow.
+    variable with no resolvable literal assignment, or a downloader is piped straight into a shell).
 Residual limit, stated honestly: wrapper-flag stripping is a KNOWN-flag list (`sudo`/`env`/`xargs`'s
-documented value-taking flags), not a full grammar — an unrecognized value-taking flag on one of
-these wrappers can still misparse which token is the command. Deliberate self-obfuscation
-(`G="git push --force"; $G …`, runtime aliases, base64|sh) is out of scope by design and documented
-as such — the guard asks on the un-inspectable forms it can see.
+documented value-taking flags), not a full grammar. Variable resolution covers same-command LITERAL
+assignments only — a value from `$( … )`, another variable, or the environment stays un-resolvable
+and keeps its "ask" (fail-safe: never *allow* on a value we can't determine). Runtime aliases and
+base64|sh remain out of scope.
 
 Customize the RULES block for YOUR repo (deploys, migrations, data deletes, secret branches).
 """
@@ -45,7 +49,11 @@ _OPERATORS = {"&&", "||", ";", "|", "&"}
 _WRAPPERS = {"sudo", "nohup", "command", "builtin", "exec", "time", "doas", "xargs"}
 _SHELLS = {"sh", "bash", "zsh", "dash", "ksh"}
 _GROUPS = {"(", ")", "{", "}"}
+_PUNCT = set("();<>|&")                                      # shlex(punctuation_chars=True)'s set
+_ATOMIC2 = ("&&", "||", ">>", "<<", ">&", "<&", "|&", "&>")  # 2-char ops to keep whole when re-splitting
 _ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")            # NAME=value env-assignment prefix
+_ASSIGN_FULL = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")  # capture NAME + literal value
+_UNSAFE_VAL = set(";|&<>()\n")                              # control operators that void flat resolution
 _COMBINED_C = re.compile(r"^-[a-z]*c$")                       # -c, -lc, -xc … (shell command flag)
 
 # Known VALUE-taking flags for the wrappers we strip — so `sudo -u root git push --force` or
@@ -286,11 +294,35 @@ def _strip_wrappers(t):
     return t
 
 
+def _split_punct(tok):
+    """Re-split a run of shell punctuation into individual operator/group tokens.
+    shlex(punctuation_chars=True) returns a *run* of punctuation as ONE token, so ');' (a subshell
+    close glued to a ';') would hide the ';' command-separator from segment-splitting — and
+    `X=$(…); rm -rf /` would slip past the rules. Two-char operators and redirections (`&&`, `>&`,
+    `&>`, …) are kept whole so `2>&1` isn't misread as a background `&`."""
+    out, i, n = [], 0, len(tok)
+    while i < n:
+        if tok[i:i + 2] in _ATOMIC2:
+            out.append(tok[i:i + 2])
+            i += 2
+        else:
+            out.append(tok[i])
+            i += 1
+    return out
+
+
 def _tokenize(line):
-    """Tokenize one line, keeping shell operators (&&, ||, ;, |, &) as separate tokens."""
+    """Tokenize one line, keeping shell operators (&&, ||, ;, |, &) as separate tokens. Compound
+    punctuation runs (');', ')&&', …) are re-split so no separator hides behind a ')' or '('."""
     lex = shlex.shlex(line, posix=True, punctuation_chars=True)
     lex.whitespace_split = True
-    return list(lex)
+    out = []
+    for tok in lex:
+        if len(tok) > 1 and all(c in _PUNCT for c in tok):
+            out.extend(_split_punct(tok))
+        else:
+            out.append(tok)
+    return out
 
 
 def _segments(cmd):
@@ -362,6 +394,45 @@ def _shell_c_arg(t):
     return None
 
 
+def _resolve_map(segs):
+    """Build {VAR: literal-value} for variables ASSIGNED with a static literal in THIS command, so
+    a later `$VAR` command name can be resolved instead of just asked about. Common safe idiom:
+        B=/path/to/tool; $B goto …   → resolve $B → /path/to/tool  (not dangerous → allow)
+    But it also catches danger hidden the same way:
+        RM="rm -rf"; $RM /           → resolve $RM → rm -rf         (→ deny)
+    ONLY a FLAT literal value is recorded — a value with `$`/`` ` ``/`$(` (another var or a command
+    substitution) OR with a shell control operator (`;`, `|`, `&`, `<`, `>`, `(`, `)`, newline) is
+    un-resolvable and stays out of the map (that `$VAR` keeps its 'ask'). The operator check matters:
+    without it, `X="foo; rm -rf /"; $X` would resolve to a *benign* command `foo` with the `rm`
+    smuggled in as args — turning a fail-safe 'ask' into a silent allow. A var reassigned to a
+    DIFFERENT literal is treated as ambiguous and dropped (fail toward asking)."""
+    m, ambiguous = {}, set()
+    for seg in segs:
+        for tok in seg:
+            mo = _ASSIGN_FULL.match(tok)
+            if not mo:
+                continue
+            name, val = mo.group(1), mo.group(2)
+            if "$" in val or "`" in val or any(c in _UNSAFE_VAL for c in val):
+                ambiguous.add(name)               # not a flat literal command — can't safely resolve
+                continue
+            if name in m and m[name] != val:      # reassigned differently — ambiguous
+                ambiguous.add(name)
+            m[name] = val
+    for name in ambiguous:
+        m.pop(name, None)
+    return m
+
+
+def _var_name(tok):
+    """The variable name in a `$VAR` / `${VAR}` command token, or None."""
+    if tok.startswith("${") and tok.endswith("}"):
+        return tok[2:-1] or None
+    if tok.startswith("$") and len(tok) > 1:
+        return tok[1:]
+    return None
+
+
 def evaluate(cmd, _depth=0):
     """Return the most severe (decision, reason) triggered by any segment, or None to allow."""
     if _depth > 6 or not cmd:
@@ -374,6 +445,7 @@ def evaluate(cmd, _depth=0):
         best = _max(best, evaluate(inner, _depth + 1))
 
     segs = _segments(cmd)
+    var_map = _resolve_map(segs)               # {VAR: literal} assigned in this same command
 
     # 2. cross-segment: a downloader piped straight into a shell = unreviewed remote code
     names = []
@@ -389,6 +461,17 @@ def evaluate(cmd, _depth=0):
         t = _strip_wrappers(list(seg))
         if not t:
             continue
+        # Resolve a `$VAR` command name from a same-command literal assignment, then RE-STRIP (the
+        # value may itself begin with sudo/env/…). RM="rm -rf"; $RM /  →  [rm,-rf,/] → the RULES
+        # see the real command. Un-resolvable vars stay `$VAR` → _var_command still asks.
+        name = _var_name(t[0])
+        if name and name in var_map:
+            try:
+                t = _strip_wrappers(shlex.split(var_map[name]) + t[1:])
+            except Exception:
+                pass
+            if not t:
+                continue
         sc = _shell_c_arg(t)
         if sc is not None:                                  # sh -c "…" / bash -lc "…"
             best = _max(best, evaluate(sc, _depth + 1))

@@ -85,8 +85,15 @@ CASES = [
     ("GIT_SSH_COMMAND=x git push --force",               "deny"),      # env-assignment prefix
     ('bash -lc "git push --force"',                      "deny"),      # combined shell flag -lc
     ("eval 'git push --force'",                          "deny"),      # eval <string>
-    ("X=push; git $X --force origin main",               "ask"),       # var indirection → un-inspectable
-    ('G="git push --force"; $G origin main',             "ask"),       # command name in a variable
+    ("X=push; git $X --force origin main",               "ask"),       # var in ARG position → un-inspectable
+    # command name assigned a flat literal in THIS command IS resolved (both directions):
+    ('G="git push --force"; $G origin main',             "deny"),      # danger behind a $VAR name → resolved → deny
+    ("B=/usr/bin/browse; $B goto http://x",              None),        # benign tool behind $VAR → resolved → allow
+    ('X="foo; rm -rf /"; $X',                            "ask"),       # value carries a `;` → NOT flattened → ask
+    ("X=$(which git); $X push --force",                  "ask"),       # value is a cmd-sub → un-resolvable → ask
+    ("A=safe; A=rm; $A -rf /",                           "ask"),       # reassigned differently → ambiguous → ask
+    ("X=$(echo hi); rm -rf /",                           "deny"),      # `);` no longer hides the `;` separator
+    ("A=$(id); rm -rf ~/.ssh",                           "ask"),       # ditto — danger after `)` now seen (→ ask)
 
     # --- non-git destructive defaults now have teeth ---
     ("rm -rf /",                                         "deny"),
