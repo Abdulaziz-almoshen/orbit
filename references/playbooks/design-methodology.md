@@ -109,7 +109,10 @@ when `impact_level: HEAVY` — see `roles.md` and `qa-validation.md`.)
 ## The plan-critique gate (before any code)
 Test each choice: work through a *similar* brief and confirm you don't arrive at the same
 answer. If any part reads like a default, revise it. Only start building once the plan is
-distinctive and coherent. (See `anti-ai-aesthetics.md` for the specific defaults to reject.)
+distinctive and coherent. (See `anti-ai-aesthetics.md` for the specific defaults to reject.) On
+**HEAVY** work, this is also where the **taste preflight** runs (`taste-preflight.md`: the design
+read, the three dials, a real-design-system pick, and the anti-slop checklist) — recorded as
+`taste_preflight` in `design/approved.json` for the QA/Reviewer gates.
 
 ## Quality floor (built in, not announced)
 Responsive down to mobile; visible keyboard focus; `prefers-reduced-motion` respected. Mind

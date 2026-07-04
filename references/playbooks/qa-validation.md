@@ -40,8 +40,10 @@ has no prototype baseline to diff against by design — confirm `.orbit/design/T
 move on. A legacy `approved.json` with no `impact_level` field is a **pass-with-warning**, never an
 auto-fail (it predates this gate). But if the change looks HEAVY and **neither** `approved.json` nor
 the `TRIVIAL` marker exists, that's a finding, not an exemption — the triage step was skipped
-entirely, not judged unnecessary. On HEAVY, the Designer's **approved prototype**
-(`design/approved.json` + `DESIGN.md` tokens) is the golden baseline:
+entirely, not judged unnecessary. **Also require the `taste_preflight` record:** a HEAVY
+`approved.json` with **no `taste_preflight`** block (design read + dials + design-system + surface +
+`checklist_passed`) is a finding — the taste gate was skipped, not judged unneeded. On HEAVY, the
+Designer's **approved prototype** (`design/approved.json` + `DESIGN.md` tokens) is the golden baseline:
 1. **Token assertions:** extract the *rendered* design system via computed styles (fonts, palette, type
    scale, spacing, touch-target boxes) and assert token-by-token against DESIGN.md — numeric checks
    (body ≥16px, WCAG AA 4.5:1, 44px targets, spacing on the 4/8px scale), not vibes.
@@ -64,6 +66,12 @@ traceback), so a missing browser degrades the check — it never crashes the cyc
    recommendation labeled "(Recommended)"); accepted changes advance the baseline. Never a prose ask.
 4. Quick structural checks per page: trunk test (what site/page/sections/where-am-I), states
    (empty/loading/error/overflow), responsive at 3 viewports, keyboard focus visible.
+5. **Anti-slop scan (the AI-tell pass).** Scan the *rendered* UI against the ban list in
+   `taste-preflight.md`/`anti-ai-aesthetics.md` — em-dashes in shipped copy, fake dashboards or
+   div-drawn fake screenshots, default purple/mesh gradients, three identical generic cards, the
+   beige-luxury palette, fake version labels, decorative scroll cues/dots, generic names ("John Doe"),
+   empty marketing copy ("Seamlessly streamline your workflow"). A confirmed match on HEAVY UI is a
+   finding (severity by prominence), with the screenshot as evidence — not a matter of taste.
 
 ## Execution discipline
 - **Reconnaissance-then-action:** navigate, wait for idle, inspect the real DOM, derive real selectors —

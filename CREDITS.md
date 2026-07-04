@@ -18,6 +18,17 @@ where required by their licenses (retained notices + a note of changes).
   system, "remove one accessory", quality floor) is **adapted and restructured** into Orbit's own
   playbook and combined with the style palette + selection gate above. Not a verbatim copy.
 
+## Taste preflight — `references/playbooks/taste-preflight.md`
+- **Source:** [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill) ([tasteskill.dev](https://www.tasteskill.dev/))
+- **License:** MIT — © 2026 Leonxlnx
+- **What we use & changes:** the *taste layer* — the one-line design "read", the three dials
+  (`DESIGN_VARIANCE` / `MOTION_INTENSITY` / `VISUAL_DENSITY`), the real-design-system map, the
+  anti-slop ban list, and the hard pre-flight checklist — is **adapted and rewritten** into Orbit's
+  own playbook and folded into `anti-ai-aesthetics.md`. Adapted, not copied: the em-dash ban is
+  scoped to shipped UI copy only (Orbit's internal docs keep their house style), "dark by default"
+  becomes "declare a colour-mode strategy", and the whole thing is made **surface-conditional** and
+  wired into Orbit's existing prototype gate, `taste_preflight` record, and QA/Reviewer gates.
+
 ## Technical-review methodology — `references/playbooks/technical-review.md`
 - **Inspiration:** the review / QA / eng-review skills in
   [gstack](https://github.com/garrytan/gstack) (MIT — © 2026 Garry Tan)

@@ -445,7 +445,7 @@ matches the dashboard they'll watch). Use the real colors:
 - 🔭 **Product Discovery Manager** *(blue — on substantial work)* — frames the outcome + the user's job, kills the four risks, names the riskiest assumption. *Skill: product-discovery.*
 - 📊 **Market & Competitive Researcher** *(cyan — on substantial work)* — what exists, reuse-vs-build, where the gap is. *Skill: market-and-competitive-research.*
 - 🟢 **&lt;Frontend / Backend / Data&gt; Engineer** *(green)* — builds the work. *Skill: &lt;the domain skill&gt;.*
-- 🟪 **Designer** *(violet — frontend only)* — distinctive, on-brand UI, not templated slop. *Skills: design-methodology, anti-ai-aesthetics.*
+- 🟪 **Designer** *(violet — frontend only)* — distinctive, on-brand UI, not templated slop. *Skills: design-methodology, anti-ai-aesthetics, design-styles, taste-preflight.*
 - 🟡 **Reviewer** *(yellow)* — proves the *diff* (runs tests, quotes the line, enforces ADRs) before it counts. *Skill: technical-review.*
 - 🧪 **QA Engineer** *(bright yellow)* — validates the *product* against the requirements, story by story; pixel-checks the UI vs your approved design. *Skill: qa-validation.*
 - 🔴 **Safety** *(red)* — can veto or stop a dangerous action. The hard wall.
@@ -505,7 +505,7 @@ done. Make the user feel they just hired a team, and it's eager to start.
   product. `references/profiles/frontend.md` — the frontend/UI profile that activates the
   **Designer**. Add your own profiles here for repeated setups.
 - `references/playbooks/` — the reusable **role-skill library** provisioned to sub-agents:
-  `design-methodology.md` + `anti-ai-aesthetics.md` + `design-styles.md` (Designer),
+  `design-methodology.md` + `anti-ai-aesthetics.md` + `design-styles.md` + `taste-preflight.md` (Designer),
   `planning-and-decision-briefs.md` (Orchestrator), `clarify-and-challenge.md` (Dispatcher/Orchestrator),
   `technical-review.md` (Reviewer — the technical quality gate), `qa-validation.md` (QA Engineer —
   requirements-traceability + pixel fidelity), `active-learning.md` (the Orchestrator's silent

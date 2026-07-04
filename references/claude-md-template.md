@@ -105,8 +105,12 @@ execution engine. See `references/durable-execution.md`.)
   determination** (HEAVY vs TRIVIAL) and the two prototype gates it scopes: the one-time
   style-prototype gate (2–5 styles, once per product) and the recurring component gate (2–5
   variants, every HEAVY component/redesign). TRIVIAL work skips both — the fast lane (§10) stays fast.
-- `.orbit/skills/anti-ai-aesthetics.md` — the templated-default clusters to reject.
+- `.orbit/skills/anti-ai-aesthetics.md` — the templated-default clusters to reject (+ the folded-in
+  anti-slop ban list).
 - `.orbit/skills/design-styles.md` + `design-styles/` — the 67-style catalog the gates draw from.
+- `.orbit/skills/taste-preflight.md` — the taste layer (adapted from TasteSkill): the design read,
+  three dials, the real-design-system map, surface routing, and the anti-slop preflight recorded as
+  `taste_preflight` in `design/approved.json` on HEAVY.
 
 **QA executors** (frontend repos only — *tools*, not playbooks; helpers, not a bundled browser):
 - `.orbit/qa/snapshot.py` — `screenshot` / pixel-`diff` / `console` capture. Playwright if installed,

@@ -3,6 +3,43 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.27.0
+
+**The Designer gets a taste layer — TasteSkill, folded into Orbit's workflow.** Orbit already owned
+the operating model (HEAVY/TRIVIAL triage, the prototype gate, the `design/approved.json` + `DESIGN.md`
+contract, the QA verification triangle). What it lacked was a mechanical guard against UI that *looks*
+generated. This release adapts **[TasteSkill](https://github.com/Leonxlnx/taste-skill)** (MIT, Leonxlnx —
+credited in `CREDITS.md`) into that workflow as a new playbook, `taste-preflight.md`:
+
+- **The design *read*** — one line before choosing a style ("Reading this as: a pricing page for indie
+  founders, leaning toward Linear/shadcn"), so the brief is interpreted explicitly, not defaulted.
+- **Three dials, set explicitly** (1–10): `DESIGN_VARIANCE` (symmetry↔asymmetry), `MOTION_INTENSITY`
+  (static↔choreographed), `VISUAL_DENSITY` (airy↔cockpit). They drive every layout/motion/spacing call.
+- **A real-design-system map** — Material · Fluent · Carbon · Polaris · Atlassian · Primer · GOV.UK/USWDS ·
+  Bootstrap · Radix/shadcn · Tailwind — *conventions* to inherit, distinct from the 67 aesthetic styles.
+- **Surface-conditional scope** — landing/marketing gets the full preflight; app/dashboard leans on the
+  system-map + Orbit's product-UI QA at high density; mobile defers to platform guidelines first.
+- **An anti-slop ban list** folded into `anti-ai-aesthetics.md` (the canonical source): fake dashboards,
+  default purple gradients, generic cards, beige-luxury palette, fake version labels, decorative scroll
+  cues/dots, generic names, empty marketing copy — and em-dashes **in shipped UI copy only** (Orbit's own
+  internal docs keep their house style; a deliberate adaptation, not a copy).
+- **A recorded contract + real gates.** The Designer writes a `taste_preflight` block into
+  `design/approved.json` on HEAVY (read + dials + design-system + surface + `checklist_passed`). QA and the
+  Reviewer's Design-Distinctiveness gate treat a HEAVY approval with **no `taste_preflight`** as a finding,
+  and the `design-gate.py` hook asks on a HEAVY UI edit whose approval lacks it — while a legacy or
+  unparseable approval stays pass-with-warning (fail-safe). TRIVIAL work is exempt; the fast lane stays fast.
+
+The Designer now loads four design skills (`design-methodology` + `anti-ai-aesthetics` + `design-styles` +
+`taste-preflight`); `taste-preflight.md` is provisioned into `.orbit/skills/` on UI repos only. New
+`tests/test_taste_preflight.py` (UI-only provisioning, the 67-style catalog, HEAVY-only recording, the
+QA/Reviewer gates, the scoped em-dash ban) + extended `test_design_gate.py`. The whole merge was put
+through a six-lens adversarial verification pass; the confirmed findings (ban-list de-duplication, surface
+vs universal-defaults clarity, one missed doc reference, and stronger test assertions) are fixed here. Full
+suite (21 files) + coherence + `claude plugin validate` green.
+
+*Note:* the `0.7.1`-vs-richer-release confusion some external notes referenced was stale — this repo already
+shipped the full 67-style catalog; 0.27.0 builds straight on it.
+
 ## 0.26.3
 
 **Guard now resolves a `$VAR` command name — killing a false positive AND closing a real bypass.**

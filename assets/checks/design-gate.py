@@ -8,7 +8,9 @@ edit is "heavy" or verify that real prototypes were built or genuinely compared.
 is whether *any* design-decision record exists for this work — a HEAVY approval
 (`design/approved.json`) or a TRIVIAL triage marker (`.orbit/design/TRIVIAL`). Neither existing is
 the one thing a hook can catch: the case where the Designer's determination step (see
-`design-methodology.md`) never ran at all.
+`design-methodology.md`) never ran at all. It also parses a HEAVY approval and asks when it carries
+no `taste_preflight` record (the taste gate in `taste-preflight.md` was skipped) — a legacy approval
+with no `impact_level`, or any parse failure, is still treated as pass-with-warning (fail-safe).
 
 Honest v1 limitation, stated plainly: this is existence-based, not identity-based — it does not
 verify the record is FOR the specific file/component being edited, only that *some* design
@@ -77,11 +79,27 @@ def _repo_root(start, file_path: str) -> Path:
     return Path(start or ".")
 
 
-def _has_design_record(root: Path) -> bool:
-    """A HEAVY approval or a TRIVIAL triage marker exists anywhere in the repo. Existence-based
-    (see the module docstring's honest limitation) — not tied to the specific file being edited."""
-    return (root / "design" / "approved.json").exists() or \
-           (root / ".orbit" / "design" / "TRIVIAL").exists()
+def _record_status(root: Path) -> str:
+    """Classify the repo's design-decision trail into one of three states the hook acts on:
+      * "ok"                — a TRIVIAL marker, a legacy/non-HEAVY approval, or a HEAVY approval that
+                              carries a `taste_preflight` record → allow.
+      * "heavy_no_preflight"— a HEAVY `approved.json` that LACKS a `taste_preflight` block → the taste
+                              gate was skipped → ask.
+      * "none"              — no approval and no TRIVIAL marker at all → the triage never ran → ask.
+    Existence-based (see the module docstring's honest limitation). Fail-safe: an unparseable
+    approval is treated as "ok" — the hook never invents a finding from a file it can't read."""
+    approved = root / "design" / "approved.json"
+    if approved.exists():
+        try:
+            rec = json.loads(approved.read_text(errors="ignore"))
+        except Exception:
+            return "ok"                                        # can't parse → don't fabricate a gate
+        if isinstance(rec, dict) and rec.get("impact_level") == "HEAVY" and not rec.get("taste_preflight"):
+            return "heavy_no_preflight"
+        return "ok"                                            # HEAVY+preflight, legacy, or non-HEAVY
+    if (root / ".orbit" / "design" / "TRIVIAL").exists():
+        return "ok"
+    return "none"
 
 
 def _current_cycle(root: Path):
@@ -147,20 +165,25 @@ def main():
         if not file_path or not _is_ui_production_file(file_path):
             return  # allow — not a UI production file this gate cares about
         root = _repo_root(data.get("cwd") or ".", file_path)   # find the repo root, even from a subdir
-        if _has_design_record(root):
-            return  # allow — a design decision trail exists
+        status = _record_status(root)
+        if status == "ok":
+            return  # allow — a sufficient design decision trail exists
         cur = _current_cycle(root)
         if _already_asked_this_cycle(root, cur):
             return  # allow — already asked once this cycle, don't nag on every subsequent edit
         _mark_asked(root, cur)
+        if status == "heavy_no_preflight":
+            reason = ("[orbit] HEAVY design approved but no taste_preflight record — run the taste "
+                      "preflight (taste-preflight.md: the design read, the three dials, the "
+                      "design-system pick, the anti-slop checklist) and add it to design/approved.json.")
+        else:
+            reason = ("[orbit] UI production edit with no design record this cycle — if this is HEAVY, "
+                      "run the prototype gate (design-methodology.md) and write design/approved.json; "
+                      "if TRIVIAL, approve this once or drop .orbit/design/TRIVIAL.")
         print(json.dumps({"hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": "ask",
-            "permissionDecisionReason": (
-                "[orbit] UI production edit with no design record this cycle — if this is HEAVY, "
-                "run the prototype gate (design-methodology.md) and write design/approved.json; "
-                "if TRIVIAL, approve this once or drop .orbit/design/TRIVIAL."
-            ),
+            "permissionDecisionReason": reason,
         }}))
     except Exception:
         return  # fail OPEN — this gate must never brick a legitimate edit

@@ -15,7 +15,7 @@ updates itself.
 
 <br/>
 
-![version](https://img.shields.io/badge/version-0.26.3-2b6cb0)
+![version](https://img.shields.io/badge/version-0.27.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![self-updating](https://img.shields.io/badge/self--updating-yes-22863a)
@@ -249,11 +249,15 @@ every other AI-generated app:
   *"would a different brief have produced this exact look?"* — and revises until the answer is no.
 - **Actively rejects the 3 default "AI aesthetics"** (the warm-cream/serif look, the
   near-black/acid-green look, the broadsheet/hairline look) via an anti-AI-aesthetics checklist.
+- **Runs a taste preflight on HEAVY UI** (adapted from [TasteSkill](https://github.com/Leonxlnx/taste-skill),
+  MIT): a one-line design *read*, three explicit dials (variance / motion / density), a real-design-system
+  map (Material / Fluent / Carbon / Polaris / shadcn / …), surface-aware scope (landing vs app vs
+  mobile), and a hard anti-slop checklist — recorded as `taste_preflight` in `design/approved.json`.
 - **Hands the plan to the Builder; the Reviewer enforces a Design Distinctiveness gate** — the
-  shipped UI must match the plan and *not* read like a template.
+  shipped UI must match the plan, carry the `taste_preflight` record, and *not* read like a template.
 
-> Playbooks: `design-methodology.md` + `anti-ai-aesthetics.md`. Self-contained — no external
-> design skill required.
+> Playbooks: `design-methodology.md` + `anti-ai-aesthetics.md` + `design-styles.md` (67-style catalog)
+> + `taste-preflight.md`. Self-contained — no external design skill required.
 
 ## Install options
 

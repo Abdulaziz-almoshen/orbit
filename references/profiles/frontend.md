@@ -15,9 +15,10 @@ job, don't.
 - Add the **Designer** role (see `references/roles.md`) to this repo's roster, as a spec in
   `.orbit/roles/designer.md` + an adapter in `.claude/agents/designer.md`.
 - **Provision its skills** — copy the design playbooks into `.orbit/skills/`:
-  `design-methodology.md`, `anti-ai-aesthetics.md`, `design-styles.md`, **and the whole
-  `design-styles/` directory (the 67-style catalog)**. The scaffolder does this automatically with
-  `--frontend`. (This is the "provide skills to the sub-agent" pattern — the role loads them on demand.)
+  `design-methodology.md`, `anti-ai-aesthetics.md`, `design-styles.md`, `taste-preflight.md`, **and
+  the whole `design-styles/` directory (the 67-style catalog)**. The scaffolder does this
+  automatically with `--frontend`. (This is the "provide skills to the sub-agent" pattern — the role
+  loads them on demand.)
 - **Determine impact first, every design-related request.** HEAVY (a new/redesigned component,
   module, screen, or flow; a layout/hierarchy/typography/color/spacing/interaction change; no
   approved style yet) fires a prototype gate; TRIVIAL (copy fix, sanctioned token tweak,
