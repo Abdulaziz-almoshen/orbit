@@ -3,6 +3,44 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.27.1
+
+**Guard: fixes the reported `$B` browse false-positive, then two adversarial red-team passes harden it
+against 16 evasions — and remove the over-blocks that hardening exposed.** The trigger was a real
+annoyance: gstack's `browse` emits `B=/…/browse; $B js "(()=>{…})()"`, and the guard was parsing the
+*quoted JavaScript argument* as if it were shell (a bare `(` inside quotes read as a subshell), so it
+asked on every call.
+
+- **The browse fix.** `_inner_commands` is now **quote-aware** — a bare `(` inside single/double
+  quotes is a literal character (a JS/SQL/regex argument), while a real `$( … )` / backtick — even
+  inside double quotes — is still caught.
+- **Three red-team rounds, 25 confirmed fixes.** Rather than ship on faith, an adversarial
+  multi-agent pass — then a second on the hardened result, then a third targeting regressions from
+  the second — hunted for commands bash executes catastrophically but the guard allowed, *and* benign
+  commands it wrongly blocked. Fixed:
+  - **Parser:** ANSI-C `$'…'` (both the trailing-`$()` swallow and the tokenizer-drop `$'\''; rm -rf /`);
+    a stray apostrophe (in `don't`, a `#` comment, a heredoc body) no longer hides a later `$( … )`;
+    the bash-5.3 command funsub `${ cmd; }` / `${|cmd;}` is recognized, including inside double quotes;
+    `#` comments are stripped word-boundary-aware, so `git commit -m fix#42 && git push --force` no
+    longer drops its tail.
+  - **Variable resolution:** `$VAR` / `${VAR}` resolves in **argument** position too (`of=$DEV`,
+    `git push $F`, `rm -rf $D`), every candidate of a reassigned var is tried (worst wins), the
+    curl|sh detector resolves var names, and `dd`/redirect gained raw-device fail-safes (`> /dev/sda`).
+  - **Heredocs done right:** a heredoc BODY is inert stdin **data**, never a command, so a benign
+    `cat <<'EOF' … rm -rf / … EOF` file-write isn't blocked — but detection is **quote/comment-aware**
+    (a `<<X` inside quotes or a comment is *not* a heredoc, closing a regression the first heredoc
+    pass introduced), the delimiter charset and exact close-match are correct, and an **unquoted**
+    heredoc body still gets its `$( … )` scanned.
+  - **Over-blocks removed:** `#` comments aren't parsed as commands; `rm -rf ./build` (the cwd prefix,
+    not a dotfile) is allowed; heredoc file-writes with dangerous-looking body lines are allowed.
+- **Honest boundary.** The guard's threat model is *catching an agent's mistakes*, not defeating a
+  determined adversary — it fails **open** by design (spelled out in the module header). Three rounds
+  closed the common and many adversarial forms and removed the false positives that hurt real work;
+  residual gaps are exotic obfuscations outside that model. `tests/test_guard.py` grows to **123
+  cases**; full suite + coherence + `claude plugin validate` green. (This reaches existing scaffolded
+  repos only when they re-run `/orbit` — each repo has its own `.orbit/checks/guard.py` and migration
+  is warn-only.)
+
 ## 0.27.0
 
 **The Designer gets a taste layer — TasteSkill, folded into Orbit's workflow.** Orbit already owned

@@ -24,7 +24,10 @@ one can always write a script file, `python -c "os.system(...)"`, or fetch+run).
     flags** (`sudo -E`, `env -i`, `xargs -I{}` no longer leave a flag sitting where the real
     command name belongs), and subshell/brace wrappers (`( … )`, `{ …; }`), and recurses into
     `sh -c "…"` (incl. `-lc`/`-xc`), `eval …`, and command-substitutions `$( … )` / backticks so a
-    wrapped force-push is still caught,
+    wrapped force-push is still caught. Substitution detection is QUOTE-AWARE, matching bash: a bare
+    `(` inside a quoted string is a literal character (a JS/SQL/regex argument like
+    `browse js "(()=>{…})()"`), NOT a subshell — only `$( … )` and backticks expand inside `"…"`,
+    and nothing expands inside `'…'`. This stops quoted code arguments from being misread as shell,
   • recognizes home-relative sensitive paths (`~/.ssh`, `$HOME/.aws`, …), not just absolute ones,
   • RESOLVES a `$VAR` command name when the variable was assigned a static literal in the SAME
     command (`B=/path/tool; $B goto …` → the real tool → allowed; `RM="rm -rf"; $RM /` → the real
@@ -32,11 +35,22 @@ one can always write a script file, `python -c "os.system(...)"`, or fetch+run).
     catches danger hidden the same way — both used to only "ask",
   • FAILS CLOSED to "ask" when a command's identity is genuinely un-inspectable (its name is a
     variable with no resolvable literal assignment, or a downloader is piped straight into a shell).
-Residual limit, stated honestly: wrapper-flag stripping is a KNOWN-flag list (`sudo`/`env`/`xargs`'s
-documented value-taking flags), not a full grammar. Variable resolution covers same-command LITERAL
-assignments only — a value from `$( … )`, another variable, or the environment stays un-resolvable
-and keeps its "ask" (fail-safe: never *allow* on a value we can't determine). Runtime aliases and
-base64|sh remain out of scope.
+THREAT MODEL, stated honestly: this catches an agent's *mistakes* — a genuinely dangerous command
+generated in a normal, non-adversarial form — and asks/blocks on it. It is NOT a sandbox and does
+NOT defend against a determined adversary deliberately obfuscating a payload to evade a static
+parser: that is undecidable in general (short of *being* bash), so the hook FAILS OPEN by design
+(a parse it can't resolve → allow, never brick the shell). THREE adversarial red-team passes hardened
+it against 25 specific evasions and over-blocks — quote-aware substitution scanning, ANSI-C `$'…'`
+(parser AND tokenizer), the bash-5.3 `${ cmd; }` funsub (incl. inside `"…"`), argument-position
+variable resolution (all candidates, worst wins), quote/comment-aware heredoc detection (bodies are
+inert stdin data; a quoted `<<X` is not a heredoc), word-boundary `#`-comment handling (so
+`fix#42 && …` isn't truncated), `);`-tokenizer splits, a `dd`/redirect raw-device fail-safe — and it
+no longer over-blocks common benign work (heredoc file-writes, comments, `./build` cleanups, quoted
+code arguments). Residual gaps are exotic obfuscations outside the mistake threat model. Wrapper-flag
+stripping is a KNOWN-flag list, not a full grammar; variable resolution covers same-command LITERAL
+assignments only (a value from `$( … )`, another variable, or the environment stays un-resolvable and
+keeps its "ask"); multi-level indirection, runtime aliases, and base64|sh remain out of scope.
+Depth-in-defense, not a wall.
 
 Customize the RULES block for YOUR repo (deploys, migrations, data deletes, secret branches).
 """
@@ -54,6 +68,9 @@ _ATOMIC2 = ("&&", "||", ">>", "<<", ">&", "<&", "|&", "&>")  # 2-char ops to kee
 _ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")            # NAME=value env-assignment prefix
 _ASSIGN_FULL = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")  # capture NAME + literal value
 _UNSAFE_VAL = set(";|&<>()\n")                              # control operators that void flat resolution
+_VARREF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)")  # $VAR / ${VAR}
+_ANSI_C = re.compile(r"\$'(?:\\.|[^'\\])*'")               # ANSI-C $'…' span (honors backslash escapes)
+_DELIM = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.\-]*")       # a heredoc delimiter word (bash-ish)
 _COMBINED_C = re.compile(r"^-[a-z]*c$")                       # -c, -lc, -xc … (shell command flag)
 
 # Known VALUE-taking flags for the wrappers we strip — so `sudo -u root git push --force` or
@@ -155,6 +172,8 @@ def _rm_sensitive(t):
         return True                                         # target-less recursive-force delete → ask
     for x in tg:
         s = x.rstrip("/")
+        while s.startswith("./"):                            # `./build` is the cwd prefix, NOT a dotfile
+            s = s[2:]
         if s.startswith(".") or ".git" in x or ".orbit" in x or x.startswith("/") or x.startswith("$"):
             return True
         sub = _home_subpath(x)                               # ~/.ssh, ~/.aws, $HOME/.gnupg, …
@@ -175,6 +194,17 @@ def _to_device(t):
     return any(re.match(r"of=/dev/(sd|nvme|disk|hd|mmcblk)", x) for x in t)
 
 
+def _redirect_to_device(t):
+    # shell output redirection onto a raw block device (`> /dev/sda`) destroys it exactly like
+    # `dd of=…` — same blast radius, and the more common accidental form (image-flashing).
+    for i, tok in enumerate(t):
+        if tok in (">", ">>") and i + 1 < len(t) and re.match(r"/dev/(sd|nvme|disk|hd|mmcblk)", t[i + 1]):
+            return True
+        if re.match(r">>?/dev/(sd|nvme|disk|hd|mmcblk)", tok):   # glued `>/dev/sda`
+            return True
+    return False
+
+
 def _mkfs(t):
     return bool(t) and (t[0].startswith("mkfs") or t[0] in ("fdisk", "parted"))
 
@@ -183,6 +213,12 @@ def _ambiguous_git_force(t):
     # a git command with a force flag but no visible `push` subcommand, whose intent is hidden in
     # a shell variable — we can't confirm it's safe, so pause.
     return is_git(t) and ("--force" in t or "-f" in t) and "push" not in t and any("$" in x for x in t)
+
+
+def _ambiguous_dd(t):
+    # a `dd` whose output target is an unresolved variable / substitution / `/dev/$VAR` — we can't
+    # confirm it isn't a raw disk device, so pause (mirrors _ambiguous_git_force for dd).
+    return bool(t) and t[0] == "dd" and any(a.startswith("of=") and "$" in a for a in t)
 
 
 def _var_command(t):
@@ -203,6 +239,8 @@ RULES = [
      _rm_catastrophic),
     ("deny", "writing with `dd` to a raw disk device destroys the disk.",
      _to_device),
+    ("deny", "redirecting output onto a raw disk device (`> /dev/sd…`) destroys the disk.",
+     _redirect_to_device),
     ("deny", "`mkfs`/`fdisk`/`parted` reformats a disk — never run this from an agent loop.",
      _mkfs),
     ("ask",  "force-with-lease is a human-approval checkpoint here — confirm before pushing.",
@@ -223,6 +261,8 @@ RULES = [
      _rm_sensitive),
     ("ask",  "a git command with a force flag whose intent is hidden in a variable — confirm it's not a force-push.",
      _ambiguous_git_force),
+    ("ask",  "a `dd` whose output device is hidden in a variable/substitution — confirm it's not a raw disk.",
+     _ambiguous_dd),
     ("ask",  "this command's name is an unresolved shell variable — I can't verify what it runs; confirm it's safe.",
      _var_command),
 ]
@@ -311,11 +351,36 @@ def _split_punct(tok):
     return out
 
 
+def _strip_comment(line):
+    """Remove a bash comment — from an unquoted `#` at a word boundary (start of line or after
+    whitespace) to end of line. Quote-aware, so `fix#42`, `issue#7`, `'a#b'` keep their `#`. We do
+    this ourselves because shlex's built-in `commenters='#'` strips `#` even mid-word, which dropped
+    a chained `git commit -m fix#42 && git push --force` down to just `git commit -m fix`."""
+    i, n = 0, len(line)
+    while i < n:
+        c = line[i]
+        if c == "\\":
+            i += 2
+            continue
+        if c == "'" or c == '"':
+            i = _skip_quote(line, i)
+            continue
+        if c == "#" and (i == 0 or line[i - 1] in " \t"):
+            return line[:i]
+        i += 1
+    return line
+
+
 def _tokenize(line):
     """Tokenize one line, keeping shell operators (&&, ||, ;, |, &) as separate tokens. Compound
-    punctuation runs (');', ')&&', …) are re-split so no separator hides behind a ')' or '('."""
+    punctuation runs (');', ')&&', …) are re-split so no separator hides behind a ')' or '('.
+    ANSI-C `$'…'` spans are neutralized to `''` FIRST — raw shlex isn't ANSI-C aware and would raise
+    on `$'\\''`, which used to make the whole line drop silently (a `$'\\''; rm -rf /` bypass).
+    Comments are stripped word-boundary-aware (not shlex's mid-word `#`)."""
+    line = _strip_comment(_ANSI_C.sub("''", line))
     lex = shlex.shlex(line, posix=True, punctuation_chars=True)
     lex.whitespace_split = True
+    lex.commenters = ""                                    # we handle `#` ourselves (word-boundary)
     out = []
     for tok in lex:
         if len(tok) > 1 and all(c in _PUNCT for c in tok):
@@ -353,32 +418,138 @@ def _segments(cmd):
     return out
 
 
+def _skip_quote(cmd, i):
+    """`cmd[i]` is a quote char. Return the index just past the matching close quote.
+    A plain `'…'` is fully literal; a `$'…'` (ANSI-C) honors backslash escapes, so `\\'` does NOT
+    close it; `"…"` honors a backslash escape. An UNTERMINATED quote returns i+1 — the quote char is
+    treated as a literal and scanning continues. Never swallow to end-of-string: a stray apostrophe
+    (in a heredoc body, a `#` comment, `don't`/`let's`) must NOT hide a real `$( … )` that follows."""
+    n = len(cmd)
+    if cmd[i] == "'":
+        ansi_c = i > 0 and cmd[i - 1] == "$"                # $'…' → backslash escapes apply
+        j = i + 1
+        while j < n:
+            if ansi_c and cmd[j] == "\\":
+                j += 2
+                continue
+            if cmd[j] == "'":
+                return j + 1
+            j += 1
+        return i + 1                                        # unterminated → treat the quote as literal
+    j = i + 1                                               # double quote
+    while j < n:
+        if cmd[j] == "\\":
+            j += 2
+            continue
+        if cmd[j] == '"':
+            return j + 1
+        j += 1
+    return i + 1                                            # unterminated → treat the quote as literal
+
+
+def _grab_balanced(cmd, start):
+    """`start` is just past an opening `(`. Return (inner, end): the balanced content up to the
+    matching `)`, and the index just past it. Quote-aware — a `(`/`)` inside a quoted span does NOT
+    count toward depth (so `$(echo ")")` closes correctly)."""
+    depth, j, n = 1, start, len(cmd)
+    while j < n and depth:
+        ch = cmd[j]
+        if ch in "'\"":
+            j = _skip_quote(cmd, j)
+            continue
+        if ch == "\\":
+            j += 2
+            continue
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        j += 1
+    return cmd[start:j - 1], j
+
+
+def _grab_brace(cmd, start):
+    """`start` is just past an opening `{`. Return (inner, end): brace-balanced content up to the
+    matching `}`, and the index just past it. Quote-aware."""
+    depth, j, n = 1, start, len(cmd)
+    while j < n and depth:
+        ch = cmd[j]
+        if ch in "'\"":
+            j = _skip_quote(cmd, j)
+            continue
+        if ch == "\\":
+            j += 2
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+        j += 1
+    return cmd[start:j - 1], j
+
+
 def _inner_commands(cmd):
-    """Yield command strings hidden inside `( … )`, `$( … )`, `` `…` ``. Single-quoted regions are
-    skipped (bash does no expansion there), so a quoted example isn't a false positive."""
+    """Yield command strings hidden in REAL shell substitutions/subshells — `$( … )`, backticks,
+    *unquoted* `( … )` / `<( … )` / `>( … )`, and the bash-5.3 command funsub `${ cmd; }` / `${|cmd;}`.
+    Quote-aware, matching bash's own rules:
+      • inside single quotes NOTHING expands;
+      • inside double quotes ONLY `$( … )` and backticks expand — a bare `(` there is a literal
+        character (JS/SQL/regex/etc. passed as a string argument), NOT a subshell.
+    This is what stops a quoted code argument like `browse js "(()=>{ … })()"` from being misread as
+    shell and asked about, while still catching a real `"$(rm -rf /)"` hidden inside double quotes."""
     subs, i, n = [], 0, len(cmd)
     while i < n:
         c = cmd[i]
-        if c == "'":                                        # skip single-quoted span (no expansion)
-            j = cmd.find("'", i + 1)
-            i = (j + 1) if j != -1 else n
+        if c == "\\":                                       # escaped char → literal
+            i += 2
             continue
-        if c == "`":
-            j = cmd.find("`", i + 1)
-            if j != -1:
-                subs.append(cmd[i + 1:j])
-                i = j + 1
+        if c == "#" and (i == 0 or cmd[i - 1] in " \t\n"):  # a `#` comment (word boundary) → EOL
+            nl = cmd.find("\n", i)                          # bash doesn't expand $( … ) in a comment
+            i = nl if nl != -1 else n
+            continue
+        if c == "$" and i + 2 < n and cmd[i + 1] == "{" and cmd[i + 2] in " \t\n|":
+            inner, i = _grab_brace(cmd, i + 2)              # bash-5.3 funsub `${ cmd; }` / `${|cmd;}`
+            subs.append(inner.lstrip("| \t\n").rstrip(" \t\n;"))
+            continue
+        if c == "'":                                        # single-quoted span → no expansion
+            i = _skip_quote(cmd, i)
+            continue
+        if c == '"':                                        # double-quoted span → $( ), ` `, ${ funsub}
+            i += 1
+            while i < n and cmd[i] != '"':
+                if cmd[i] == "\\":
+                    i += 2
+                    continue
+                if cmd[i] == "$" and i + 2 < n and cmd[i + 1] == "{" and cmd[i + 2] in " \t\n|":
+                    inner, i = _grab_brace(cmd, i + 2)      # funsub expands inside "…" too
+                    subs.append(inner.lstrip("| \t\n").rstrip(" \t\n;"))
+                    continue
+                if cmd[i] == "$" and i + 1 < n and cmd[i + 1] == "(":
+                    inner, i = _grab_balanced(cmd, i + 2)
+                    subs.append(inner)
+                    continue
+                if cmd[i] == "`":
+                    k = cmd.find("`", i + 1)
+                    if k == -1:
+                        i = n
+                        break
+                    subs.append(cmd[i + 1:k])
+                    i = k + 1
+                    continue
+                i += 1
+            i += 1                                          # step past the closing "
+            continue
+        if c == "`":                                        # unquoted backtick substitution
+            k = cmd.find("`", i + 1)
+            if k != -1:
+                subs.append(cmd[i + 1:k])
+                i = k + 1
                 continue
-        if c == "(":                                        # ( subshell ), $( ), <( ), >( )
-            depth, j = 1, i + 1
-            while j < n and depth:
-                if cmd[j] == "(":
-                    depth += 1
-                elif cmd[j] == ")":
-                    depth -= 1
-                j += 1
-            subs.append(cmd[i + 1:j - 1])
-            i = j
+            i += 1
+            continue
+        if c == "(":                                        # unquoted ( subshell ) / $( ) / <( ) / >( )
+            inner, i = _grab_balanced(cmd, i + 1)
+            subs.append(inner)
             continue
         i += 1
     return subs
@@ -395,18 +566,22 @@ def _shell_c_arg(t):
 
 
 def _resolve_map(segs):
-    """Build {VAR: literal-value} for variables ASSIGNED with a static literal in THIS command, so
-    a later `$VAR` command name can be resolved instead of just asked about. Common safe idiom:
+    """Build {VAR: [candidate literal values]} for variables ASSIGNED a static literal in THIS
+    command, so a later `$VAR` — as the command NAME *or* as an ARGUMENT — is resolved instead of
+    slipping past. Common safe idiom:
         B=/path/to/tool; $B goto …   → resolve $B → /path/to/tool  (not dangerous → allow)
-    But it also catches danger hidden the same way:
-        RM="rm -rf"; $RM /           → resolve $RM → rm -rf         (→ deny)
-    ONLY a FLAT literal value is recorded — a value with `$`/`` ` ``/`$(` (another var or a command
-    substitution) OR with a shell control operator (`;`, `|`, `&`, `<`, `>`, `(`, `)`, newline) is
-    un-resolvable and stays out of the map (that `$VAR` keeps its 'ask'). The operator check matters:
-    without it, `X="foo; rm -rf /"; $X` would resolve to a *benign* command `foo` with the `rm`
-    smuggled in as args — turning a fail-safe 'ask' into a silent allow. A var reassigned to a
-    DIFFERENT literal is treated as ambiguous and dropped (fail toward asking)."""
-    m, ambiguous = {}, set()
+    and the danger hidden the same way is caught in every position:
+        RM="rm -rf"; $RM /           → $RM → rm -rf                 (→ deny)
+        DEV=/dev/sda; dd … of=$DEV   → of=$DEV → of=/dev/sda        (→ deny)
+        F=--force; git push $F       → $F → --force                (→ deny)
+    ONLY FLAT literal values are recorded — a value with `$`/`` ` ``/`$(` (another var or a command
+    substitution) OR a shell control operator (`;`, `|`, `&`, `<`, `>`, `(`, `)`, newline) makes the
+    whole var un-resolvable (dropped): we must never resolve it to a partial/benign guess. The
+    operator check stops `X="foo; rm -rf /"; $X` from resolving to a benign `foo` with the `rm`
+    smuggled in as args. A var reassigned to DIFFERENT literals keeps ALL candidates — bash is
+    last-write-wins but the guard can't know positions, so the evaluator tries every candidate and
+    takes the WORST verdict (`RM=echo; RM="rm -rf"; $RM /` must still deny, not downgrade to ask)."""
+    m, bad = {}, set()
     for seg in segs:
         for tok in seg:
             mo = _ASSIGN_FULL.match(tok)
@@ -414,23 +589,142 @@ def _resolve_map(segs):
                 continue
             name, val = mo.group(1), mo.group(2)
             if "$" in val or "`" in val or any(c in _UNSAFE_VAL for c in val):
-                ambiguous.add(name)               # not a flat literal command — can't safely resolve
+                bad.add(name)                     # not a flat literal — the whole var is unresolvable
                 continue
-            if name in m and m[name] != val:      # reassigned differently — ambiguous
-                ambiguous.add(name)
-            m[name] = val
-    for name in ambiguous:
+            m.setdefault(name, [])
+            if val not in m[name]:
+                m[name].append(val)
+    for name in bad:
         m.pop(name, None)
     return m
 
 
 def _var_name(tok):
-    """The variable name in a `$VAR` / `${VAR}` command token, or None."""
+    """The variable name if `tok` is exactly a `$VAR` / `${VAR}` reference, else None."""
     if tok.startswith("${") and tok.endswith("}"):
         return tok[2:-1] or None
-    if tok.startswith("$") and len(tok) > 1:
+    if tok.startswith("$") and len(tok) > 1 and tok[1:].isidentifier():
         return tok[1:]
     return None
+
+
+def _sub_token(tok, choice):
+    """Substitute `$VAR`/`${VAR}` in one token using {name: value}. A whole-token ref expands via
+    shlex (so `--force` / `rm -rf` become real argv tokens); an embedded ref (e.g. `of=$DEV`) is
+    string-spliced. Returns the list of resulting tokens."""
+    nm = _var_name(tok)
+    if nm is not None and nm in choice:
+        try:
+            parts = shlex.split(choice[nm])
+        except Exception:
+            parts = None
+        return parts if parts else [choice[nm]]
+    if "$" not in tok:
+        return [tok]
+    return [_VARREF.sub(lambda mo: choice.get(mo.group(1) or mo.group(2), mo.group(0)), tok)]
+
+
+def _resolved_variants(t, var_map):
+    """Candidate argv lists for a segment with its resolvable `$VAR`s substituted. Single-value vars
+    are always substituted; a multi-value var yields one variant per candidate so `evaluate` can take
+    the WORST. Bounded to a handful of variants. A segment with no resolvable var → itself, unchanged
+    (so a genuinely un-inspectable `$X` command name still reaches the `_var_command` 'ask')."""
+    refs = []
+    for tok in t:
+        for mo in _VARREF.finditer(tok):
+            nm = mo.group(1) or mo.group(2)
+            if nm in var_map and nm not in refs:
+                refs.append(nm)
+    if not refs:
+        return [t]
+    base = {nm: var_map[nm][0] for nm in refs}
+
+    def build(choice):
+        out = []
+        for tok in t:
+            out.extend(_sub_token(tok, choice))
+        return out
+
+    variants = [build(base)]
+    for nm in refs:
+        for v in var_map[nm][1:]:
+            ch = dict(base)
+            ch[nm] = v
+            variants.append(build(ch))
+    return variants[:12]
+
+
+def _heredoc_delims(line):
+    """Heredoc introducers on a line, QUOTE- and COMMENT-aware → [(name, unquoted, dash)]. A `<<`
+    inside quotes or after an unquoted `#` is NOT a heredoc (so `grep '<<X'`, `echo "a<<Y"`, and
+    `ls # <<Z` are not misread — that misread swallowed the *next* real command as fake body). Only a
+    genuine, confidently-detected heredoc strips a body: a false negative is a safe over-ask, a false
+    positive is an unsafe bypass, so this leans conservative."""
+    out, i, n = [], 0, len(line)
+    while i < n:
+        c = line[i]
+        if c == "\\":
+            i += 2
+            continue
+        if c == "'" or c == '"':
+            i = _skip_quote(line, i)
+            continue
+        if c == "#" and (i == 0 or line[i - 1] in " \t"):
+            break                                           # comment to EOL — no heredoc past here
+        if line[i:i + 2] == "<<" and line[i:i + 3] != "<<<":
+            j = i + 2
+            dash = j < n and line[j] == "-"
+            if dash:
+                j += 1
+            while j < n and line[j] in " \t":
+                j += 1
+            q = ""
+            if j < n and line[j] in "'\"\\":
+                q = line[j]
+                j += 1
+            mo = _DELIM.match(line, j)
+            if mo:
+                out.append((mo.group(0), q == "", dash))
+                j = mo.end()
+                if q in ("'", '"') and j < n and line[j] == q:
+                    j += 1
+            i = j
+            continue
+        i += 1
+    return out
+
+
+def _split_heredocs(cmd):
+    """Split heredocs out of a command → (code, unquoted_bodies):
+      • `code` is the command with every heredoc BODY and its closing delimiter removed. Body lines
+        are stdin DATA, never commands — `_segments` must not tokenize them as argv, or a benign
+        `cat <<'EOF' … rm -rf / … EOF` file-write gets wrongly blocked.
+      • `unquoted_bodies` collects only the bodies whose delimiter was UNQUOTED (`<<EOF`, not
+        `<<'EOF'` / `<<\\EOF`): there bash DOES run `$( … )`/backticks at setup, so they still need
+        substitution-scanning (a real `<<EOF … $(rm -rf /) … EOF` must still be caught).
+    The closing delimiter must match EXACTLY (for `<<-`, only leading TABS are stripped) — bash does
+    not accept a trailing-space `EOF `. No heredoc → (cmd, "")."""
+    if "<<" not in cmd:
+        return cmd, ""
+    lines = cmd.split("\n")
+    code, bodies, i = [], [], 0
+    while i < len(lines):
+        code.append(lines[i])
+        delims = _heredoc_delims(lines[i])
+        i += 1
+        for name, unquoted, dash in delims:
+            body = []
+            while i < len(lines):
+                probe = lines[i].lstrip("\t") if dash else lines[i]
+                if probe == name:
+                    break
+                body.append(lines[i])
+                i += 1
+            if i < len(lines):                             # consume the exact closing delimiter line
+                i += 1
+            if unquoted:
+                bodies.append("\n".join(body))
+    return "\n".join(code), "\n".join(bodies)
 
 
 def evaluate(cmd, _depth=0):
@@ -439,54 +733,71 @@ def evaluate(cmd, _depth=0):
         return None
     cmd = cmd.replace("\\\n", "")                           # bash line-continuation joins with NO space
     best = None
+    code, hbodies = _split_heredocs(cmd)                    # heredoc bodies are stdin data, not argv
 
-    # 1. recurse into hidden sub-commands (subshells / substitutions / backticks)
-    for inner in _inner_commands(cmd):
+    # 1. recurse into hidden sub-commands (subshells / substitutions / backticks) in the code, PLUS
+    #    unquoted-heredoc bodies (where `$( … )`/backticks run at setup); quoted bodies are inert.
+    for inner in _inner_commands(code):
+        best = _max(best, evaluate(inner, _depth + 1))
+    for inner in _inner_commands(hbodies):
         best = _max(best, evaluate(inner, _depth + 1))
 
-    segs = _segments(cmd)
-    var_map = _resolve_map(segs)               # {VAR: literal} assigned in this same command
+    segs = _segments(code)                                  # NOT the heredoc body lines
+    var_map = _resolve_map(segs)               # {VAR: [candidates]} assigned in this same command
 
-    # 2. cross-segment: a downloader piped straight into a shell = unreviewed remote code
-    names = []
-    for s in segs:
+    # 2. cross-segment: a downloader piped straight into a shell = unreviewed remote code. Resolve a
+    #    `$VAR` command name first, so `C=curl; $C … | sh` and `curl … | $S`(S=sh) don't hide it.
+    def _first_names(s):
         st = _strip_wrappers(list(s))
-        names.append(st[0] if st else "")
-    if any(n in ("curl", "wget", "fetch") for n in names) and any(n in _SHELLS for n in names):
+        if not st:
+            return [""]
+        nm = _var_name(st[0])
+        if nm and nm in var_map:
+            outs = []
+            for v in var_map[nm]:
+                try:
+                    outs.append((shlex.split(v) or [v])[0])
+                except Exception:
+                    outs.append(v)
+            return outs or [st[0]]
+        return [st[0]]
+    name_sets = [_first_names(s) for s in segs]
+    has_dl = any(any(n in ("curl", "wget", "fetch") for n in ns) for ns in name_sets)
+    has_sh = any(any(n in _SHELLS for n in ns) for ns in name_sets)
+    if has_dl and has_sh:
         best = _max(best, ("ask", "piping a downloaded script straight into a shell (curl|sh) runs "
                                   "unreviewed remote code — confirm the source."))
 
-    # 3. per-segment argv rules (recursing into sh -c / eval)
+    # 3. per-segment argv rules, WITH same-command variable resolution in the command-name AND
+    #    argument positions. A multi-valued var is tried in every candidate; we keep the worst.
+    #    An un-resolvable `$VAR` passes through unchanged → the `_var_command` rule still asks.
     for seg in segs:
-        t = _strip_wrappers(list(seg))
-        if not t:
+        base = _strip_wrappers(list(seg))
+        if not base:
             continue
-        # Resolve a `$VAR` command name from a same-command literal assignment, then RE-STRIP (the
-        # value may itself begin with sudo/env/…). RM="rm -rf"; $RM /  →  [rm,-rf,/] → the RULES
-        # see the real command. Un-resolvable vars stay `$VAR` → _var_command still asks.
-        name = _var_name(t[0])
-        if name and name in var_map:
-            try:
-                t = _strip_wrappers(shlex.split(var_map[name]) + t[1:])
-            except Exception:
-                pass
-            if not t:
-                continue
-        sc = _shell_c_arg(t)
-        if sc is not None:                                  # sh -c "…" / bash -lc "…"
-            best = _max(best, evaluate(sc, _depth + 1))
-            continue
-        if t[0] == "eval":                                  # eval <string> → evaluate the string
-            best = _max(best, evaluate(" ".join(t[1:]), _depth + 1))
-            continue
-        for decision, reason, pred in RULES:
-            try:
-                if pred(t):
-                    best = _max(best, (decision, reason))
-                    break
-            except Exception:
-                continue
+        for variant in _resolved_variants(base, var_map):
+            t = _strip_wrappers(variant)               # a value may itself begin with sudo/env/…
+            best = _max(best, _eval_argv(t, _depth))
     return best
+
+
+def _eval_argv(t, depth):
+    """The verdict for ONE fully-resolved argv — recursing into `sh -c "…"` / `eval …`, else running
+    the RULES. Returns (decision, reason) or None."""
+    if not t:
+        return None
+    sc = _shell_c_arg(t)
+    if sc is not None:                                      # sh -c "…" / bash -lc "…"
+        return evaluate(sc, depth + 1)
+    if t[0] == "eval":                                     # eval <string> → evaluate the string
+        return evaluate(" ".join(t[1:]), depth + 1)
+    for decision, reason, pred in RULES:
+        try:
+            if pred(t):
+                return (decision, reason)
+        except Exception:
+            continue
+    return None
 
 
 def main():
