@@ -30,7 +30,7 @@ for _p in "${CLAUDE_PLUGIN_ROOT:-}/bin/orbit-preamble" \
           "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/orbit/bin/orbit-preamble" \
           "$HOME/.claude/skills/orbit/bin/orbit-preamble" \
           ".claude/skills/orbit/bin/orbit-preamble"; do
-  [ -x "$_p" ] && { "$_p"; exit 0; }
+  [ -x "$_p" ] && { bash "$_p"; exit 0; }   # `bash "$_p"`, not bare `"$_p"`, so the guard sees `bash` (a known command), not a `$VAR` command name
 done
 # fallback: older install without orbit-preamble — resolve orbit-update-check inline
 _UPD=""; _DIR=""; _CC="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
@@ -38,7 +38,7 @@ for _p in "${CLAUDE_PLUGIN_ROOT:-}/bin/orbit-update-check" \
           "$_CC/skills/orbit/bin/orbit-update-check" \
           "$HOME/.claude/skills/orbit/bin/orbit-update-check" \
           ".claude/skills/orbit/bin/orbit-update-check"; do
-  if [ -x "$_p" ]; then _UPD="$("$_p" 2>/dev/null || true)"; _DIR="$(dirname "$(dirname "$_p")")"; break; fi
+  if [ -x "$_p" ]; then _UPD="$(bash "$_p" 2>/dev/null || true)"; _DIR="$(dirname "$(dirname "$_p")")"; break; fi
 done
 _VER="$(tr -d '[:space:]' < "${_DIR:-.}/VERSION" 2>/dev/null || echo '?')"
 echo "${_UPD:-orbit v$_VER (up to date / not re-checked within 24h)}"

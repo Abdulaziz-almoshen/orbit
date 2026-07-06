@@ -158,7 +158,7 @@ preamble, go back into that workflow. The upgrade is done.
    for _p in "${CLAUDE_PLUGIN_ROOT:-}/bin/orbit-update-check" \
              "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/orbit/bin/orbit-update-check" \
              "$HOME/.claude/skills/orbit/bin/orbit-update-check"; do
-     [ -x "$_p" ] && { "$_p" --force; break; }
+     [ -x "$_p" ] && { bash "$_p" --force; break; }
    done
    ```
 2. If it prints `UPGRADE_AVAILABLE <old> <new>` → run Steps 0–6 above.

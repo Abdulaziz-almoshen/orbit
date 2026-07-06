@@ -3,6 +3,20 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.28.2
+
+**Orbit's own `/orbit` preamble stops tripping Orbit's own guard.** The Step 0 update-check preamble
+resolved a binary across candidate paths with `for _p in …; do "$_p"; done` — but `"$_p"` is a bare
+`$VAR` *command name*, exactly what the guard's fail-safe asks about (it can't resolve a for-loop
+variable). So every `/orbit` run prompted *"this command's name is an unresolved shell variable —
+confirm it's safe."* — a self-inflicted false positive. Fixed the *generator*, not the guard (the
+guard is correct to be cautious here, and it's been hardened over three red-team rounds): the preamble
+now invokes the resolved path through an interpreter — `bash "$_p"` — so the command name is `bash`
+and `$_p` is just an argument. Same fix in the `/orbit-upgrade` standalone check. New
+`tests/test_generated_commands.py` asserts Orbit emits no bare-`$var` command and that the guard still
+(correctly) asks on the bare form — the regression is on the generator, not a guard weakening. Full
+suite (25 files) + coherence + `claude plugin validate` green.
+
 ## 0.28.1
 
 **Scaffold freshness — kill the silent version lie.** The bug class: `/orbit-upgrade` can truthfully
