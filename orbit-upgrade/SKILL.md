@@ -133,8 +133,11 @@ orbit v{new} — upgraded from v{old}! (commit {sha})
 What's new:
 - …
 
-Then re-run /orbit if you want existing projects to pick up template improvements
-(it merges; it won't clobber your scaffolded files).
+⚠️ This upgraded the PLUGIN only — your already-scaffolded projects still run their OLD local
+scaffold (that's a separate freshness). To see if a project is behind, run
+`scripts/scaffold.py --check-drift --target <repo>`; to refresh it, re-run /orbit inside it
+(it adds missing files/hooks + re-stamps the version, and hash-gates — never clobbers — a
+customized guard.py).
 ```
 
 Include `{sha}` (from Step 3's `$_SHA`, when the install is a git checkout) — it's the concrete,

@@ -3,6 +3,33 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.28.1
+
+**Scaffold freshness — kill the silent version lie.** The bug class: `/orbit-upgrade` can truthfully
+say "Orbit is current" while a scaffolded project still runs an **old local scaffold** — `plugin`
+freshness ≠ `project-scaffold` freshness. Root cause: `.orbit/setup.json`'s `orbit_version` was written
+*once, by the model* and never bumped, so it drifted (a real project sat at `0.21.0` while missing the
+Stop hook and the Gearbox). Fixed at the source:
+
+- **Deterministic version stamp.** The scaffolder now writes `.orbit/setup.json`'s `orbit_version` +
+  `scaffold_schema` on every run — so a re-run finally moves `0.21.0 → current`. Idempotency is
+  preserved: `last_migrated_from`/`last_migrated_at` are written **only when the version actually
+  changes**, never a fresh timestamp on a no-op re-run (no git noise), and the model-written keys
+  (domain characterization + choices) are preserved.
+- **A read-only drift report** — `scaffold.py --check-drift` (surfaced by the `/orbit` preamble on a
+  re-run, and referenced by `/orbit-upgrade`): reports *plugin current · scaffold metadata old/missing ·
+  missing files · hook drift · role/template drift (advisory) · stale prose (advisory) · custom guard
+  preserved*. So a project can't silently run a stale scaffold while the plugin reports "current."
+- **Broadened, manifest-based migration.** A `.orbit/.scaffold-manifest.json` records the sha of each
+  managed check the scaffolder placed. On a re-run, a managed hook (`guard.py`, `route.py`, `learn.py`,
+  `orbit-stop-check.py`) that is **byte-identical to what we placed** (unmodified) is carried forward
+  with a backup; a **customized** one (e.g. a guard with your own §8 deploy rules) is **warned about and
+  never overwritten**. No more maintaining hardcoded historical-hash lists.
+
+New `tests/test_scaffold_freshness.py`; the idempotency and migration invariants still pass; full suite
+(24 files) + coherence + `claude plugin validate` green. (A project like the earlier stale one refreshes
+by re-running `/orbit` in it — the local projects themselves were left untouched.)
+
 ## 0.28.0
 
 **Orbit Gearbox — the loop sizes itself before it moves.** Not every request deserves the same

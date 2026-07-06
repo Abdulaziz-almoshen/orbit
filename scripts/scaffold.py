@@ -32,58 +32,76 @@ import shutil
 import time
 from pathlib import Path
 
-# Hooks that shipped with a defect in an earlier version and must be re-provisioned in existing
-# repos. `marker` is a version-STABLE substring that identifies the file as an Orbit hook of this
-# kind (so we know when a file is "ours, but outdated" vs unrelated). We auto-replace ONLY a file
-# whose sha256 is a known-old shipped version; a file that's ours-but-modified gets a warning +
-# manual instructions; a file already at the current shipped version is left untouched.
-HOOK_MIGRATIONS = [
-    {"src": "checks/guard.py", "dst": ".orbit/checks/guard.py",
-     "marker": b"Orbit safety guard",
-     "old_hashes": {
-         "0c5eb314a1dc64ad408adeb0d2170644f9bc48eeb343b562fbe6bf17fb098013",  # <0.23.0 (dead output shape)
-         "3c5f77344b6857059593dc28e612fd9cae07948401adf6b447ae9df3270abc9c",  # 0.23.0 (narrow + bypassable)
-     },
-     "why": "the safety wall used an output shape Claude Code ignored (<0.23.0, blocks did nothing) "
-            "and had narrow coverage with several one-token bypasses (0.23.0); 0.23.1 hardens it"},
-    {"src": "checks/route.py", "dst": ".orbit/checks/route.py",
-     "marker": b"UserPromptSubmit hook",
-     "old_hashes": {
-         "6e821feb7f8b2c400d1f1254a0f5fef2d225ab8858af5bde0c226987f62f8ec8",
-         "3cdb8b75d49da422b8b09504e3f612f6e6b3d539d41ee35923aa98ef1c21c77b",
-         "39040718046c1e57aede2eab41291c874da37392507693205f80ec880cae1584",
-         "92c14909470a56f2405900cdc1a1e1a414bd96326682eecacb60f088ddca16fd",
-     },
-     "why": "its event log crashed the orbit-status dashboard and its injected routing text overclaimed"},
-]
+SCHEMA_VERSION = 2                         # bumps if setup.json / manifest shape changes
+MANIFEST_REL = ".orbit/.scaffold-manifest.json"   # {rel: sha256} of the check files WE placed
+
+# The check files the scaffolder MANAGES and can carry forward on a re-run. `marker` is a
+# version-STABLE substring identifying the file as ours (so we don't touch an unrelated file at
+# that path). We auto-replace a managed check ONLY when it is byte-identical to what we last placed
+# (the manifest) OR to a known-old shipped version — i.e. the user has NOT customized it. A
+# customized file (or unknown provenance) gets a warning + manual instructions, never an overwrite.
+MANAGED_CHECKS = {
+    ".orbit/checks/guard.py":           ("checks/guard.py",           b"Orbit safety guard"),
+    ".orbit/checks/route.py":           ("checks/route.py",           b"UserPromptSubmit hook"),
+    ".orbit/checks/learn.py":           ("checks/learn.py",           b"active-learning"),
+    ".orbit/checks/orbit-stop-check.py":("checks/orbit-stop-check.py", b"observability backstop"),
+}
+# Known-old shipped hashes for repos scaffolded BEFORE the manifest existed (no manifest to compare).
+_LEGACY_OLD = {
+    ".orbit/checks/guard.py": {
+        "0c5eb314a1dc64ad408adeb0d2170644f9bc48eeb343b562fbe6bf17fb098013",  # <0.23.0 (dead output shape)
+        "3c5f77344b6857059593dc28e612fd9cae07948401adf6b447ae9df3270abc9c",  # 0.23.0 (narrow + bypassable)
+    },
+    ".orbit/checks/route.py": {
+        "6e821feb7f8b2c400d1f1254a0f5fef2d225ab8858af5bde0c226987f62f8ec8",
+        "3cdb8b75d49da422b8b09504e3f612f6e6b3d539d41ee35923aa98ef1c21c77b",
+        "39040718046c1e57aede2eab41291c874da37392507693205f80ec880cae1584",
+        "92c14909470a56f2405900cdc1a1e1a414bd96326682eecacb60f088ddca16fd",
+    },
+}
+
+
+def _sha(b: bytes) -> str:
+    return hashlib.sha256(b).hexdigest()
+
+
+def _read_json(p: Path) -> dict:
+    try:
+        return json.loads(p.read_text())
+    except Exception:
+        return {}
 
 
 def migrate_hooks(target: Path, created, warnings):
-    """Carry existing repos forward to the current shipped hooks (security/correctness fixes).
-    Auto-replaces ONLY a byte-identical known-old shipped version; a locally-modified hook is
-    warned about (never overwritten); an already-current hook is left untouched."""
-    for m in HOOK_MIGRATIONS:
-        dst = target / m["dst"]
+    """Carry existing repos forward to the current shipped check hooks (security/correctness fixes).
+    Auto-replaces a managed check ONLY when it is UNMODIFIED — byte-identical to what we placed (the
+    manifest) or to a known-old shipped version. A locally-modified hook (e.g. a guard with custom
+    §8 rules) is warned about and NEVER overwritten; an already-current hook is left untouched."""
+    manifest = _read_json(target / MANIFEST_REL)
+    for rel, (src_rel, marker) in MANAGED_CHECKS.items():
+        dst = target / rel
         if not dst.exists():
             continue                                        # fresh file — normal _place copies the new one
         content = dst.read_bytes()
-        if m["marker"] not in content:
+        if marker not in content:
             continue                                        # not an Orbit hook of this kind — leave it
-        src = ASSETS / m["src"]
-        new = src.read_bytes()
-        cur = hashlib.sha256(content).hexdigest()
-        if cur == hashlib.sha256(new).hexdigest():
+        new = (ASSETS / src_rel).read_bytes()
+        cur = _sha(content)
+        if cur == _sha(new):
             continue                                        # already the current shipped version
-        if cur in m["old_hashes"]:
+        unmodified = (rel in manifest and cur == manifest[rel]) or cur in _LEGACY_OLD.get(rel, set())
+        if unmodified:                                      # ours, unchanged by the user → carry forward
             bak = dst.with_name(dst.name + f".bak.{int(time.time())}")
             bak.write_bytes(content)
             dst.write_bytes(new)
             dst.chmod(0o755)
-            created.append(f"{m['dst']}  (⚠ UPDATED — {m['why']}; old version → {bak.name})")
-        else:
+            created.append(f"{rel}  (⚠ UPDATED to the current shipped version — security/correctness "
+                           f"fixes; old version → {bak.name})")
+        else:                                               # customized or unknown → hands off
             warnings.append(
-                f"{m['dst']} is an outdated Orbit hook that was locally modified — NOT auto-replaced. "
-                f"({m['why']}.) Fix: diff it against {src} and port your changes.")
+                f"{rel} is an Orbit hook that was locally modified — NOT auto-replaced (your custom "
+                f"rules are preserved). To take the newer fixes, diff it against {ASSETS / src_rel} "
+                f"and port your changes.")
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
 ASSETS = SKILL_ROOT / "assets"
@@ -244,6 +262,116 @@ def resolve_engineers(surfaces):
     return eng, has_ui
 
 
+def _orbit_version() -> str:
+    try:
+        return (SKILL_ROOT / "VERSION").read_text().strip() or "unknown"
+    except Exception:
+        return "unknown"
+
+
+def _write_manifest(target: Path) -> None:
+    """Record the sha256 of each managed check file WE placed, so a later re-run can tell 'unmodified
+    since we placed it' (safe to carry forward) from 'the user customized it' (hands off). Idempotent:
+    same files → same content → no rewrite."""
+    m = {rel: _sha((target / rel).read_bytes()) for rel in MANAGED_CHECKS if (target / rel).exists()}
+    out = target / MANIFEST_REL
+    text = json.dumps(m, indent=2, sort_keys=True) + "\n"
+    try:
+        if not out.exists() or out.read_text() != text:
+            out.write_text(text)
+    except Exception:
+        pass
+
+
+def _stamp_setup(target: Path, prev_version: str) -> None:
+    """Stamp .orbit/setup.json with the CURRENT orbit_version + scaffold_schema — deterministically,
+    so the version metadata stops lying after a refresh. Preserves the model-written keys (domain
+    characterization + choices). `last_migrated_from`/`_at` are written ONLY when the version actually
+    changed — never a fresh timestamp on a no-op re-run, so the 're-run changes nothing' contract holds."""
+    p = target / ".orbit/setup.json"
+    data = _read_json(p)
+    cur = _orbit_version()
+    data["orbit_version"] = cur
+    data["scaffold_schema"] = SCHEMA_VERSION
+    if prev_version and prev_version != cur:                 # a real migration → record it (with a time)
+        data["last_migrated_from"] = prev_version
+        data["last_migrated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    text = json.dumps(data, indent=2, sort_keys=True) + "\n"
+    try:
+        if not p.exists() or p.read_text() != text:
+            p.write_text(text)
+    except Exception:
+        pass
+
+
+def scaffold_drift(target: Path) -> dict:
+    """READ-ONLY: how stale is THIS project's scaffold vs the current plugin? Separates plugin
+    freshness (what /orbit-upgrade fixes) from project-scaffold freshness (what a re-run of /orbit
+    fixes). Never writes. The staleness signal the /orbit preamble surfaces so a project doesn't
+    silently run an old local scaffold while the plugin reports 'current'."""
+    cur = _orbit_version()
+    proj_v = _read_json(target / ".orbit/setup.json").get("orbit_version")
+    has_ui = (target / ".claude/agents/designer.md").exists()
+    expected = [dst for _, dst, _ in FILE_PLAN] + [f".orbit/skills/{pb}" for pb in PLAYBOOKS_ALWAYS]
+    if has_ui:
+        expected += [f".orbit/skills/{pb}" for pb in PLAYBOOKS_FRONTEND]
+        expected += [d for _, d in DESIGN_GATE_FRONTEND]
+    missing = [e for e in expected if not (target / e).exists()]
+    settings = _read_json(target / ".claude/settings.json")
+    wired = json.dumps(settings.get("hooks", {})) + json.dumps(settings.get("statusLine", {}))
+    hook_drift = [name for name, tok in (
+        ("safety guard", "guard.py"), ("router", "route.py"),
+        ("observability Stop hook", "orbit-stop-check.py"), ("telemetry", "orbit-hook"),
+        ("status line", "orbit-statusline")) if tok not in wired]
+    guard = target / ".orbit/checks/guard.py"
+    guard_custom = bool(guard.exists() and b"Orbit safety guard" in guard.read_bytes()
+                        and _sha(guard.read_bytes()) != _sha((ASSETS / "checks/guard.py").read_bytes()))
+    stale_prose = []
+    for rel in (".orbit/STATE.md", "CLAUDE.md"):
+        f = target / rel
+        try:
+            if f.exists() and proj_v and proj_v != cur and proj_v in f.read_text():
+                stale_prose.append(rel)
+        except Exception:
+            pass
+    return {
+        "plugin_version": cur, "scaffold_version": proj_v,
+        "metadata_stale_or_missing": (proj_v != cur),
+        "missing_files": missing, "hook_drift": hook_drift,
+        "role_template_drift_advisory": (proj_v != cur),     # roles/CLAUDE.md are never overwritten → may lag
+        "stale_prose_advisory": stale_prose,
+        "guard_customized_preserved": guard_custom,
+    }
+
+
+def _print_drift(target: Path) -> None:
+    d = scaffold_drift(target)
+    if not (target / ".orbit").is_dir():
+        print("Not an Orbit-scaffolded repo (no .orbit/). Run /orbit to set it up."); return
+    fresh = (not d["metadata_stale_or_missing"] and not d["missing_files"] and not d["hook_drift"])
+    print(f"Orbit scaffold drift — plugin v{d['plugin_version']} · this project's scaffold "
+          f"v{d['scaffold_version'] or 'unknown'}")
+    if fresh:
+        print("  ✓ up to date — scaffold matches the current plugin."); return
+    print("  ✓ plugin is current (that's what /orbit-upgrade checks) — but this PROJECT's scaffold is behind:")
+    if d["metadata_stale_or_missing"]:
+        print(f"  • scaffold metadata old/missing (setup.json says {d['scaffold_version'] or 'nothing'})")
+    if d["missing_files"]:
+        print(f"  • {len(d['missing_files'])} file(s) the current plugin ships are missing: "
+              f"{', '.join(x.split('/')[-1] for x in d['missing_files'][:6])}"
+              + (" …" if len(d['missing_files']) > 6 else ""))
+    if d["hook_drift"]:
+        print(f"  • hook drift — not wired: {', '.join(d['hook_drift'])}")
+    if d["role_template_drift_advisory"]:
+        print("  • roles / CLAUDE.md may be stale (advisory — never auto-overwritten; review by hand)")
+    if d["stale_prose_advisory"]:
+        print(f"  • stale prose (advisory): {', '.join(d['stale_prose_advisory'])} still names an old version")
+    if d["guard_customized_preserved"]:
+        print("  • your guard.py is customized — it will be PRESERVED (warned, not overwritten) on a re-run")
+    print("  Fix: re-run `/orbit` here — it adds the missing files/hooks and re-stamps the version,\n"
+          "       hash-gating (never clobbering) your customized guard.")
+
+
 def install_hooks(target: Path, has_ui: bool = False) -> None:
     """Wire Orbit's always-on hooks into .claude/settings.json (default-on + announced):
 
@@ -352,8 +480,14 @@ def main():
                     help="back-compat alias: implies a web surface (Designer + design playbooks)")
     ap.add_argument("--install-hooks", action="store_true",
                     help="also wire the always-on safety hook into .claude/settings.json")
+    ap.add_argument("--check-drift", action="store_true",
+                    help="READ-ONLY: report how stale this project's scaffold is vs the current plugin, then exit")
     args = ap.parse_args()
     target = args.target.resolve()
+
+    if args.check_drift:                                     # read-only staleness report — never writes
+        _print_drift(target)
+        return
 
     if not target.is_dir():
         raise SystemExit(f"target is not a directory: {target}")
@@ -365,6 +499,7 @@ def main():
     engineers, has_ui = resolve_engineers(surfaces)
 
     created, skipped, warnings = [], [], []
+    prev_version = _read_json(target / ".orbit/setup.json").get("orbit_version", "")   # for the version stamp
 
     for d in DIRS:
         (target / d).mkdir(parents=True, exist_ok=True)
@@ -430,8 +565,17 @@ def main():
             _emit(target / ".claude/agents" / f"{fn}.md", adapter, created, skipped)
             _emit(target / ".orbit/roles" / f"{fn}.md", _strip_frontmatter(adapter), created, skipped)
 
+    # 5. record what we placed (for precise 'unmodified' migration) + stamp the version deterministically
+    _write_manifest(target)
+    _stamp_setup(target, prev_version)
+
     _team = ", ".join(sorted(engineers.keys())) + (" + designer" if has_ui else "")
     print(f"Scaffolded orbit skeleton into: {target}")
+    _cur_v = _orbit_version()
+    if prev_version and prev_version != _cur_v:
+        print(f"Version: migrated this scaffold {prev_version} → {_cur_v} (setup.json re-stamped).")
+    else:
+        print(f"Version: scaffold stamped at orbit v{_cur_v} (setup.json).")
     print(f"Specialists for this project (from surfaces {surfaces or '[none → generic builder]'}): {_team}")
     print("\nCreated:")
     for c in created or ["(nothing new)"]:

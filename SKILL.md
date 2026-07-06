@@ -164,8 +164,15 @@ skeleton, the model only for the project-specific spec.
 Setup must feel like gstack: smooth, near-zero questions. **Inference is the default; asking
 is the fallback.** Interrogating the user with four questions is a failure mode.
 
-1. **If `.orbit/setup.json` exists**, read it and reuse those answers — don't re-ask on a
-   re-run. (Write it at the end of setup: the domain characterization + any choices.)
+1. **If `.orbit/setup.json` exists**, this repo is already scaffolded → this is a **re-run / refresh**,
+   not a fresh setup. Read it and reuse those answers — don't re-ask. **First, surface scaffold drift:**
+   run `scripts/scaffold.py --check-drift --target .` (read-only) and show the user the result —
+   because the *plugin* being current (what `/orbit-upgrade` reports) does NOT mean this *project's*
+   scaffold is current. If it's behind (old `orbit_version`, missing files/hooks, drifted roles), tell
+   them what the refresh will do, then proceed with the normal scaffold, which **adds the missing
+   files/hooks and re-stamps `setup.json`'s `orbit_version` deterministically** — while **hash-gating
+   (never clobbering) a customized `guard.py`**. (The scaffolder stamps the version; you no longer
+   hand-write it.)
 2. **Mine the repo and INFER** product, goal, "most expensive mistake," and integrations
    from README, package manifests (package.json, *.csproj, requirements.txt…), config, and
    code. Read `references/profiles/generic.md` for what to look for.
