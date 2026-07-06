@@ -155,11 +155,12 @@ preamble, go back into that workflow. The upgrade is done.
 
 1. Force a fresh check (bypass the 24h throttle):
    ```bash
-   for _p in "${CLAUDE_PLUGIN_ROOT:-}/bin/orbit-update-check" \
-             "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/orbit/bin/orbit-update-check" \
-             "$HOME/.claude/skills/orbit/bin/orbit-update-check"; do
-     [ -x "$_p" ] && { bash "$_p" --force; break; }
-   done
+   # literal executable (`./orbit-update-check`); the variable is only a `cd` argument → no guard prompt
+   _CC="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+   if   [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -x "$CLAUDE_PLUGIN_ROOT/bin/orbit-update-check" ]; then ( cd "$CLAUDE_PLUGIN_ROOT/bin" && ./orbit-update-check --force )
+   elif [ -x "$_CC/skills/orbit/bin/orbit-update-check" ];          then ( cd "$_CC/skills/orbit/bin" && ./orbit-update-check --force )
+   elif [ -x "$HOME/.claude/skills/orbit/bin/orbit-update-check" ]; then ( cd "$HOME/.claude/skills/orbit/bin" && ./orbit-update-check --force )
+   fi
    ```
 2. If it prints `UPGRADE_AVAILABLE <old> <new>` → run Steps 0–6 above.
 3. If it prints nothing → run Step 0 to find `INSTALL_DIR`, read `VERSION`, and tell the

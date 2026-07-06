@@ -26,20 +26,21 @@ block (it finds `orbit-preamble` whether Orbit is a user skill or a marketplace 
 back to an inline resolver if that script is missing):
 
 ```bash
-for _p in "${CLAUDE_PLUGIN_ROOT:-}/bin/orbit-preamble" \
-          "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/orbit/bin/orbit-preamble" \
-          "$HOME/.claude/skills/orbit/bin/orbit-preamble" \
-          ".claude/skills/orbit/bin/orbit-preamble"; do
-  [ -x "$_p" ] && { bash "$_p"; exit 0; }   # `bash "$_p"`, not bare `"$_p"`, so the guard sees `bash` (a known command), not a `$VAR` command name
-done
-# fallback: older install without orbit-preamble — resolve orbit-update-check inline
-_UPD=""; _DIR=""; _CC="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
-for _p in "${CLAUDE_PLUGIN_ROOT:-}/bin/orbit-update-check" \
-          "$_CC/skills/orbit/bin/orbit-update-check" \
-          "$HOME/.claude/skills/orbit/bin/orbit-update-check" \
-          ".claude/skills/orbit/bin/orbit-update-check"; do
-  if [ -x "$_p" ]; then _UPD="$(bash "$_p" 2>/dev/null || true)"; _DIR="$(dirname "$(dirname "$_p")")"; break; fi
-done
+# The executable is ALWAYS a literal (`./orbit-preamble`) — the variable is only ever a `cd`
+# argument. So Orbit never asks you to trust a `$VAR` command before Orbit has even started.
+_CC="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+if   [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -x "$CLAUDE_PLUGIN_ROOT/bin/orbit-preamble" ]; then ( cd "$CLAUDE_PLUGIN_ROOT/bin" && ./orbit-preamble ); exit 0
+elif [ -x "$_CC/skills/orbit/bin/orbit-preamble" ];          then ( cd "$_CC/skills/orbit/bin" && ./orbit-preamble ); exit 0
+elif [ -x "$HOME/.claude/skills/orbit/bin/orbit-preamble" ]; then ( cd "$HOME/.claude/skills/orbit/bin" && ./orbit-preamble ); exit 0
+elif [ -x ".claude/skills/orbit/bin/orbit-preamble" ];       then ( cd .claude/skills/orbit/bin && ./orbit-preamble ); exit 0
+fi
+# fallback: older install without orbit-preamble — resolve orbit-update-check inline (literal exec too)
+_UPD=""; _DIR=""
+if   [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -x "$CLAUDE_PLUGIN_ROOT/bin/orbit-update-check" ]; then _UPD="$( cd "$CLAUDE_PLUGIN_ROOT/bin" && ./orbit-update-check 2>/dev/null || true )"; _DIR="$CLAUDE_PLUGIN_ROOT"
+elif [ -x "$_CC/skills/orbit/bin/orbit-update-check" ];          then _UPD="$( cd "$_CC/skills/orbit/bin" && ./orbit-update-check 2>/dev/null || true )"; _DIR="$_CC/skills/orbit"
+elif [ -x "$HOME/.claude/skills/orbit/bin/orbit-update-check" ]; then _UPD="$( cd "$HOME/.claude/skills/orbit/bin" && ./orbit-update-check 2>/dev/null || true )"; _DIR="$HOME/.claude/skills/orbit"
+elif [ -x ".claude/skills/orbit/bin/orbit-update-check" ];       then _UPD="$( cd .claude/skills/orbit/bin && ./orbit-update-check 2>/dev/null || true )"; _DIR=".claude/skills/orbit"
+fi
 _VER="$(tr -d '[:space:]' < "${_DIR:-.}/VERSION" 2>/dev/null || echo '?')"
 echo "${_UPD:-orbit v$_VER (up to date / not re-checked within 24h)}"
 ```

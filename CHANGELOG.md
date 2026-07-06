@@ -3,6 +3,20 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.28.3
+
+**The `/orbit` preamble now runs with zero PreToolUse prompts — the executable is always literal.**
+0.28.2 stopped the guard prompt by wrapping the resolved path in `bash "$_p"`, but that still puts a
+variable in command-adjacent position and force-feeds the shebang. The cleaner fix (a P1 *trust* bug —
+Orbit must not ask you to trust Orbit before it has started): resolve the install directory as a `cd`
+argument and run a **literal** `./orbit-preamble` / `./orbit-update-check`. So no `$VAR` ever sits in
+command position, the script's own shebang is respected, and the guard has nothing to ask about. Same
+rewrite in `/orbit-upgrade`'s forced check. **The guard is untouched** — it still asks on a real
+`"$X"` command and denies dangerous substitutions. `tests/test_generated_commands.py` now evaluates the
+**exact** Step 0 and forced-check blocks *extracted from the skill files* through `guard.evaluate(...)`
+and asserts `None` (so the test can't drift from what ships), plus the guard's ask/deny behaviour.
+Acceptance bar met in full; suite (25 files) + coherence + `claude plugin validate` green.
+
 ## 0.28.2
 
 **Orbit's own `/orbit` preamble stops tripping Orbit's own guard.** The Step 0 update-check preamble
