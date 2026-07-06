@@ -3,6 +3,47 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.28.0
+
+**Orbit Gearbox — the loop sizes itself before it moves.** Not every request deserves the same
+machinery. Orbit already leaned this way (a fast lane vs a substantial lane vs the goal pipeline), but
+the ladder was *implicit* and its top rung couldn't scale its fan-out to the request. The Gearbox makes
+it explicit, market-aligned (route-first · dynamic orchestrator-workers · guardrails-scale-with-autonomy,
+OWASP LLM06), and — the point — **legible**: Orbit declares its operating mode before doing the work.
+
+Five gears, chosen by a **scorecard** (ambiguity · blast radius · # surfaces · research need ·
+compliance/security · reversibility · runtime/cost), *highest risk-trigger wins* (never a sum), biased
+toward the **smallest gear that can still prove the result**:
+
+- **T0 Direct** — question / explanation / trivial patch → answer or patch, no loop.
+- **T1 Quick** — small · clear · reversible → Plan → Do → Verify, one owner.
+- **T2 Standard** — a real change → the team loop on the visible board.
+- **T3 Deep** — broad · ambiguous · research-heavy · multi-surface → **Map → Research → Plan → Critique
+  → Synthesize → Build**, with a *dynamic* fleet of **existing roles** sized to the request (Map =
+  Product-Discovery per surface, Research = Market-Researcher per unknown, Plan = Planner per feature
+  cluster, **Critique = the Reviewer/Safety/design roles wearing an adversarial "critique the plan" hat**
+  after a draft exists, **Synthesize = the Planner** converging to one plan-of-record — *no new role
+  types are introduced*). Capped (`gears.deep`: 16 agents / 400k tokens) and **always confirmed with the
+  user before fan-out**.
+- **T4 Mission** — multi-repo · multi-day · production migration · money at scale → T3 on the durable
+  runner (`loop.py` / `durable-execution.md`): checkpoints, resume, a human-approval gate per irreversible
+  step, an artifact bundle.
+
+Every gear opens with a **Gear Card** (`Gear / Why / Budget / Exit`, emitted to `activity.jsonl` +
+rendered on the board) — the "surprise factor": Orbit explaining *why* it sized the request the way it
+did. **Guardrails scale with the gear** (OWASP LLM06): higher gear → minimal tools per worker (reusing
+Orbit's per-role `tools:` scoping), cost/fan-out caps, and a human gate on every irreversible/outward/money
+step. And it all runs on the **visible board** — `set_team` + `.orbit/tasks.json` + `.orbit/activity.jsonl`,
+Task-tool sub-agents — **never** the native `Workflow(...)` runner (the v0.27.2 contract holds).
+
+**It's not new machinery — it unifies what Orbit already had:** T1 = the fast lane, T2 = the substantial
+lane + discovery team, T3 = the discovery team *made dynamic* + plan-review's lenses *as critics* +
+goal-pipeline, T4 = the durable `loop.py` path. Wired into §10, the Orchestrator role, `route.py` (a soft
+gear hint on breadth/research/mission signals + "size the gear first" in the injected context),
+`loop.config.json` (the `gears` block), `roles.md`, and `SKILL.md`; provisioned as `loop-tiers.md`. New
+`tests/test_loop_tiers.py`; full suite (23 files) + coherence + `claude plugin validate` green; the whole
+feature run through a 5-lens adversarial review.
+
 ## 0.27.2
 
 **The run contract now forbids the black-box runner — and enforces it.** Orbit's core promise is

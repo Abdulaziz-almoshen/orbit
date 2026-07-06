@@ -70,7 +70,11 @@ NEGATION_PAT = re.compile(r"^\s*(don'?t|do not|no need to|never mind|nevermind|s
 
 TASK_CTX = (
     "[orbit] ROUTING — default lane: TASK. Route it through the loop (deterministic keyword match; "
-    "if it's clearly NOT a task, say so in one line and answer directly instead). "
+    "if it's clearly NOT a task, say so in one line and answer directly instead). **SIZE THE GEAR "
+    "FIRST** (the Gearbox — `.orbit/skills/loop-tiers.md`): score effort/risk/uncertainty and pick the "
+    "smallest gear that can still prove the result — T0 Direct · T1 Quick · T2 Standard · T3 Deep · "
+    "T4 Mission — then DECLARE the Gear Card (Gear/Why/Budget/Exit) before moving; on T3/T4 confirm the "
+    "budget before fanning out. "
     "**If it's a substantial goal/feature, the planning team reviews it as experts FIRST, before "
     "building.** Understand the real intent, then bring the team's knowledge to bear (discovery: is "
     "this the right bet?; prior-art/market: does it already exist, or is there a better/reusable way?; "
@@ -105,6 +109,33 @@ _INFO_OPENER = re.compile(
     r"^\s*(explain|describe|clarify|walk\s+me|show|list|tell|what|whats|what's|how|why|when|"
     r"where|who|which)\b", re.IGNORECASE,
 )
+
+# Soft GEAR hints — NOT a gear decision (the orchestrator sizes it), just a nudge toward a higher gear
+# when the prompt shows breadth / research-need / mission-scale signals. Keyword-only, best-effort.
+_BREADTH_PAT = re.compile(r"(^|\n)\s*\d+[.)]\s|\bacross the (product|app|codebase)\b|\bmultiple\b|"
+                          r"\beach (of|client|feature)\b|\b(feature|ask|item)s?\b.*\band\b.*\b(feature|ask|item)s?\b",
+                          re.IGNORECASE)
+_RESEARCH_PAT = re.compile(r"\b(regulation|regulator|compliance|complian|feasibilit|best[-\s]?practice|"
+                           r"options?\b|research|does .{1,30} support|pdpl|gdpr|hipaa|api access|market)\b",
+                           re.IGNORECASE)
+_MISSION_PAT = re.compile(r"\b(migrat|production|prod deploy|multi[-\s]?repo|across repos|roll ?out|"
+                          r"at scale|customers?|billing|payment|money)\b", re.IGNORECASE)
+
+
+def gear_hint(prompt: str) -> str:
+    """A soft, appendable hint toward a higher gear (T3/T4) when the prompt shows breadth / research /
+    mission signals. Empty when nothing strong shows — the orchestrator still sizes the gear itself."""
+    mission = bool(_MISSION_PAT.search(prompt))
+    breadth = bool(_BREADTH_PAT.search(prompt))
+    research = bool(_RESEARCH_PAT.search(prompt))
+    if mission:
+        return ("[orbit] GEAR HINT: mission-scale signals (migration/production/multi-repo/money) — "
+                "consider T4 Mission (durable, human-gated); size + declare the gear.")
+    if breadth or research:
+        why = " + ".join([w for w, on in (("breadth", breadth), ("research-need", research)) if on])
+        return (f"[orbit] GEAR HINT: {why} signals — consider T3 Deep "
+                "(Map→Research→Plan→Critique→Synthesize→Build, confirm the fan-out); size + declare the gear.")
+    return ""
 
 
 def classify(prompt: str) -> str:
@@ -246,6 +277,9 @@ def main() -> None:
 
     ctx = {"task": TASK_CTX, "question": QUESTION_CTX, "ambiguous": AMBIGUOUS_CTX}[kind]
     if kind in ("task", "ambiguous"):
+        hint = gear_hint(prompt)                  # soft nudge toward a higher gear (breadth/research/mission)
+        if hint:
+            ctx = ctx + " " + hint
         emit_activity(cwd, kind, prompt)
 
     print(json.dumps({

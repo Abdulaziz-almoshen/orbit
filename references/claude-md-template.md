@@ -138,35 +138,42 @@ read `CLAUDE.md` + `STATE.md` → plan next action → act via sub-agent(s) → 
 `.orbit/loop.py` (portable, dispatch seam wired to the orchestrator) or
 `scripts/ralph_loop.sh` (Claude Code, fresh context per cycle). Config: §8 / loop.config.json.
 
-## 10. Request Routing — fast by default  (read on EVERY user message)
-Classify each request, then spend effort **in proportion to it**. This is how the system
-prompts itself *and* stays fast: most requests don't need ceremony, so don't pay for it.
+## 10. Request Routing — the Gearbox: size the loop before you move  (read on EVERY user message)
+The loop picks a **gear** before doing work — the **smallest gear that can still PROVE the result**.
+Most requests don't need ceremony, so don't pay for it; a broad, ambiguous, high-risk one gets a whole
+research-and-critique fleet. Size it on a scorecard (ambiguity · blast radius · # surfaces · research
+need · compliance/security · reversibility · runtime/cost), **highest risk-trigger wins** (never a sum),
+then **declare the gear out loud** (a *Gear Card*) before moving. Full rubric + fan-out math:
+`.orbit/skills/loop-tiers.md`.
 
-- **QUESTION** (status / explanation: "is it live?", "what does X do?", "why did Y fail?")
-  → answer directly. No loop, no roles. Read `.orbit/STATE.md` if it helps.
-- **TASK** (changes the product: build, fix, add, refactor, migrate, redesign…) → route it
-  through the loop, but **size the loop to the task** — and never free-edit a source-of-truth
-  file outside it:
-  - **Small · clear · reversible** (a rename, a log line, a localized fix) → **just do it well,
-    now.** Reason internally, act, self-check against §3, log one line in STATE.md. No briefs,
-    no role hand-offs, no phase narration. *This is the default, and it's fast.* On frontend
-    repos, this lane is why the Designer's prototype gate stays out of the way for small work:
-    small/clear/reversible UI edits (a copy fix, a sanctioned token tweak, an appearance-restoring
-    bug fix) never route to the Designer at all, so they cannot trigger a prototype gate — the
-    gate only fires on work the Designer itself classifies HEAVY (see `design-methodology.md`).
-  - **Substantial · ambiguous · irreversible** (a new capability; anything touching
-    schema/data/security/payments; wide blast radius) → run the full loop, and run the
-    **thinking in parallel**: infer from the repo, generate 2–3 approaches, and scan risks
-    **concurrently**, then synthesize and act via the roles in `.claude/agents/` (Dispatcher →
-    specialists → Safety → Reviewer → Reporter), dispatched with the **Task tool**. **Make the board
-    visible FIRST** — `set_team` + `set_tasks` + `TaskCreate` — *before* spawning any specialist, so
-    the user sees who owns each step from the start. Drive the TaskCreate/TaskUpdate checklist and
-    write `.orbit/tasks.json` + `.orbit/activity.jsonl`. **Do NOT run the task through the native
-    `Workflow(...)` background runner** — it is a black-box job that bypasses the checklist, the
-    visible owner, and the `.orbit/` telemetry; a task isn't "running through Orbit" unless the user
-    can see who owns each step and what's done / in progress. Parallel beats serial here — same
-    wall-clock as one pass, but sharper (more perspectives at once). This is where the system is
-    *smarter*, not slower.
+- **T0 · Direct** — a QUESTION (status / explanation: "is it live?", "what does X do?") or a trivial
+  patch → answer / patch directly. No loop, no roles. Read `.orbit/STATE.md` if it helps.
+- **T1 · Quick** — small · clear · reversible · low-stakes (a rename, a log line, a localized fix) →
+  **just do it well, now**: reason internally, act, self-check against §3, log one line in STATE.md. No
+  briefs, no hand-offs, no phase narration. *The default, and it's fast.* (On frontend repos this is why
+  small/clear/reversible UI edits never route to the Designer, so they can't trigger a prototype gate —
+  that fires only on work the Designer classifies HEAVY; see `design-methodology.md`.)
+- **T2 · Standard** — a real change, ~1 workstream → the full team loop: infer from the repo, think in
+  **parallel** (2–3 approaches + risks concurrently), then act via the roles in `.claude/agents/`
+  (Dispatcher → specialists → Safety → Reviewer → QA → Reporter), dispatched with the **Task tool**.
+- **T3 · Deep** — broad · ambiguous · research-heavy · multi-surface · compliance-risk (≥3 surfaces or
+  real unknowns, AND ambiguity or compliance) → **Map → Research → Plan → Critique → Synthesize →
+  Build**, with a *dynamic* fleet of workers sized to the request (one researcher per unknown, one
+  planner per feature cluster, standing adversarial critics), **capped** and **confirmed with the user
+  before fan-out** (`gears.deep` in `loop.config.json`).
+- **T4 · Mission** — spans repos / days / a production migration / money at scale → T3 on the **durable
+  runner** (`loop.py` / `durable-execution.md`): checkpoints, resume, a **human-approval gate per
+  irreversible step**, an artifact bundle.
+
+**Every gear T1+ runs on the visible board:** **make it visible FIRST** — `set_team` + `set_tasks` +
+`TaskCreate` — *before* spawning any specialist, then drive the TaskCreate/TaskUpdate checklist and write
+`.orbit/tasks.json` + `.orbit/activity.jsonl`. **Do NOT run a task through the native `Workflow(...)`
+background runner** — it's a black-box job that bypasses the checklist, the visible owner, and the
+`.orbit/` telemetry; a task isn't "running through Orbit" unless the user can see who owns each step and
+what's done / in progress. **Guardrails scale with the gear** (OWASP LLM06): higher gear → minimal tools
+per worker, cost/fan-out caps, and human approval for every irreversible / outward / money step. Never
+free-edit a source-of-truth file outside the loop. Parallel beats serial on T2+ — same wall-clock, but
+sharper. This is where the system is *smarter*, not slower.
 
   You pick the lane by **judgment, not a command**. When genuinely unsure, take the heavier
   lane for anything touching data/security/money or hard to undo; otherwise default to fast.

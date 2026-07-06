@@ -514,7 +514,9 @@ done. Make the user feel they just hired a team, and it's eager to start.
   product. `references/profiles/frontend.md` — the frontend/UI profile that activates the
   **Designer**. Add your own profiles here for repeated setups.
 - `references/playbooks/` — the reusable **role-skill library** provisioned to sub-agents:
-  `design-methodology.md` + `anti-ai-aesthetics.md` + `design-styles.md` + `taste-preflight.md` (Designer),
+  `loop-tiers.md` (the **Gearbox** — the Orchestrator sizes every request into a gear T0–T4 and declares
+  a Gear Card before moving), `design-methodology.md` + `anti-ai-aesthetics.md` + `design-styles.md` +
+  `taste-preflight.md` (Designer),
   `planning-and-decision-briefs.md` (Orchestrator), `clarify-and-challenge.md` (Dispatcher/Orchestrator),
   `technical-review.md` (Reviewer — the technical quality gate), `qa-validation.md` (QA Engineer —
   requirements-traceability + pixel fidelity), `active-learning.md` (the Orchestrator's silent

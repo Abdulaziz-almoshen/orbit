@@ -52,6 +52,7 @@ sub-agent, it **provisions the relevant playbooks** by copying them into the rep
 
 | Playbook | Provisioned to | When |
 |----------|----------------|------|
+| `loop-tiers.md` (the **Gearbox** — sizes the loop: T0 Direct · T1 Quick · T2 Standard · T3 Deep · T4 Mission; scorecard router, Gear Card, dynamic Deep fan-out, T4 durability) | **Orchestrator** | always — the first thing it reads to size a request |
 | `design-methodology.md`, `anti-ai-aesthetics.md`, `design-styles.md` + `design-styles/` (67 styles), `taste-preflight.md` | **Designer** | frontend/UI repos (`profiles/frontend.md`) |
 | `planning-and-decision-briefs.md` | **Orchestrator** + **Planner** | always |
 | `clarify-and-challenge.md` | **Dispatcher / Orchestrator** | always (the task path) |

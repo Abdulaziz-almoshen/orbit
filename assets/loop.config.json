@@ -34,6 +34,12 @@
     "spend_over_usd": 1.0
   },
 
+  "_gears_help": "The Gearbox (.orbit/skills/loop-tiers.md). The ORCHESTRATOR reads these when it sizes a request into a gear (T0 Direct · T1 Quick · T2 Standard · T3 Deep · T4 Mission) and declares the Gear Card. 'deep' caps the T3 dynamic fan-out; 'mission' flags T4 durability. Consumed by the model at sizing time, not by the runners.",
+  "gears": {
+    "deep":    { "agent_max": 16, "map_max": 4, "research_max": 6, "plan_max": 6, "critics": 3, "concurrency": 8, "token_budget": 400000, "confirm_before_fanout": true },
+    "mission": { "durable": true, "resumable": true, "human_gate_per_irreversible_step": true, "artifact_bundle": true }
+  },
+
   "done_when": "STATE.md run_goal satisfied AND the Reviewer quality gate passed",
 
   "_proof_help": "First-class verification: the CONCRETE evidence a cycle actually worked, not just 'looks done'. kind: command (run it, expect exit 0) | metric (read a number, compare) | checklist (all items true) | review (Reviewer rubric >= threshold). The loop must produce this proof before calling a task done.",
