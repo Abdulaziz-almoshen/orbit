@@ -22,7 +22,7 @@ FORCE=0
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$ROOT" || { echo "cannot cd to repo root"; exit 1; }
 
-TARGETS=(".orbit" "scripts/ralph_loop.sh" "scripts/orbit-status" "scripts/orbit-statusline" "scripts/orbit-lock" "scripts/orbit-memory")
+TARGETS=(".orbit" "scripts/ralph_loop.sh" "scripts/orbit-status" "scripts/orbit-statusline" "scripts/orbit-lock" "scripts/orbit-memory" "scripts/orbit-dashboard")
 SETTINGS=".claude/settings.json"
 
 echo "Orbit uninstall — repo: $ROOT"

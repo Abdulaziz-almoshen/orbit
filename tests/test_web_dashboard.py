@@ -1,0 +1,122 @@
+#!/usr/bin/env python3
+"""
+The visual web dashboard (v0.34.0) — a READ-ONLY local web board over .orbit/. Tests the snapshot builder
+directly: correct shape from real files, secrets redacted, malformed/empty/missing files never crash,
+and the HTTP surface is read-only (a POST is rejected). (The terminal dashboard, orbit-status, has its
+own test_dashboard.py.)
+
+Run: python3 tests/test_web_dashboard.py   (exit 0 = pass)
+"""
+import importlib.machinery
+import importlib.util
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+DASH = ROOT / "assets" / "orbit-dashboard"
+fails = []
+
+
+def _load(orbit: Path):
+    loader = importlib.machinery.SourceFileLoader("orbit_dashboard", str(DASH))  # extensionless file
+    spec = importlib.util.spec_from_loader("orbit_dashboard", loader)
+    m = importlib.util.module_from_spec(spec)
+    sys.modules["orbit_dashboard"] = m
+    loader.exec_module(m)
+    m.ORBIT = orbit
+    return m
+
+
+def ck(cond, msg):
+    if not cond:
+        fails.append(msg)
+
+
+def test_snapshot_shape_and_redaction():
+    with tempfile.TemporaryDirectory() as d:
+        orbit = Path(d) / ".orbit"
+        orbit.mkdir()
+        (orbit / "run.json").write_text(json.dumps({"phase": "build", "active_role": "backend",
+                                                    "cycle": 2, "tokens": 1234, "confidence": 75}))
+        (orbit / "tasks.json").write_text(json.dumps([{"subject": "do X", "status": "completed"}]))
+        (orbit / "activity.jsonl").write_text(
+            json.dumps({"who": "backend", "status": "done", "msg": "token=sk-ABCDEF1234567890 ok"}) + "\n"
+            + "this is not json{\n")   # malformed line must be skipped, not crash
+        m = _load(orbit)
+        snap = m.snapshot()
+        ck(snap["run"]["phase"] == "build", "snapshot must read run.json")
+        ck(len(snap["activity"]) == 1, f"malformed activity line must be skipped (got {len(snap['activity'])})")
+        ck("sk-ABCDEF" not in json.dumps(snap), "a secret-looking token must be redacted from the snapshot")
+        ck(snap["tasks"][0]["subject"] == "do X", "checklist must come through")
+
+
+def test_empty_and_malformed_never_crash():
+    with tempfile.TemporaryDirectory() as d:
+        orbit = Path(d) / ".orbit"
+        orbit.mkdir()
+        (orbit / "run.json").write_text("{ broken json")
+        (orbit / "tasks.json").write_text("not even close")
+        m = _load(orbit)
+        snap = m.snapshot()          # must not raise
+        ck(snap["run"] == {} and snap["tasks"] == [], "malformed run/tasks must degrade to empty, not crash")
+        ck(json.dumps(snap), "snapshot must be JSON-serializable even when inputs are garbage")
+
+
+def test_readonly_http_surface():
+    with tempfile.TemporaryDirectory() as d:
+        orbit = Path(d) / ".orbit"
+        orbit.mkdir()
+        (orbit / "run.json").write_text(json.dumps({"phase": "test"}))
+        proc = subprocess.Popen([sys.executable, "-u", str(DASH), "--port", "0"], cwd=str(Path(d)),
+                                env={**os.environ, "ORBIT_DIR": ".orbit", "PYTHONUNBUFFERED": "1"},
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        try:
+            base, deadline = None, time.time() + 6      # read the auto-picked port from the URL it prints
+            while time.time() < deadline:
+                line = proc.stdout.readline()
+                m = re.search(r"http://127\.0\.0\.1:(\d+)", line or "")
+                if m:
+                    base = f"http://127.0.0.1:{m.group(1)}"
+                    break
+            ck(base is not None, "the dashboard must print its URL on start")
+            if base:
+                html = urllib.request.urlopen(base + "/", timeout=3).read().decode()
+                ck("Orbit board" in html, "GET / must serve the board HTML")
+                data = json.loads(urllib.request.urlopen(base + "/data", timeout=3).read())
+                ck(data["run"].get("phase") == "test", "GET /data must serve the snapshot")
+                try:
+                    urllib.request.urlopen(urllib.request.Request(base + "/data", data=b"x"), timeout=3)
+                    fails.append("a POST must be rejected — the dashboard is read-only")
+                except urllib.error.HTTPError as e:
+                    ck(e.code == 405, f"POST must be 405 (got {e.code})")
+        except Exception as e:
+            fails.append(f"[http] {type(e).__name__}: {e}")
+        finally:
+            proc.terminate()
+            proc.wait(timeout=5)
+
+
+def main():
+    for fn in (test_snapshot_shape_and_redaction, test_empty_and_malformed_never_crash, test_readonly_http_surface):
+        try:
+            fn()
+        except Exception as e:
+            fails.append(f"[{fn.__name__}] raised {type(e).__name__}: {e}")
+    if fails:
+        print(f"FAIL: web-dashboard {len(fails)} case(s):")
+        for f in fails:
+            print("  -", f)
+        sys.exit(1)
+    print("PASS: web-dashboard (snapshot shape · secret redaction · empty/malformed never crash · read-only HTTP)")
+
+
+if __name__ == "__main__":
+    main()

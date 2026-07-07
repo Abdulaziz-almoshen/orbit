@@ -200,6 +200,7 @@ FILE_PLAN = [
     ("orbit-lock",       "scripts/orbit-lock",        0o755),   # thin wrapper → trusted bin/orbit-lock
     ("orbit-memory",     "scripts/orbit-memory",      0o755),   # review/promote/forget the learning ledger
     ("orbit-status",     "scripts/orbit-status",      0o755),
+    ("orbit-dashboard",  "scripts/orbit-dashboard",   0o755),   # read-only local web board over .orbit/
     ("orbit-statusline.py", "scripts/orbit-statusline", 0o755),  # the one-line Claude Code status line
 
     ("security/rules.json", ".orbit/security/rules.json", None),  # declarative repo rules for the trusted guard

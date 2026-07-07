@@ -15,7 +15,7 @@ updates itself.
 
 <br/>
 
-![version](https://img.shields.io/badge/version-0.33.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.34.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![self-updating](https://img.shields.io/badge/self--updating-yes-22863a)
@@ -70,6 +70,7 @@ the exact same clone + `./setup`. More options (marketplace plugin, "let Claude 
 | `/orbit` | In a product repo | Scaffold the governed loop, or merge template updates into an already-scaffolded repo |
 | `/orbit:orbit-run <task>` | In a product repo | Force a task through the loop explicitly, bypassing the router's default-lane classification |
 | `scripts/orbit-status --follow` | In a product repo (terminal) | Live who's-talking dashboard — the headless-runner equivalent of the pinned Claude Code checklist |
+| `scripts/orbit-dashboard` [`--port N`] | In a product repo | The same board as a **read-only local web app** (plan · agents · owner · gates · budget · confidence · writer-lock · activity). Secrets redacted; no mutating endpoint. `--once` prints the JSON snapshot |
 | `orbit-doctor` [`--fix`] | In a product repo | **Read-only** health check: scaffold drift (version · missing files/hooks · role/prose drift · preserved custom guard) **+** a safe-refresh plan for the managed hooks. `--fix` applies only the safe changes (add missing + upgrade *unmodified* hooks, backups kept) — **never** touches a customized hook |
 | `scripts/orbit-lock` `status`\|`break` | In a product repo | Inspect or recover the single-writer lock (enforcement is automatic via a hook). `status` = who owns the repo; `break --reason …` = clear a stale/abandoned lock (required reason, audited) |
 | `scripts/orbit-memory` `review`\|`promote`\|`forget` | In a product repo | Curate the active-learning ledger. `review` = what's live/promotable/conflicted/durable; `promote <key>` = make a **user-stated** learning a durable cross-project rule (mechanically refused for observed/injected content — nothing auto-promotes); `forget <key>` = tombstone one |

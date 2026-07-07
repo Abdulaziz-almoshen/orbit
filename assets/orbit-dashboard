@@ -1,0 +1,229 @@
+#!/usr/bin/env python3
+"""
+orbit-dashboard — a READ-ONLY local web board over a repo's .orbit/ state. The premium view of the same
+event stream orbit-status renders in the terminal: plan/checklist, active agents + current owner, gates,
+budget (cost/time/tokens), confidence, the writer lock, decisions, and scaffold freshness.
+
+  scripts/orbit-dashboard              # serve on an auto-picked port, print the URL
+  scripts/orbit-dashboard --port 8765  # a fixed port
+  scripts/orbit-dashboard --once       # print the JSON snapshot and exit (no server; for scripts/tests)
+
+Read-only by construction — it never writes .orbit/ and exposes no mutating endpoint. Secrets are
+redacted; empty/missing/malformed files degrade to empty sections and never crash the page.
+"""
+from __future__ import annotations
+
+import argparse
+import http.server
+import json
+import os
+import re
+import socketserver
+import sys
+import time
+from pathlib import Path
+
+ORBIT = Path(os.environ.get("ORBIT_DIR", ".orbit"))
+
+# Redact anything that looks like a credential before it reaches the page.
+_SECRET = re.compile(
+    r'(?i)\b(api[_-]?key|secret|token|password|passwd|bearer|authorization|client[_-]?secret)\b'
+    r'\s*[:=]\s*["\']?[^\s"\',}]{6,}')
+_SECRET2 = re.compile(r'\b(sk-[A-Za-z0-9]{12,}|ghp_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,})')
+
+
+def _redact(obj):
+    """Recursively redact secret-looking strings anywhere in the snapshot."""
+    if isinstance(obj, str):
+        s = _SECRET.sub(lambda m: m.group(1) + "=[redacted]", obj)
+        return _SECRET2.sub("[redacted]", s)
+    if isinstance(obj, list):
+        return [_redact(x) for x in obj]
+    if isinstance(obj, dict):
+        return {k: _redact(v) for k, v in obj.items()}
+    return obj
+
+
+def _json(name, default):
+    try:
+        v = json.loads((ORBIT / name).read_text())
+        return v
+    except Exception:
+        return default
+
+
+def _jsonl(name, tail=200):
+    out = []
+    try:
+        for ln in (ORBIT / name).read_text().splitlines()[-tail:]:
+            try:
+                out.append(json.loads(ln))
+            except Exception:
+                continue                       # a truncated/garbage line never breaks the feed
+    except Exception:
+        pass
+    return out
+
+
+def _age(ts_iso):
+    try:
+        t = time.strptime(str(ts_iso), "%Y-%m-%dT%H:%M:%SZ")
+        return max(0, int(time.time() - time.mktime(t) + time.timezone))
+    except Exception:
+        return None
+
+
+def snapshot() -> dict:
+    """The whole board as one redacted, JSON-safe object. Every field degrades to empty, never raises."""
+    run = _json("run.json", {}) or {}
+    tasks = _json("tasks.json", []) or []
+    agents = _json("agents.json", {}) or {}
+    lock = _json("locks/active-writer.json", None)
+    decisions = []
+    dfile = ORBIT / "decisions"
+    if dfile.is_dir():
+        for p in sorted(dfile.glob("*.json"))[-20:]:
+            d = _json(f"decisions/{p.name}", None)
+            if isinstance(d, dict):
+                decisions.append(d)
+    snap = {
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "run": run,
+        "tasks": tasks if isinstance(tasks, list) else [],
+        "agents": agents if isinstance(agents, dict) else {},
+        "activity": _jsonl("activity.jsonl", 120),
+        "writer_lock": lock if isinstance(lock, dict) else None,
+        "lock_stale": bool(lock and isinstance(lock, dict)
+                           and (_age(lock.get("heartbeat_at")) or 0) > int(lock.get("ttl_seconds") or 1800)),
+        "decisions": decisions,
+        "confidence": run.get("confidence") if isinstance(run, dict) else None,
+    }
+    return _redact(snap)
+
+
+PAGE = """<!doctype html><html lang=en><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1"><title>Orbit board</title>
+<style>
+:root{--bg:#0e1116;--card:#161b22;--line:#30363d;--fg:#e6edf3;--dim:#8b949e;--ok:#3fb950;--warn:#d29922;--bad:#f85149;--accent:#58a6ff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{display:flex;align-items:center;gap:.6rem;padding:14px 20px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:2}
+header h1{font-size:16px;margin:0;font-weight:650}.dot{width:8px;height:8px;border-radius:50%;background:var(--ok)}
+.wrap{max-width:1100px;margin:0 auto;padding:18px 20px;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:720px){.wrap{grid-template-columns:1fr;padding:14px}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;min-width:0}
+.card h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin:0 0 10px}
+.span2{grid-column:1/-1}.row{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-top:1px solid var(--line)}
+.row:first-of-type{border-top:0}.k{color:var(--dim)}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line)}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}.muted{color:var(--dim)}
+ul{margin:0;padding:0;list-style:none}li{padding:5px 0;border-top:1px solid var(--line)}li:first-child{border-top:0}
+.check{color:var(--ok)}.doing{color:var(--accent)}.todo{color:var(--dim)}
+.feed{max-height:340px;overflow:auto}.feed li{font-size:13px}.who{color:var(--accent)}
+.bar{height:6px;background:#21262d;border-radius:3px;overflow:hidden;margin-top:6px}.bar>i{display:block;height:100%;background:var(--accent)}
+.empty{color:var(--dim);font-style:italic}
+</style></head><body>
+<header><span class=dot id=live></span><h1>🛰 Orbit board</h1><span class=muted id=gen></span></header>
+<div class=wrap id=app></div>
+<script>
+const E=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e};
+const esc=s=>String(s==null?'':s).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
+function card(title,body,span){const c=E('div','card'+(span?' span2':''));c.appendChild(E('h2',null,esc(title)));c.appendChild(body);return c}
+function rows(pairs){const d=E('div');for(const[k,v,cls]of pairs){const r=E('div','row');r.appendChild(E('span','k',esc(k)));r.appendChild(E('span',cls||'mono',v));d.appendChild(r)}return d}
+function render(s){
+ const app=document.getElementById('app');app.innerHTML='';
+ document.getElementById('gen').textContent=' · updated '+ (s.generated_at||'').replace('T',' ').replace('Z','');
+ const run=s.run||{};
+ // Run summary
+ app.appendChild(card('Run',rows([
+   ['phase',esc(run.phase||run.mode||'—')],['active role',esc(run.active_role||'—')],
+   ['cycle',esc(run.cycle==null?'—':run.cycle)],
+   ['confidence',(s.confidence==null?'—':s.confidence+'%'),s.confidence==null?'muted':(s.confidence>=70?'ok':s.confidence>=40?'warn':'bad')],
+ ])));
+ // Budget
+ app.appendChild(card('Budget',rows([
+   ['tokens',esc((run.tokens||0).toLocaleString())],['cost',esc('$'+(run.cost_usd||0).toFixed? (run.cost_usd||0).toFixed(2):run.cost_usd||0)],
+   ['tasks',esc((run.tasks_done||0)+' / '+(run.tasks_total||0))],
+ ])));
+ // Writer lock
+ const lk=s.writer_lock;const lb=E('div');
+ if(!lk){lb.appendChild(E('div','empty','free — no active writer'))}
+ else{lb.appendChild(rows([['owner',esc((lk.owner_kind||'?')+' '+String(lk.session_id||'').slice(0,10))],['task',esc(lk.task||'—')],['branch',esc(lk.branch||'—')],['status',s.lock_stale?'STALE':'held',s.lock_stale?'bad':'ok']]))}
+ app.appendChild(card('Writer lock 🔒',lb));
+ // Owner / agents
+ const ab=E('ul');const ags=Object.entries(s.agents||{}).filter(([,v])=>v&&typeof v=='object');
+ if(!ags.length)ab.appendChild(E('li','empty','no agents recorded'));
+ for(const[role,a]of ags.sort((x,y)=>(x[1].seq||99)-(y[1].seq||99))){const st=a.status||'';const c=st=='active'?'doing':st=='done'?'check':'todo';
+   ab.appendChild(E('li',null,'<span class="'+c+'">●</span> <b>'+esc(a.display||role)+'</b> <span class=muted>'+esc(a.responsibility||a.mission||'')+'</span>'))}
+ app.appendChild(card('Team',ab));
+ // Checklist
+ const cb=E('ul');const ts=Array.isArray(s.tasks)?s.tasks:[];
+ if(!ts.length)cb.appendChild(E('li','empty','no tasks yet'));
+ for(const t of ts.slice(0,40)){const st=(t.status||'').toLowerCase();const sym=st=='completed'||st=='done'?'<span class=check>✔</span>':st=='in_progress'||st=='active'?'<span class=doing>▸</span>':'<span class=todo>☐</span>';
+   cb.appendChild(E('li',null,sym+' '+esc(t.subject||t.title||t.text||t.name||'task')+(t.owner?' <span class=muted>['+esc(t.owner)+']</span>':'')))}
+ app.appendChild(card('Checklist',cb,true));
+ // Decisions / gates
+ const db=E('ul');const ds=s.decisions||[];
+ if(!ds.length)db.appendChild(E('li','empty','no decision records'));
+ for(const d of ds.slice(-10).reverse())db.appendChild(E('li',null,'<b>'+esc(d.title||d.id||'decision')+'</b> <span class=muted>'+esc(d.status||d.decision||'')+'</span>'));
+ app.appendChild(card('Decisions',db));
+ // Activity feed
+ const fb=E('ul','feed');const ac=s.activity||[];
+ if(!ac.length)fb.appendChild(E('li','empty','no activity yet'));
+ for(const e of ac.slice().reverse().slice(0,80)){const who=esc(e.role||e.who||'?');const stx=esc(e.status||'');const cls=stx=='blocked'?'bad':stx=='done'?'ok':'muted';
+   fb.appendChild(E('li',null,'<span class=who>'+who+'</span> <span class="'+cls+'">'+stx+'</span> <span class=muted>'+esc(e.phase||'')+'</span> '+esc(e.msg||'')))}
+ app.appendChild(card('Activity',fb,true));
+}
+async function tick(){try{const r=await fetch('data');const s=await r.json();render(s);document.getElementById('live').style.background='var(--ok)'}catch(e){document.getElementById('live').style.background='var(--bad)'}}
+tick();setInterval(tick,2000);
+</script></body></html>"""
+
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass  # quiet
+
+    def _send(self, code, body, ctype):
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body if isinstance(body, bytes) else body.encode())
+
+    def do_GET(self):
+        if self.path.rstrip("/") in ("", "/index.html") or self.path == "/":
+            self._send(200, PAGE, "text/html; charset=utf-8")
+        elif self.path.rstrip("/").endswith("data"):
+            try:
+                self._send(200, json.dumps(snapshot()), "application/json")
+            except Exception:
+                self._send(200, json.dumps({"error": "snapshot failed", "run": {}, "tasks": [],
+                                            "agents": {}, "activity": []}), "application/json")
+        else:
+            self._send(404, "not found", "text/plain")
+
+    def do_POST(self):          # read-only: no mutating endpoint exists
+        self._send(405, "read-only dashboard", "text/plain")
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Read-only Orbit web board over .orbit/")
+    ap.add_argument("--port", type=int, default=0, help="port (0 = auto-pick)")
+    ap.add_argument("--once", action="store_true", help="print the JSON snapshot and exit (no server)")
+    args = ap.parse_args()
+    if not ORBIT.is_dir():
+        print(f"orbit-dashboard: no {ORBIT}/ here — run /orbit first, or set ORBIT_DIR.", file=sys.stderr)
+        sys.exit(1)
+    if args.once:
+        print(json.dumps(snapshot(), indent=2))
+        return
+    with socketserver.TCPServer(("127.0.0.1", args.port), Handler) as httpd:
+        port = httpd.server_address[1]
+        print(f"🛰  Orbit board → http://127.0.0.1:{port}   (Ctrl-C to stop; read-only)", flush=True)
+        try:
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            print("\nstopped.")
+
+
+if __name__ == "__main__":
+    main()

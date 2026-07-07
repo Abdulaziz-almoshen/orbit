@@ -1,7 +1,7 @@
 {
   "name": "orbit",
   "displayName": "Orbit",
-  "version": "0.33.0",
+  "version": "0.34.0",
   "description": "Turn any repo into a self-prompting agentic loop — a governed, project-fitted sub-agent team with persistent memory, a task/question router, hard safety brakes, a live team board, and active learning.",
   "author": {
     "name": "Abdulaziz Almohsen",

@@ -3,6 +3,21 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.34.0
+
+**Train C (part 2) — the visual dashboard: the terminal board as a premium read-only web app.**
+`scripts/orbit-dashboard` serves a self-contained page + a `/data` JSON snapshot over a repo's `.orbit/`:
+run phase/role/confidence, budget (tokens/cost/tasks), the team + current owner, the checklist,
+decisions, the writer lock (with a STALE flag), and the live activity feed — auto-refreshing every 2s.
+
+- **Read-only by construction:** it never writes `.orbit/` and exposes no mutating endpoint (a POST is
+  `405`). **Secrets are redacted** (api keys / tokens / `sk-…` / `ghp_…` patterns) before anything reaches
+  the page. Empty / missing / malformed files degrade to empty sections and never crash the snapshot.
+- `--port 0` auto-picks a port and prints the URL; `--once` prints the JSON snapshot (no server) for
+  scripts/tests. Provisioned as `scripts/orbit-dashboard`; `orbit-status` remains the terminal view.
+- New `tests/test_web_dashboard.py` (snapshot shape · redaction · empty/malformed resilience · read-only
+  HTTP surface). Full suite (34 files) + coherence + validate green.
+
 ## 0.33.0
 
 **Train C (part 1) — memory hygiene: active learning stays useful instead of becoming poisoned lore.**
