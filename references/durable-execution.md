@@ -54,8 +54,23 @@ Orbit ships both; be honest about which is which:
   is the seam; `assets/runners/inngest-loop.ts` is a reference template. **Don't build your
   own engine** — that's years of work and it's exactly what these tools exist for.
 
-The portable `loop.py` adds a thin durability layer (the `Steps` checkpoint memo + `--resume`)
-so the *portable* path also survives a restart — but a real engine is the production answer.
+The portable `loop.py` adds a thin durability layer so the *portable* path also survives a restart —
+but a real engine is the production answer. Three primitives make it real:
+
+- **`Steps`** — the per-run checkpoint memo. A named step (`c3:act`, `c3:evaluate`) runs at most once;
+  a crash resumes at the *next* step, not the last one (so a crash after `act` resumes at `evaluate`,
+  and the model call / side effect isn't repeated). Budget is checkpointed too, so `--resume` can't
+  reset the per-run caps to zero.
+- **`Approvals`** — durable human-approval **waits**. When a gated action (`deploy`, `external_message`)
+  needs a human, the loop records a *pending* request to `.orbit/approvals/` and stops. A human grants
+  it out-of-band — `python .orbit/loop.py --approve deploy` — and on `--resume` the loop finds the grant
+  and proceeds *past* the checkpoint instead of pausing on the same gate forever. Grants are per
+  `(action, cycle)`, so each occurrence needs its own approval.
+- **`Idempotency`** — business-key idempotency for side effects. A key like `deploy:v1.2.3` fires **at
+  most once ever** — across resumes *and* separate runs — unless explicitly forced. Stronger than the
+  `Steps` memo (which is keyed on a cycle-scoped step name): use it inside `dispatch()` to wrap the
+  actual side effect (`idem.run('notify:invoice-4471', lambda: send())`) so a brand-new run can't
+  double-send. (Regression-tested in `tests/test_loop_durability.py`.)
 
 ## Concurrency — one run per key
 

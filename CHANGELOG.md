@@ -3,6 +3,27 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.32.0
+
+**Train B — `loop.py` durability: the portable runner survives a restart and never double-fires.** The
+runner already had a checkpoint memo (`Steps`) + budget-persist-across-`--resume`; this closes the two
+real gaps so T4 Mission is durable in practice, not just documented.
+
+- **Durable approval waits (`Approvals`).** A gated action (`deploy`, `external_message`) records a
+  *pending* request to `.orbit/approvals/` and stops. A human grants it out-of-band — `python
+  .orbit/loop.py --approve deploy` — and on `--resume` the loop finds the grant and proceeds *past* the
+  checkpoint. Before this, a resumed run re-hit the same gate and would pause forever. Grants are per
+  `(action, cycle)`.
+- **Idempotency keys (`Idempotency`).** A business key like `deploy:v1.2.3` fires **at most once ever** —
+  across resumes *and* separate runs — unless explicitly `force`d. Persisted to `.orbit/idempotency.json`;
+  wrap the real side effect inside `dispatch()` so a brand-new run can't double-send.
+- The step contract is now explicit (`STEP_CONTRACT`), and a crash after `act` provably resumes at
+  `evaluate` (not `act`), so the model call / side effect isn't repeated.
+
+New `tests/test_loop_durability.py` drives the real `run()` with a fake dispatch and asserts all four
+contracts (resume-after-act · budget persists · approval pause→`--approve`→resume · side-effect fires
+once unless forced), plus FORBIDDEN-never-runs. Full suite (32 files) + coherence + validate green.
+
 ## 0.31.2
 
 **`/orbit-upgrade` becomes boring — one deterministic resolver instead of a narrated candidate search.**

@@ -106,6 +106,94 @@ class Steps:
         return output
 
 
+def _now() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def _read_json(path: Path, default):
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return default
+
+
+# The stable per-cycle step contract. Durability + observability both key off these names: the ACT and
+# EVALUATE steps are checkpointed (see Steps), so a crash resumes at the next step, not the last one.
+STEP_CONTRACT = ("read", "plan", "act", "evaluate", "update", "decide")
+
+
+class Idempotency:
+    """Business-key idempotency for SIDE EFFECTS (deploy, external message, payment). A key fires AT MOST
+    ONCE — across resumes AND separate runs — unless explicitly forced. This is stronger than the per-run
+    step memo (Steps), which is keyed on a cycle-scoped step NAME: use a STABLE BUSINESS key here, e.g.
+    'deploy:v1.2.3' or 'notify:invoice-4471', so the effect can't repeat even in a brand-new run.
+
+    Adapter usage inside dispatch():  idem.run('deploy:v1.2.3', lambda: really_deploy())"""
+
+    def __init__(self, path: Path):
+        self.path = path
+        self.used = _read_json(path, {}) if path.exists() else {}
+
+    def seen(self, key: str) -> bool:
+        return key in self.used
+
+    def run(self, key: str, fn, force: bool = False):
+        if key in self.used and not force:
+            return self.used[key].get("output")     # already performed → do NOT repeat the side effect
+        out = fn()
+        try:
+            json.dumps(out)
+            stored = out
+        except (TypeError, ValueError):
+            stored = str(out)
+        self.used[key] = {"at": _now(), "output": stored, "forced": bool(force and key in self.used)}
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(json.dumps(self.used, indent=2))
+        return out
+
+
+class Approvals:
+    """Durable human-approval waits. When the loop needs a human for a gated action it records a PENDING
+    request and STOPS; a human grants it out-of-band (`loop.py --approve <action>`); on --resume the loop
+    finds the grant and proceeds PAST the checkpoint instead of pausing on the same gate forever. Grants
+    are per (action, cycle) so each occurrence needs its own approval — a later cycle re-asks."""
+
+    def __init__(self, root: Path):
+        self.root = root
+        self.pending = root / "pending.json"
+        self.granted = root / "granted.jsonl"
+
+    def _grants(self) -> set:
+        out = set()
+        if self.granted.exists():
+            for ln in self.granted.read_text().splitlines():
+                try:
+                    out.add(json.loads(ln)["key"])
+                except Exception:
+                    pass
+        return out
+
+    def is_granted(self, action: str, cycle: int) -> bool:
+        return f"{action}:{cycle}" in self._grants()
+
+    def request(self, action: str, cycle: int) -> None:
+        self.root.mkdir(parents=True, exist_ok=True)
+        self.pending.write_text(json.dumps(
+            {"action": action, "cycle": cycle, "key": f"{action}:{cycle}", "requested_at": _now()}, indent=2))
+
+    def grant(self, action: str = "", cycle: int | None = None) -> str:
+        """Grant the CURRENT pending request (action/cycle inferred) or a specific action:cycle pair."""
+        self.root.mkdir(parents=True, exist_ok=True)
+        if cycle is None and self.pending.exists():
+            p = _read_json(self.pending, {})
+            action = action or p.get("action", "")
+            cycle = p.get("cycle", 1)
+        key = f"{action}:{cycle if cycle is not None else 1}"
+        with self.granted.open("a") as f:
+            f.write(json.dumps({"key": key, "at": _now()}) + "\n")
+        return key
+
+
 # ------------------------------------------------------------------------ the seams
 def dispatch(role: str, task: dict, context: str, cfg: dict) -> dict:
     """MODEL SEAM. Build the role's prompt from .orbit/roles/<role>.md + the relevant
@@ -216,6 +304,9 @@ def run(cfg: dict, resume: bool = False):
         ckpt.unlink()
     steps = Steps(ckpt)
     resumed = set(steps.done)                        # steps already completed BEFORE this run
+    _orbit = ckpt.parent                             # durable approval waits + side-effect idempotency
+    approvals = Approvals(_orbit / "approvals")
+    idem = Idempotency(_orbit / "idempotency.json")
     if resume and steps.last_budget:                 # restore spend + cycle so per-run caps + the
         budget.tokens = steps.last_budget.get("tokens", 0)     # iteration counter survive a restart
         budget.cost_usd = steps.last_budget.get("cost_usd", 0.0)
@@ -269,17 +360,28 @@ def run(cfg: dict, resume: bool = False):
                 emit("safety", "evaluate", "blocked", str(e), cycle=cycle)
                 on_run_end({"cfg": cfg, "budget": budget, "reason": f"FORBIDDEN: {action_tag}"})
                 return
-            if gated:
-                emit("human", "decide", "blocked", f"awaiting approval: {action_tag}", cycle=cycle)
+            if gated and not approvals.is_granted(action_tag, cycle):
+                approvals.request(action_tag, cycle)     # DURABLE wait: record the request and stop
+                emit("human", "decide", "blocked",
+                     f"awaiting approval: {action_tag} — grant with "
+                     f"`python .orbit/loop.py --approve {action_tag}` then --resume", cycle=cycle)
                 on_run_end({"cfg": cfg, "budget": budget, "reason": "awaiting human"})
                 return
+            if gated:                                    # granted (on --resume) → proceed AT MOST ONCE
+                idem.run(f"{action_tag}:c{cycle}", lambda: {"approved": action_tag, "cycle": cycle})
+                emit("human", "decide", "done", f"approval granted: {action_tag}", cycle=cycle)
 
-        # Human checkpoint mid-cycle if the orchestrator proposed a gated action.
-        if result.get("needs_human"):
-            emit("human", "decide", "blocked",
-                 f"awaiting approval: {result['needs_human']}", cycle=cycle)
-            on_run_end({"cfg": cfg, "budget": budget, "reason": "awaiting human"})
-            return  # resume is a fresh invocation after the human acts
+        # Human checkpoint mid-cycle if the orchestrator proposed a gated action (durable wait too).
+        _nh = result.get("needs_human")
+        if _nh:
+            if not approvals.is_granted(_nh, cycle):
+                approvals.request(_nh, cycle)
+                emit("human", "decide", "blocked",
+                     f"awaiting approval: {_nh} — grant with "
+                     f"`python .orbit/loop.py --approve {_nh}` then --resume", cycle=cycle)
+                on_run_end({"cfg": cfg, "budget": budget, "reason": "awaiting human"})
+                return  # resume is a fresh invocation after the human grants
+            emit("human", "decide", "done", f"approval granted: {_nh}", cycle=cycle)
 
         # EVALUATE — Safety (veto) + Reviewer (quality) gates (also checkpointed).
         emit("reviewer", "evaluate", "start", "checking gates", cycle=cycle)
@@ -315,11 +417,18 @@ def main():
     ap.add_argument("--config", default=".orbit/loop.config.json", type=Path)
     ap.add_argument("--resume", action="store_true",
                     help="resume from the last checkpoint instead of starting a fresh run")
+    ap.add_argument("--approve", metavar="ACTION", default="",
+                    help="grant the pending human-approval checkpoint for ACTION, then re-run with --resume")
     args = ap.parse_args()
     try:
         cfg = load_config(args.config)
     except FileNotFoundError:
         sys.exit(f"config not found: {args.config}")
+    if args.approve:
+        _orbit = Path(cfg["paths"].get("checkpoints", ".orbit/steps.jsonl")).parent
+        key = Approvals(_orbit / "approvals").grant(args.approve)
+        print(f"approved: {key} — now re-run with --resume to proceed past the checkpoint")
+        return
     run(cfg, resume=args.resume)
 
 
