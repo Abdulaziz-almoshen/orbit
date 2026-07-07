@@ -140,8 +140,10 @@ def main():
             fails.append(f"[D] loop.config.json gears.deep missing {k!r}")
     if deep.get("confirm_before_fanout") is not True:
         fails.append("[D] gears.deep.confirm_before_fanout must be true (always confirm on T3)")
-    if deep.get("agent_max") != 16:
-        fails.append(f"[D] gears.deep.agent_max should be 16, got {deep.get('agent_max')}")
+    if not isinstance(deep.get("agent_max"), int) or deep.get("agent_max") > 4:
+        fails.append(f"[D] gears.deep.agent_max should default to <=4 in Cost Mode, got {deep.get('agent_max')}")
+    if deep.get("require_context_doctor") is not True:
+        fails.append("[D] gears.deep.require_context_doctor must be true")
     for k in ("map_max", "research_max", "plan_max", "critics", "concurrency"):
         if not isinstance(deep.get(k), int) or deep.get(k) < 1:
             fails.append(f"[D] gears.deep.{k} must be a positive integer, got {deep.get(k)!r}")

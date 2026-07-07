@@ -1,9 +1,10 @@
 # The sub-agent team
 
-One agent doing everything blows its context and does each thing mediocrely. A team of
-narrow specialists, coordinated by an Orchestrator and gated by a Reviewer, does each
-thing well and in parallel. This file defines the standard roster, the spec format, the
-handoff protocol, and how to render each role for both output layers.
+One agent doing everything can blow its context and miss domain checks. But the opposite failure is
+also real: waking the whole roster turns judgment into token burn. Orbit's rule is **catalog, not
+payroll**: keep narrow specialists available, then activate zero or one by default and ask before wider
+fan-out. This file defines the standard roster, the activation policy, the spec format, the handoff
+protocol, and how to render each role for both output layers.
 
 Adapt names and scope to the product — but keep the *shape*: one planner, several
 executors, one safety gate, one quality gate. The roster below is a domain-neutral
@@ -14,9 +15,9 @@ default; rename and re-scope each role to the real subtasks of the product you'r
 | Role | Remit | Reads | Writes |
 |------|-------|-------|--------|
 | **Dispatcher / Router** | Classify each request: **question** → answer directly (no loop); **task** → first **clarify & challenge** (infer from the repo, surface premises, ask only the gap), then hand to the Orchestrator to route through the loop (CLAUDE.md §10). Loads `clarify-and-challenge`. No edit tools. | the user request, CLAUDE.md §10 | a routing decision + clarified intent |
-| **Orchestrator / PM** | **Conducts** the loop: on the substantial lane, convenes the **discovery team** (below) in the PLAN phase, runs **plan-review** (CEO + eng lenses), owns STATE.md (sole writer), checks stop conditions. Folds the team's artifacts into the plan; doesn't do the discovery itself. Loads `planning-and-decision-briefs`. | CLAUDE.md, STATE.md, the team's briefs | STATE.md, ratified plan |
-| **Product Discovery Manager** *(planning phase, substantial lane)* | De-risk the *bet* before building: frame the **outcome** + the user's **job**, map opportunities from evidence, kill the four risks (value/usability/feasibility/viability), name the **riskiest assumption + cheapest test**. Extends clarify-and-challenge with evidence. Loads `product-discovery`. | clarified intent, repo/analytics, market brief | `discovery-brief.md` |
-| **Market & Competitive Researcher** *(planning phase, substantial lane)* | What already exists, what the user would use instead, where the gap is — a **reuse-vs-build verdict**, graded feature matrix, positioning. Timeboxed, cited. Runs in **parallel** with discovery. Loads `market-and-competitive-research`. Distinct from Input/Research below. | the JTBD/intent, the web, deps | `market-brief.md` |
+| **Orchestrator / PM** | **Conducts** the loop: sizes the gear, keeps Cost Mode Lite by default, uses role lenses before workers, owns STATE.md (sole writer), checks stop conditions. On substantial work it may request one specialist for a proof gap, or ask before wider fan-out. Loads `loop-tiers` + `planning-and-decision-briefs`. | CLAUDE.md, STATE.md, selected briefs | STATE.md, ratified plan |
+| **Product Discovery Manager** *(planning phase, on demand)* | De-risk the *bet* before building: frame the **outcome** + the user's **job**, map opportunities from evidence, kill the four risks (value/usability/feasibility/viability), name the **riskiest assumption + cheapest test**. Use as a lens first; spawn only when the bet is genuinely uncertain. Loads `product-discovery`. | clarified intent, repo/analytics, market brief | `discovery-brief.md` |
+| **Market & Competitive Researcher** *(planning phase, on demand)* | What already exists, what the user would use instead, where the gap is — a **reuse-vs-build verdict**, graded feature matrix, positioning. Timeboxed, cited. Use only for external uncertainty that changes the decision. Loads `market-and-competitive-research`. Distinct from Input/Research below. | the JTBD/intent, the web, deps | `market-brief.md` |
 | **Planner** *(planning phase, substantial lane)* | Turn the validated, de-risked bet into the **plan of record** — thin vertical slices, sequenced by dependency + risk, a proof bar per slice, hand-off specs. Emits **decision briefs** in the standard format up to the Orchestrator. Loads `planning-and-decision-briefs`. | discovery + market briefs, §3 criteria | `plan.md` + decision briefs |
 | **Input / Research Specialist** *(optional — provision when the domain has a distinct data-intake lane)* | Gather, clean, and validate the **data inputs** the work consumes; guarantee they're complete and fresh. (Supply-side data — *not* the demand-side Market Researcher above.) | external sources, `input-validation` skill *(author per domain)* | validated inputs + a quality report |
 | **Builder / Executor** | Produce the core output of the product from the validated inputs. (On a frontend repo, implements the Designer's Design Plan.) | validated inputs, the domain skill, design-plan | candidate output + rationale |
@@ -56,8 +57,8 @@ sub-agent, it **provisions the relevant playbooks** by copying them into the rep
 | `design-methodology.md`, `anti-ai-aesthetics.md`, `design-styles.md` + `design-styles/` (67 styles), `taste-preflight.md` | **Designer** | frontend/UI repos (`profiles/frontend.md`) |
 | `planning-and-decision-briefs.md` | **Orchestrator** + **Planner** | always |
 | `clarify-and-challenge.md` | **Dispatcher / Orchestrator** | always (the task path) |
-| `product-discovery.md` | **Product Discovery Manager** | always (convened on the substantial lane) |
-| `market-and-competitive-research.md` | **Market & Competitive Researcher** | always (convened on the substantial lane) |
+| `product-discovery.md` | **Product Discovery Manager** | provisioned always; activated on demand when the bet is uncertain |
+| `market-and-competitive-research.md` | **Market & Competitive Researcher** | provisioned always; activated on demand when external prior art changes the decision |
 | `technical-review.md` | **Reviewer / Evaluator** | always (any code/technical repo) |
 | `active-learning.md` | **Orchestrator** (the loop's UPDATE phase) | always — silently learns from corrections + major changes |
 | `qa-validation.md` | **QA Engineer** | always — the requirements-traceability + pixel-fidelity gate |
@@ -150,23 +151,22 @@ Parallel roles must not corrupt shared state. The rules:
    stops and records an Open Question in its report rather than improvising. The
    Orchestrator decides whether to pause for a human (see stop conditions).
 
-## Fan-out guidance for the Orchestrator
+## Activation + fan-out guidance for the Orchestrator
 
 - **Size the loop to the task first (fast by default).** A small, clear, reversible task gets
   no fan-out at all — do it directly, self-check, log one line. Spin up the team only for
   substantial, ambiguous, or irreversible work. Most tasks are the former; that's what keeps
   the system quick (CLAUDE.md §10).
-- **Deliberate in parallel, not serially.** When work *is* substantial, fan out the *thinking*
-  too — infer-from-repo ∥ generate 2–3 approaches ∥ scan risks — then synthesize. Same
-  wall-clock as one pass, more perspectives = a sharper call. A serial plan→brief→review chain
-  is the slow path; avoid it.
-- **The planning relay (substantial lane only).** Convene the **discovery team** in the PLAN phase:
-  **Product Discovery Manager ∥ Market & Competitive Researcher** run *concurrently* (independent
-  inputs) → both feed the **Planner** (which has a data dependency, so it runs after) → the Planner
-  hands `plan.md` + decision briefs back to you → you run **plan-review** and fold it into STATE.md →
-  build. **Skip the team on the fast lane** (small/clear/reversible — Builder just does it); on a
-  **medium** task, wear the hats yourself instead of spinning up all three. Depth scales to stakes;
-  never run a 3-agent discovery sprint on a one-line fix. You stay the sole STATE.md writer.
+- **Agents are catalog, not payroll.** The standard roster is available capability. It is not a default
+  meeting. Start with 0 sub-agents; use at most 1 without approval; ask before 2+.
+- **Use lenses before workers.** For T2, wear the product, market, safety, and reviewer hats yourself
+  unless one of them needs independent evidence. A role becomes a sub-agent only when it has a concrete
+  question to answer or a proof gap to close.
+- **Tiny packets only.** A spawned role gets the exact question, 3-8 relevant files/artifacts max,
+  constraints, and a short expected output (normally <=500 words). Do not hand sub-agents full STATE,
+  full activity logs, or a repo-wide tour.
+- **Parallelize only when approved and independent.** When work *is* broad enough and the user approves
+  the budget, fan out independent questions; otherwise keep it single-owner.
 - Parallelize only independent work (two independent analyses of the same input, or the same
   analysis across many independent items). Anything with a data dependency runs in sequence.
 - Give each spawned role only the context it needs (the relevant STATE.md slice + input

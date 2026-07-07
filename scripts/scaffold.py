@@ -199,6 +199,7 @@ FILE_PLAN = [
     ("ralph_loop.sh",    "scripts/ralph_loop.sh",     0o755),
     ("orbit-lock",       "scripts/orbit-lock",        0o755),   # thin wrapper → trusted bin/orbit-lock
     ("orbit-memory",     "scripts/orbit-memory",      0o755),   # review/promote/forget the learning ledger
+    ("orbit-context",    "scripts/orbit-context",     0o755),   # context budget doctor + safe compactor
     ("orbit-status",     "scripts/orbit-status",      0o755),
     ("orbit-dashboard",  "scripts/orbit-dashboard",   0o755),   # read-only local web board over .orbit/
     ("orbit-statusline.py", "scripts/orbit-statusline", 0o755),  # the one-line Claude Code status line

@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Thin project wrapper for the trusted Orbit context-budget tool.
+set -u
+for p in \
+  "${CLAUDE_PLUGIN_ROOT:-}/bin/orbit-context" \
+  "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/orbit/bin/orbit-context" \
+  "$HOME"/.claude/plugins/cache/*/orbit/*/bin/orbit-context \
+  "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/*/orbit/*/bin/orbit-context; do
+  [ -f "$p" ] && exec python3 "$p" "$@"
+done
+echo "orbit-context: cannot locate trusted Orbit install" >&2
+exit 1

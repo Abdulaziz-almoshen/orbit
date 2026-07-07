@@ -11,11 +11,28 @@
 
   "_hard_limits_help": "Absolute, judgment-free brakes. Checked every cycle by BOTH runners. per_run caps the whole run; per_cycle stops the loop if a single cycle blows its budget (a runaway signal). gate_failure_streak trips a hard stop after N consecutive gate failures (thrashing).",
   "hard_limits": {
-    "max_iterations": 3,
-    "token_budget": { "per_cycle": 60000, "per_run": 250000 },
-    "cost_budget_usd": { "per_cycle": 1.5, "per_run": 5.0 },
-    "max_runtime_seconds": 1800,
+    "max_iterations": 2,
+    "token_budget": { "per_cycle": 20000, "per_run": 80000 },
+    "cost_budget_usd": { "per_cycle": 0.35, "per_run": 1.25 },
+    "max_runtime_seconds": 900,
     "gate_failure_streak": 2
+  },
+
+  "_context_budget_help": "Cheap-mode context governor. orbit-context doctor reads these thresholds before expensive loops; orbit-context compact archives old append-only logs, keeping the last N events. Token estimates are deliberately rough (bytes / token_estimate_divisor) and used as a stoplight, not billing truth.",
+  "context_budget": {
+    "token_estimate_divisor": 4,
+    "total_warn_tokens": 50000,
+    "total_fail_tokens": 90000,
+    "state_warn_tokens": 12000,
+    "state_fail_tokens": 25000,
+    "activity_warn_tokens": 25000,
+    "activity_fail_tokens": 50000,
+    "steps_warn_tokens": 12000,
+    "steps_fail_tokens": 25000,
+    "state_keep_recent_entries": 40,
+    "activity_keep_events": 500,
+    "steps_keep_events": 300,
+    "archive_dir": ".orbit/archive"
   },
 
   "_eval_gates_help": "Proceed only if all pass. A single failure routes a fix task into the queue; gate_failure_streak consecutive failures trips a hard stop (the loop is thrashing). Thresholds are domain-specific; fit them to your product.",
@@ -34,10 +51,24 @@
     "spend_over_usd": 1.0
   },
 
-  "_gears_help": "The Gearbox (.orbit/skills/loop-tiers.md). The ORCHESTRATOR reads these when it sizes a request into a gear (T0 Direct · T1 Quick · T2 Standard · T3 Deep · T4 Mission) and declares the Gear Card. 'deep' caps the T3 dynamic fan-out; 'mission' flags T4 durability. Consumed by the model at sizing time, not by the runners.",
+  "_gears_help": "The Gearbox (.orbit/skills/loop-tiers.md). Cheap mode is the default: the ORCHESTRATOR sizes the smallest gear that proves the result, runs orbit-context doctor before T2+, and asks before any wider fan-out. 'deep' caps T3 dynamic fan-out; 'mission' flags T4 durability. Consumed by the model at sizing time, not by the runners.",
   "gears": {
-    "deep":    { "agent_max": 16, "map_max": 4, "research_max": 6, "plan_max": 6, "critics": 3, "concurrency": 8, "token_budget": 400000, "confirm_before_fanout": true },
+    "deep":    { "agent_max": 4, "map_max": 1, "research_max": 2, "plan_max": 1, "critics": 1, "concurrency": 2, "token_budget": 80000, "confirm_before_fanout": true, "require_context_doctor": true },
     "mission": { "durable": true, "resumable": true, "human_gate_per_irreversible_step": true, "artifact_bundle": true }
+  },
+
+  "_cost_mode_help": "Default behavior that prevents Orbit from becoming a token amplifier. The model obeys these before spawning agents; scripts/orbit-context is the mechanical stoplight for local context bloat.",
+  "cost_mode": {
+    "default": "lite",
+    "activation_model": "catalog_not_payroll",
+    "max_subagents_without_approval": 1,
+    "max_subagents_with_approval": 4,
+    "fanout_requires_approval": true,
+    "packet_file_limit": 8,
+    "packet_output_word_limit": 500,
+    "require_context_doctor_for_t2_plus": true,
+    "forbid_background_workflow": true,
+    "status_budget_lines": 20
   },
 
   "done_when": "STATE.md run_goal satisfied AND the Reviewer quality gate passed",

@@ -18,12 +18,15 @@ Turn a task into the *right* plan, delegate it, and run the loop to a clean stop
 something more accurate, stable, and scalable than the literal ask.
 
 ## Procedure
-0. **Size the gear FIRST (the Gearbox — `loop-tiers.md`).** Score the request (ambiguity · blast radius ·
+0. **Size the gear FIRST (the Gearbox — `loop-tiers.md`).** Cost mode is **Lite by default**. Score the request (ambiguity · blast radius ·
    # surfaces · research need · compliance/security · reversibility · runtime/cost), pick the **smallest
    gear that can still prove the result** — `T0 Direct · T1 Quick · T2 Standard · T3 Deep · T4 Mission`
    (highest risk-trigger wins; any HIGH on blast/compliance/reversibility floors it at ≥ T2). **Declare
    the Gear Card** (`emit` phase `gear` + render it) — `Gear / Why / Budget / Exit` — before moving. On
-   **T3/T4, confirm the budget** (one `AskUserQuestion`) before spawning the fleet. The gear is a
+   **T2+**, run `scripts/orbit-context doctor` when present. If it reports FAIL, compact or ask before
+   continuing. On **T3/T4, confirm the budget** (one `AskUserQuestion`) before spawning any fleet.
+   Without explicit approval, use **at most ONE sub-agent** and do the extra thinking yourself. **Agents
+   are a catalog, not payroll**: the roster is available capability, not a room to convene. The gear is a
    posture, not a cage: escalate/de-escalate mid-run with a one-line `[gear]` reason in STATE.md.
 1. **Plan (per the gear).** Read CLAUDE.md + STATE.md. **On T3 Deep, run the fan-out ON THE BOARD**
    (set_team the whole roster FIRST, then Task-tool sub-agents per phase) —
@@ -37,29 +40,31 @@ something more accurate, stable, and scalable than the literal ask.
    would exceed `agent_max`, bucket related unknowns under one worker and **log the merge**; **confirm
    the budget with the user before spawning** (T3/T4). Route any irreversible/outward/money step through
    `approval_checkpoints` + an `AskUserQuestion` (T4: mandatory, audited).
-   **On T2, convene the discovery team:**
-   **Product Discovery Manager ∥ Market & Competitive Researcher** in parallel → both feed the
-   **Planner** → it hands back `plan.md` + decision briefs. Then run **plan-review** (CEO + eng
-   lenses, blast-radius) and fold the result into STATE.md. *Skip the team on the fast lane; on a
-   medium task wear the hats yourself.* For a genuine fork, a tight decision brief (stakes, options,
-   recommendation, net). Deliberate in **parallel**, not a serial chain.
+   **On T2, do the planning yourself first.** Spawn only one specialist/reviewer unless the user approved
+   extra fan-out. Use Product Discovery / Market Research / Safety / Reviewer as *lenses* in your own
+   plan by default; call a sub-agent only for a genuine unknown or proof gap that changes the decision.
+   Any spawned sub-agent gets a **tiny specialist packet**: exact question, 3-8 relevant files max,
+   constraints, and an expected output limit (normally <=500 words). Never hand it full STATE, full
+   activity logs, or broad repo context. Then run one review/QA pass with a concrete proof bar. For a
+   genuine fork, a tight decision brief (stakes, options, recommendation, net).
 2. **Board FIRST, THEN delegate.** Your **first action, before spawning any specialist**, is to make
-   the board visible: call `.orbit/activity.py`'s `set_team([...])` with the roster you're about to
-   run — each `{role, task, status}` (the one you dispatch first is `active`, the rest `queued`) —
-   AND `set_tasks([...])` (the checklist) AND build the native list with `TaskCreate`. Open with a
-   one-line assignment ("Frontend Engineer is implementing the lifecycle spine; Reviewer + Safety are
-   queued after build."). This feeds the live team board (`agents.json`) + checklist (`tasks.json`)
+   the board visible: call `.orbit/activity.py`'s `set_team([...])` with the worker(s) actually running
+   now plus optionally an `available` line for dormant specialists. Do **not** queue the whole catalog.
+   Each active/queued entry is `{role, task, status}` (the one you dispatch first is `active`; any
+   approved later worker is `queued`) — AND `set_tasks([...])` (the checklist) AND build the native list
+   with `TaskCreate`. Open with a one-line assignment ("Main owner is implementing; Reviewer is available
+   if the proof gap remains."). This feeds the live team board (`agents.json`) + checklist (`tasks.json`)
    so `orbit-status` and the status line show who's active, who's next, and their jobs from the
-   *start* — a team, not a black box. **Before any long sub-agent wait, print the inline board**
+   *start* — visible progress, not a black box. **Before any long sub-agent wait, print the inline board**
    (`scripts/orbit-status --team`) — the user must never be left staring at only "waiting for
    background agent." Sub-agents don't reveal chain-of-thought, but they DO emit work status
    (`start`/`done` + a one-line signal via `.orbit/activity.py`), like a real team standup.
    **Never run the task through the native `Workflow(...)` background runner** — it is a black-box
    job that bypasses the checklist, the visible owner, and `.orbit/tasks.json` / `.orbit/activity.jsonl`.
-   Fan work out to the specialists **with the Task tool** (parallel where independent) and route
+   Fan work out to the specialists **with the Task tool** only inside the approved budget (parallel where independent) and route
    output through the gates: Safety (veto) → Reviewer (the diff) → **QA Engineer** (the product vs
    the requirements — RTM verdict per requirement). One writer of STATE.md — you.
-   **On a goal-sized ask**, run `goal-pipeline.md`: dispatch unblocked stories in parallel waves,
+   **On a goal-sized ask**, run `goal-pipeline.md` only after the user approves the wider budget: dispatch unblocked stories in parallel waves,
    backpressure-verify, repeat until every acceptance criterion is green, then the mandatory polish
    pass. Decisions mid-run per its taxonomy: Mechanical → decide silently · Taste → batch to ONE
    end-of-run approval · user-challenges/one-way doors → always stop. Load accepted ADRs

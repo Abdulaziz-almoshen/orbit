@@ -388,21 +388,21 @@ user sees is **what you print in chat.** Therefore **do THREE things every cycle
    `set_tasks` / `update_task` / `emit`). The data floor — never depends on a UI being present.
 2. **ALWAYS render the "team board" inline in your reply** — this is the **universally visible**
    path (desktop app, web, terminal, IDE — anywhere, because it's just text). Declare the roster
-   first with `.orbit/activity.py`'s **`set_team([...])`** (who's active + who's queued) so the data
-   backs the board; then render a compact markdown block with emoji role colors matching the
+   first with `.orbit/activity.py`'s **`set_team([...])`** (who's active plus any approved queued worker)
+   so the data backs the board; then render a compact markdown block with emoji role colors matching the
    dashboard, refreshed each cycle. **Before any long sub-agent wait, print it** — never leave the
    user on only "waiting for background agent." It shows who's **working now** (+ their task and a
-   live "active 4m 52s"), who's **queued** (+ their job), and a quiet timer if things go silent:
+   live "active 4m 52s"), who's **approved and queued** (+ their job), and a quiet timer if things go silent:
    ```
    🛰 Orbit · cycle 2
-   ✓ 🟣 planner — planned the change
+   ✓ main owner — planned the change
    ▸ 🟢 frontend-engineer — building the form (active 2m 10s)
-   ○ 🟡 reviewer — checks correctness + regressions · ○ 🔴 safety · ○ ⚪ reporter
+   available: 🟡 reviewer · 🔴 safety · 🧪 qa (not running)
    ```
    (The headless equivalent is `scripts/orbit-status --team`, off the same `agents.json`.)
    (🔵 dispatcher · 🟣 planner · 🔭 discovery · 📊 market · 🟢 engineer · 🟪 designer · 🟡 reviewer · 🧪 qa · 🔴 safety · ⚪ reporter — same
    colors as `orbit-status`.) **The board also carries the team's voice** — a one-line "why this task
-   matters" at kickoff, a progress-aware "your team's heads-down — N of M done, almost there" during
+   matters" at kickoff, a progress-aware "the owner is heads-down — N of M done, almost there" during
    the pause, and an earned close on completion. Mandatory; warm and genuine, tone calibrated to the
    task (serious for governance/security/money), varied, never filler. See `observability.md` →
    "The team voice." Keep it short — live "who's talking" + encouragement, not a log dump.

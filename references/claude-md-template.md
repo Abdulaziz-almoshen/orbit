@@ -68,7 +68,7 @@ to your domain:)
 Rename and scope these to your product's real subtasks; keep the shape — one planner,
 several executors, one safety gate, one quality gate.)
 - Dispatcher/Router — classifies each request (task vs question) per §10 and routes it.
-- Orchestrator/PM — conducts the loop, convenes the discovery team on the substantial lane, owns STATE.md.
+- Orchestrator/PM — conducts the loop, keeps specialists as a catalog, owns STATE.md.
 - Product Discovery Manager — *(planning, substantial lane)* de-risks the bet (outcome, opportunity, riskiest assumption).
 - Market & Competitive Researcher — *(planning, substantial lane)* what exists / reuse-vs-build / the gap.
 - Planner — *(planning, substantial lane)* turns the de-risked bet into the sliced, sequenced plan.
@@ -140,11 +140,16 @@ read `CLAUDE.md` + `STATE.md` → plan next action → act via sub-agent(s) → 
 
 ## 10. Request Routing — the Gearbox: size the loop before you move  (read on EVERY user message)
 The loop picks a **gear** before doing work — the **smallest gear that can still PROVE the result**.
-Most requests don't need ceremony, so don't pay for it; a broad, ambiguous, high-risk one gets a whole
-research-and-critique fleet. Size it on a scorecard (ambiguity · blast radius · # surfaces · research
-need · compliance/security · reversibility · runtime/cost), **highest risk-trigger wins** (never a sum),
-then **declare the gear out loud** (a *Gear Card*) before moving. Full rubric + fan-out math:
+Most requests don't need ceremony, so don't pay for it. **Cost Mode is Lite by default:** before any
+T2/T3/T4 loop, run `scripts/orbit-context doctor` if present; if it reports FAIL, compact or ask before
+fan-out. Size it on a scorecard (ambiguity · blast radius · # surfaces · research need ·
+compliance/security · reversibility · runtime/cost), **highest risk-trigger wins** (never a sum), then
+**declare the gear out loud** (a *Gear Card*) before moving. Full rubric + fan-out math:
 `.orbit/skills/loop-tiers.md`.
+
+**Agents are a catalog, not payroll.** The repo may have many specialists, but the default active count
+is zero. Use role lenses internally first; spawn a worker only for a real uncertainty, risk, or proof gap
+that it uniquely resolves.
 
 - **T0 · Direct** — a QUESTION (status / explanation: "is it live?", "what does X do?") or a trivial
   patch → answer / patch directly. No loop, no roles. Read `.orbit/STATE.md` if it helps.
@@ -153,14 +158,16 @@ then **declare the gear out loud** (a *Gear Card*) before moving. Full rubric + 
   briefs, no hand-offs, no phase narration. *The default, and it's fast.* (On frontend repos this is why
   small/clear/reversible UI edits never route to the Designer, so they can't trigger a prototype gate —
   that fires only on work the Designer classifies HEAVY; see `design-methodology.md`.)
-- **T2 · Standard** — a real change, ~1 workstream → the full team loop: infer from the repo, think in
-  **parallel** (2–3 approaches + risks concurrently), then act via the roles in `.claude/agents/`
-  (Dispatcher → specialists → Safety → Reviewer → QA → Reporter), dispatched with the **Task tool**.
+- **T2 · Standard** — a real change, ~1 workstream → plan/build with the main agent first, then use at
+  most **one** specialist/reviewer without explicit approval — one sub-agent maximum by default. Use the
+  other roles as lenses in your own thinking unless a genuine unknown changes the decision. A spawned
+  specialist gets a tiny packet:
+  exact question, 3-8 relevant files max, constraints, and a short expected output (normally <=500
+  words). Never send full STATE, full activity logs, or broad repo context.
 - **T3 · Deep** — broad · ambiguous · research-heavy · multi-surface · compliance-risk (≥3 surfaces or
   real unknowns, AND ambiguity or compliance) → **Map → Research → Plan → Critique → Synthesize →
-  Build**, with a *dynamic* fleet of workers sized to the request (one researcher per unknown, one
-  planner per feature cluster, standing adversarial critics), **capped** and **confirmed with the user
-  before fan-out** (`gears.deep` in `loop.config.json`).
+  Build**, with a *dynamic* fleet of workers sized to the request, **capped tightly** and **confirmed
+  with the user before fan-out** (`context_budget`, `cost_mode`, and `gears.deep` in `loop.config.json`).
 - **T4 · Mission** — spans repos / days / a production migration / money at scale → T3 on the **durable
   runner** (`loop.py` / `durable-execution.md`): checkpoints, resume, a **human-approval gate per
   irreversible step**, an artifact bundle.
@@ -172,8 +179,8 @@ background runner** — it's a black-box job that bypasses the checklist, the vi
 `.orbit/` telemetry; a task isn't "running through Orbit" unless the user can see who owns each step and
 what's done / in progress. **Guardrails scale with the gear** (OWASP LLM06): higher gear → minimal tools
 per worker, cost/fan-out caps, and human approval for every irreversible / outward / money step. Never
-free-edit a source-of-truth file outside the loop. Parallel beats serial on T2+ — same wall-clock, but
-sharper. This is where the system is *smarter*, not slower.
+free-edit a source-of-truth file outside the loop. Parallel fan-out is approval-gated; default to one
+sharp owner plus proof. This is where the system is *smarter*, not louder.
 
   You pick the lane by **judgment, not a command**. When genuinely unsure, take the heavier
   lane for anything touching data/security/money or hard to undo; otherwise default to fast.

@@ -3,6 +3,29 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.38.0
+
+**Cost Mode — Orbit Lite by default, with a context budget gate.** This release fixes the failure mode
+where Orbit's own memory, logs, and sub-agent fanout can burn a paid quota faster than the work deserves.
+
+- **`orbit-context`** — new read-only `doctor` plus safe `compact`. `doctor` estimates token load for
+  `.orbit/STATE.md`, `.orbit/activity.jsonl`, and `.orbit/steps.jsonl` against thresholds in
+  `loop.config.json`. `compact` archives old append-only history into `.orbit/archive/` with backups
+  and keeps the recent working set; it never raw-deletes history.
+- **Cheap defaults.** Hard limits drop from 250k/run to 80k/run, T3 Deep drops from 16 agents / 400k
+  tokens to 4 agents / 80k tokens, concurrency drops to 2, and T2/T3 now require budget awareness before
+  fan-out.
+- **Lite orchestration contract.** Router, Orchestrator, Gearbox, and CLAUDE.md template now say the
+  default is one sharp owner plus proof; more than one sub-agent, red-team fleets, and wide fan-out need
+  explicit approval.
+- **Catalog, not payroll.** The standard sub-agent roster remains intact, but it is now explicitly an
+  available specialist catalog. Orbit uses role lenses first, spawns zero/one worker by default, requires
+  approval before 2+ workers, and sends tiny specialist packets instead of full STATE/activity/repo context.
+- **Scaffolded projects get `scripts/orbit-context`.** New repos can diagnose and compact context bloat
+  without reinstalling or editing hooks.
+- New `tests/test_context_budget.py` and `tests/test_agent_activation.py`, plus Gearbox tests now enforce
+  the lower fan-out ceiling.
+
 ## 0.37.0
 
 **Train A (finish) — verifiable installs (1a): a signed-release *substrate*, honest about what it is.**

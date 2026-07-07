@@ -16,14 +16,45 @@ is the point: the user sees Orbit's operating mode *before* it moves.
 |---|---|---|---|---|---|
 | **T0 · Direct** | question · explanation · trivial patch | answer / patch directly; a one-line STATE note if useful | 0 (main loop) | read-only-ish; nothing to gate | the `route.py` QUESTION lane |
 | **T1 · Quick** | small · clear · reversible · low-stakes | **Plan → Do → Verify** — one owner, one proof bar, self-check | 1 | guard hook + self-check | the fast lane (§10) |
-| **T2 · Standard** | a real product/dev change · ~1 workstream | Planner → Builder → Reviewer → QA/Safety, on the board | ~3–6 | Safety veto → Reviewer → QA · proof per requirement | the substantial lane + discovery team |
-| **T3 · Deep** | (≥3 distinct surfaces **or** high research need) **and** (high ambiguity **or** compliance/security risk) | **Map → Research → Plan → Critique → Synthesize → Build** | dynamic, sized to breadth, capped (≤16) | + adversarial **Critique gate** · fan-out + token caps · **always confirm before fan-out** · role-scoped tools per worker | discovery **made dynamic** (Product-Discovery/Market-Researcher roles) + plan-review's lenses **as the critics** (Reviewer/Safety); its Build phase hands to T2 (which uses goal-pipeline only if the plan is goal-sized) |
+| **T2 · Standard** | a real product/dev change · ~1 workstream | Main agent plans/builds; optional single Reviewer/QA on the board | 0–1 unless approved | Safety veto → Reviewer/QA only when needed · proof per requirement · context doctor first | the substantial lane, but **Lite by default** |
+| **T3 · Deep** | (≥3 distinct surfaces **or** high research need) **and** (high ambiguity **or** compliance/security risk) | **Map → Research → Plan → Critique → Synthesize → Build** | dynamic, sized to breadth, capped (≤4 by default) | + adversarial **Critique gate** · fan-out + token caps · **context doctor + always confirm before fan-out** · role-scoped tools per worker | discovery **made dynamic** (Product-Discovery/Market-Researcher roles) + plan-review's lenses **as the critics** (Reviewer/Safety); its Build phase hands to T2 (which uses goal-pipeline only if the plan is goal-sized) |
 | **T4 · Mission** | spans multiple repos · multiple days · a production migration · money/customer-facing at scale | T3 **wrapped in durable state** — checkpoints, resumable runs, a human-approval gate per irreversible step, an external artifact bundle | dynamic, across sessions | + **mandatory human gates** · durable audit log · tool minimization · artifact bundle for review | the portable `loop.py` runner + `durable-execution.md` + approval checkpoints |
 
 Every gear runs through Orbit's **visible board** — `set_team` + `.orbit/tasks.json` + `.orbit/activity.jsonl`,
 sub-agents dispatched with the **Task tool**. **Never** the native `Workflow(...)` background runner
 (it bypasses the board — see the run contract). The gear decides *how much* machinery; the board is
 always on.
+
+**Cost mode is Lite by default.** Before T2/T3/T4, run `scripts/orbit-context doctor` when available.
+If it returns FAIL, compact or ask before continuing. Without explicit approval: max **one** sub-agent,
+no red-team fleet, no background workflow, no repeated long status narration. Intelligence should come
+from sharper selection, not more agents.
+That means one sub-agent maximum by default.
+
+## Agent Activation — catalog, not payroll
+Orbit can provision many specialists. That is inventory, not an instruction to wake them. The default
+run has one owner: the main agent. Use role **lenses** internally before spawning role **workers**.
+
+| Trigger | Default activation |
+|---|---|
+| Question / explanation | 0 sub-agents |
+| Small clear reversible change | 0 sub-agents |
+| Risky code with a concrete proof gap | 1 Reviewer or QA Engineer |
+| HEAVY UI decision | 1 Designer or Reviewer, depending on the gap |
+| Deploy / payment / privacy / destructive operation | 1 Safety gate |
+| External uncertainty that changes the decision | 1 Market Researcher or Product Discovery worker |
+| 2+ independent unknowns / broad strategy | Ask before 2-4 agents |
+
+Any spawned worker gets a **tiny specialist packet**:
+- exact question / verdict needed;
+- 3-8 relevant files or artifact paths max;
+- constraints and approval gates;
+- expected output limit, normally <=500 words;
+- no full `.orbit/activity.jsonl`, no full `STATE.md`, no open-ended repo tour.
+- Plain rule: no full STATE and no full activity context in a sub-agent packet.
+
+The visible board should show active owner(s) and blockers. It may show dormant specialists as
+`available`, but it must not queue the whole catalog to make the run feel bigger.
 
 ## The sizing router — a scorecard, not vibes
 Score the request on seven axes, then let the **highest risk-trigger win** (a *sum* is unsafe — it lets
@@ -82,9 +113,9 @@ More agents / more tools / more reach ⇒ **more control**, never less:
   Gearbox *leans on* Orbit's per-role scoping; it does not hand every worker broad tools.
 - **Approval for high-impact actions.** Anything irreversible / outward-facing / money / regulated is
   *proposed*, never auto-performed — a human gate. Mandatory and audited on T4.
-- **Cost + fan-out caps.** T3 runs under `loop.config.json` → `gears.deep` (agent cap, token budget,
-  concurrency). Exceed the cap → **bucket related sub-questions under one worker and LOG the merge** —
-  never silently drop coverage.
+- **Cost + fan-out caps.** T3 runs under `loop.config.json` → `context_budget`, `cost_mode`, and
+  `gears.deep` (agent cap, token budget, concurrency). Exceed the cap → **bucket related sub-questions
+  under one worker and LOG the merge** — never silently drop coverage.
 - **Everything logged + monitored.** The board (`tasks.json` + `activity.jsonl`) *is* the audit trail;
   T4 keeps a durable one across sessions.
 
@@ -92,7 +123,8 @@ More agents / more tools / more reach ⇒ **more control**, never less:
 Six phases; agents sized to the request's real structure, capped:
 
 These are **existing roles run in a phased fan-out — no new role types are introduced.** All of it
-runs on the visible board (set_team the whole roster up front, Task-tool sub-agents):
+runs on the visible board (set_team the approved active/queued workers, not the whole catalog) and only
+after the user approves the budget:
 
 1. **Map** — the **Product-Discovery** role (read-only) run once per codebase *surface* (data model ·
    UI/nav · integration seams). Answers "what actually exists?" before anyone plans.

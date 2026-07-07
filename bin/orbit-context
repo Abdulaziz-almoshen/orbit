@@ -1,0 +1,229 @@
+#!/usr/bin/env python3
+"""
+orbit-context — cheap context budget doctor + safe compactor for Orbit projects.
+
+The goal is not perfect billing math. The goal is to stop Orbit from repeatedly loading giant
+working-memory files, activity logs, and checkpoints until a Max plan disappears.
+
+Commands:
+  orbit-context [doctor] [PROJECT_DIR]   read-only stoplight; exits 2 when over fail thresholds
+  orbit-context compact [PROJECT_DIR]    archive old append-only history; backups kept, no raw delete
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import shutil
+import sys
+import time
+from dataclasses import dataclass
+from pathlib import Path
+
+DEFAULT_BUDGET = {
+    "token_estimate_divisor": 4,
+    "total_warn_tokens": 50000,
+    "total_fail_tokens": 90000,
+    "state_warn_tokens": 12000,
+    "state_fail_tokens": 25000,
+    "activity_warn_tokens": 25000,
+    "activity_fail_tokens": 50000,
+    "steps_warn_tokens": 12000,
+    "steps_fail_tokens": 25000,
+    "state_keep_recent_entries": 40,
+    "activity_keep_events": 500,
+    "steps_keep_events": 300,
+    "archive_dir": ".orbit/archive",
+}
+
+
+@dataclass
+class Item:
+    name: str
+    rel: str
+    warn_key: str
+    fail_key: str
+    size: int = 0
+    tokens: int = 0
+    status: str = "OK"
+
+
+ITEMS = [
+    Item("STATE", ".orbit/STATE.md", "state_warn_tokens", "state_fail_tokens"),
+    Item("activity", ".orbit/activity.jsonl", "activity_warn_tokens", "activity_fail_tokens"),
+    Item("steps", ".orbit/steps.jsonl", "steps_warn_tokens", "steps_fail_tokens"),
+]
+
+
+def _read_json(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return {}
+
+
+def _budget(root: Path) -> dict:
+    cfg = _read_json(root / ".orbit/loop.config.json")
+    out = dict(DEFAULT_BUDGET)
+    if isinstance(cfg.get("context_budget"), dict):
+        out.update(cfg["context_budget"])
+    return out
+
+
+def _estimate(size: int, divisor: int) -> int:
+    return int(math.ceil(size / max(1, divisor)))
+
+
+def scan(root: Path) -> tuple[list[Item], int, str, dict]:
+    budget = _budget(root)
+    divisor = int(budget.get("token_estimate_divisor", 4) or 4)
+    rows: list[Item] = []
+    total = 0
+    worst = "OK"
+    for proto in ITEMS:
+        item = Item(proto.name, proto.rel, proto.warn_key, proto.fail_key)
+        path = root / item.rel
+        item.size = path.stat().st_size if path.exists() else 0
+        item.tokens = _estimate(item.size, divisor)
+        total += item.tokens
+        if item.tokens >= int(budget.get(item.fail_key, 10**12)):
+            item.status = "FAIL"
+        elif item.tokens >= int(budget.get(item.warn_key, 10**12)):
+            item.status = "WARN"
+        rows.append(item)
+        if item.status == "FAIL":
+            worst = "FAIL"
+        elif item.status == "WARN" and worst != "FAIL":
+            worst = "WARN"
+    if total >= int(budget.get("total_fail_tokens", 10**12)):
+        worst = "FAIL"
+    elif total >= int(budget.get("total_warn_tokens", 10**12)) and worst != "FAIL":
+        worst = "WARN"
+    return rows, total, worst, budget
+
+
+def doctor(root: Path) -> int:
+    if not (root / ".orbit").is_dir():
+        print(f"orbit-context: {root} is not an Orbit project (no .orbit/)")
+        return 1
+    rows, total, worst, budget = scan(root)
+    print(f"Orbit context doctor — {root}")
+    print(f"  {worst}: ~{total:,} tokens in Orbit working context "
+          f"(warn {budget['total_warn_tokens']:,}, fail {budget['total_fail_tokens']:,})")
+    for r in rows:
+        print(f"  {r.status:<4} {r.name:<8} ~{r.tokens:>7,} tokens  {r.size:>9,} bytes  {r.rel}")
+    if worst == "FAIL":
+        print("  Action: run `orbit-context compact` before any T2/T3/T4 loop or subagent fan-out.")
+        return 2
+    if worst == "WARN":
+        print("  Action: compact soon; keep Orbit Lite unless the user approves deeper fan-out.")
+    else:
+        print("  OK: context is within the cheap-mode budget.")
+    return 0
+
+
+def _archive_dir(root: Path, budget: dict) -> Path:
+    stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
+    arch = root / str(budget.get("archive_dir", ".orbit/archive")) / stamp
+    arch.mkdir(parents=True, exist_ok=True)
+    return arch
+
+
+def _compact_jsonl(path: Path, keep: int, arch: Path) -> tuple[int, int]:
+    if not path.exists():
+        return (0, 0)
+    lines = path.read_text(errors="ignore").splitlines()
+    if len(lines) <= keep:
+        return (0, len(lines))
+    old, recent = lines[:-keep], lines[-keep:]
+    (arch / f"{path.name}.archived").write_text("\n".join(old) + "\n")
+    shutil.copy2(path, arch / f"{path.name}.backup")
+    path.write_text("\n".join(recent) + "\n")
+    return (len(old), len(recent))
+
+
+def _split_sections(lines: list[str]) -> list[tuple[int, int, str]]:
+    sections = []
+    heads = [(i, line.strip()) for i, line in enumerate(lines) if line.startswith("## ")]
+    for idx, (start, title) in enumerate(heads):
+        end = heads[idx + 1][0] if idx + 1 < len(heads) else len(lines)
+        sections.append((start, end, title.lower()))
+    return sections
+
+
+def _compact_state(path: Path, keep: int, arch: Path) -> int:
+    if not path.exists():
+        return 0
+    lines = path.read_text(errors="ignore").splitlines()
+    sections = _split_sections(lines)
+    targets = [s for s in sections if "cycle log" in s[2] or "decision log" in s[2]]
+    if not targets:
+        return 0
+    remove = set()
+    archived: list[str] = []
+    for start, end, title in targets:
+        bullet_blocks = []
+        cur = None
+        for i in range(start + 1, end):
+            if lines[i].startswith("- "):
+                if cur:
+                    bullet_blocks.append(cur)
+                cur = [i]
+            elif cur is not None and (lines[i].startswith("  ") or not lines[i].strip()):
+                cur.append(i)
+        if cur:
+            bullet_blocks.append(cur)
+        old_blocks = bullet_blocks[keep:]
+        if old_blocks:
+            archived.append(lines[start])
+        for block in old_blocks:
+            archived.extend(lines[i] for i in block)
+            remove.update(block)
+    if not remove:
+        return 0
+    shutil.copy2(path, arch / "STATE.md.backup")
+    (arch / "STATE.md.archived").write_text("\n".join(archived) + "\n")
+    kept = [line for i, line in enumerate(lines) if i not in remove]
+    path.write_text("\n".join(kept).rstrip() + "\n")
+    return len(remove)
+
+
+def compact(root: Path) -> int:
+    if not (root / ".orbit").is_dir():
+        print(f"orbit-context: {root} is not an Orbit project (no .orbit/)")
+        return 1
+    before_rows, before_total, before_worst, budget = scan(root)
+    arch = _archive_dir(root, budget)
+    activity_old, activity_kept = _compact_jsonl(
+        root / ".orbit/activity.jsonl", int(budget.get("activity_keep_events", 500)), arch
+    )
+    steps_old, steps_kept = _compact_jsonl(
+        root / ".orbit/steps.jsonl", int(budget.get("steps_keep_events", 300)), arch
+    )
+    state_removed = _compact_state(
+        root / ".orbit/STATE.md", int(budget.get("state_keep_recent_entries", 40)), arch
+    )
+    after_rows, after_total, after_worst, _ = scan(root)
+    print(f"Orbit context compact — archive: {arch}")
+    print(f"  before: {before_worst} ~{before_total:,} tokens")
+    print(f"  after:  {after_worst} ~{after_total:,} tokens")
+    print(f"  activity: archived {activity_old} old event(s), kept {activity_kept}")
+    print(f"  steps:    archived {steps_old} old checkpoint(s), kept {steps_kept}")
+    print(f"  STATE:    archived {state_removed} old line(s) from Decision/Cycle log sections")
+    if after_worst == "FAIL":
+        print("  Still over budget: use Orbit Lite only, or manually trim large project docs before fan-out.")
+        return 2
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description="Orbit context budget doctor + safe compactor")
+    ap.add_argument("command", nargs="?", default="doctor", choices=("doctor", "compact"))
+    ap.add_argument("project_dir", nargs="?", default=".")
+    args = ap.parse_args(argv)
+    root = Path(args.project_dir).resolve()
+    return compact(root) if args.command == "compact" else doctor(root)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
