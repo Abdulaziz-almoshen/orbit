@@ -54,6 +54,7 @@ ACTIVITY = ORBIT_DIR / "activity.jsonl"
 RUN = ORBIT_DIR / "run.json"
 PENDING = ORBIT_DIR / "pending-question.json"
 AGENTS = ORBIT_DIR / "agents.json"
+WRITER_LOCK = ORBIT_DIR / "locks" / "active-writer.json"
 
 _NO_COLOR = bool(os.environ.get("NO_COLOR")) or "--no-ansi" in sys.argv
 DIM = "" if _NO_COLOR else "\033[2m"
@@ -292,6 +293,23 @@ def render_compact(run, tasks, events):
     return line + tail
 
 
+def _writer_lock_line():
+    """One line: who holds the single-writer lock (many readers, one writer). None if free/absent."""
+    lock = _load(WRITER_LOCK, None)
+    if not isinstance(lock, dict) or not lock.get("owner_id"):
+        return None
+    kind = lock.get("owner_kind", "?")
+    who = str(lock.get("session_id", "?"))[:12]
+    stale = ""
+    try:
+        if _age(lock.get("heartbeat_at")) and _age(lock.get("heartbeat_at")) > int(lock.get("ttl_seconds") or 1800):
+            stale = f"  {c('ylw')}(STALE — orbit-lock break to recover){RST}"
+    except Exception:
+        pass
+    task = safe(lock.get("task") or "")
+    return f"{B}Writer lock{RST} 🔒 {kind} {DIM}{who}{RST}" + (f"  {DIM}· {task}{RST}" if task else "") + stale
+
+
 def render_full(run, tasks, events, tail, agents=None):
     agents = agents if agents is not None else load_agents()
     out = []
@@ -306,6 +324,10 @@ def render_full(run, tasks, events, tail, agents=None):
     out.append(header)
     if run:
         out.append(f"{B}Lifecycle{RST}  {_lifecycle_strip(run)}")
+    _lock = _writer_lock_line()
+    if _lock:
+        out.append(_lock)
+    if run or _lock:
         out.append("")
 
     card = _load(PENDING, None)

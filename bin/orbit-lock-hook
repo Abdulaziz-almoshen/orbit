@@ -1,0 +1,101 @@
+#!/usr/bin/env python3
+"""
+orbit-lock-hook — PreToolUse enforcement of the single-writer lock. Wired (from the TRUSTED install,
+like orbit-hook) for Edit | Write | MultiEdit | Bash. Reads the hook payload on stdin, resolves the
+writer identity from its `session_id`, and:
+
+  • read-only tool/command                       → allow (emit nothing)
+  • write + no lock                              → auto-acquire the lock, allow
+  • write + I already own the lock               → refresh heartbeat, allow
+  • write + a FOREIGN session owns the lock       → DENY, with an `orbit-lock break --reason …` recovery line
+  • write to .orbit/STATE.md under a foreign lock → always DENY (the memory spine)
+  • corrupt lock file + write                    → DENY (fail closed for writes), with recovery line
+
+FAIL OPEN on ANY infrastructure error (unreadable payload, import failure, exception) — a bug must
+never brick a repo. Kill switch for the same reason: `ORBIT_LOCK_DISABLE=1` makes this a no-op.
+
+Deny protocol (Claude Code ≥ 2.1): print the hookSpecificOutput envelope with permissionDecision=deny
+on stdout, exit 0. Emit nothing to allow.
+"""
+import json
+import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+WRITE_MATCH = ("Edit", "Write", "MultiEdit", "NotebookEdit", "Bash")
+
+
+def _allow():
+    sys.exit(0)  # emit nothing → normal permission flow (the tool runs)
+
+
+def _deny(reason):
+    print(json.dumps({"hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "deny",
+        "permissionDecisionReason": reason,
+    }}))
+    sys.exit(0)
+
+
+def _find_orbit(start):
+    try:
+        p = Path(start).resolve()
+    except Exception:
+        return None
+    for d in [p, *p.parents]:
+        if (d / ".orbit").is_dir():
+            return d
+    return None
+
+
+def main():
+    if os.environ.get("ORBIT_LOCK_DISABLE") == "1":
+        _allow()
+    try:
+        data = json.load(sys.stdin)
+    except Exception:
+        _allow()  # can't read our own payload → fail open
+
+    try:
+        import orbit_lock_lib as L
+
+        tool = data.get("tool_name") or ""
+        if tool not in WRITE_MATCH:
+            _allow()
+        target = _find_orbit(data.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or ".")
+        if target is None:
+            _allow()  # not an Orbit-scaffolded repo → not ours to police
+
+        ident = L.resolve_identity(data)
+        now = L.now_utc()
+        decision = L.evaluate(target, tool, data.get("tool_input") or {}, ident, now)
+
+        if decision["action"] == "acquire":
+            if L.acquire_exclusive(target, L.new_lock(target, ident, "", now)):
+                L.log_event(target, "acquired", ident, now, tool=tool)
+                L.log_activity(target, "acquired", f"writer lock acquired by {ident['owner_kind']}")
+            else:
+                # another session grabbed it between our read and our write — re-decide against reality
+                decision = L.evaluate(target, tool, data.get("tool_input") or {}, ident, now)
+        if decision["action"] == "heartbeat":
+            state, d = L.read_lock(target)
+            if state == "ok" and d.get("owner_id") == ident["owner_id"]:
+                d["heartbeat_at"] = L.iso(now)
+                L.write_lock_atomic(target, d)
+
+        if decision["decision"] == "deny":
+            L.log_event(target, "blocked", ident, now, tool=tool, reason=decision["reason"])
+            L.log_activity(target, "blocked", "write blocked — repo owned by another session")
+            _deny("[orbit writer-lock] " + decision["reason"])
+        _allow()
+    except SystemExit:
+        raise
+    except Exception:
+        _allow()  # ANY enforcement bug → fail open (never brick the repo)
+
+
+if __name__ == "__main__":
+    main()

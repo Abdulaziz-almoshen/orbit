@@ -55,10 +55,12 @@ def main():
         if not list((t / ".claude").glob("settings.json.bak*")):
             fails.append("valid file was not backed up before edit")
 
-        # 3. idempotent — re-run does not double-add
+        # 3. idempotent — re-run does not double-add (compare counts across runs, not a magic number,
+        #    so the check survives the hook set growing — e.g. the v0.30.0 writer-lock entries)
+        n_pre, n_ups = len(data["hooks"]["PreToolUse"]), len(data["hooks"]["UserPromptSubmit"])
         sc.install_hooks(t)
         data2 = json.loads(s.read_text())
-        if len(data2["hooks"]["PreToolUse"]) != 1 or len(data2["hooks"]["UserPromptSubmit"]) != 1:
+        if len(data2["hooks"]["PreToolUse"]) != n_pre or len(data2["hooks"]["UserPromptSubmit"]) != n_ups:
             fails.append("re-running install_hooks double-added a hook")
 
     if fails:

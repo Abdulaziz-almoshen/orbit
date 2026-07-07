@@ -3,6 +3,35 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.30.0
+
+**Single-writer lock — many readers, one writer. Protects the memory spine from two sessions racing
+writes into the same repo.** (Train B of the roadmap; shipped as 0.30.0 — *not* the originally-proposed
+0.28.4, which would sort *below* the live 0.29.0 and never be offered by the update checker.)
+
+- **The lock.** A repo can have many readers but one writer at a time. A "writer" is one Claude Code
+  session (`session_id`). **Sub-agents share the parent's `session_id`** (confirmed vs. the Claude Code
+  docs + issue #7881), so an orchestrator and its whole team count as the *same* writer and never block
+  each other; a second window or a headless `claude -p` loop is a *foreign* writer, serialized behind
+  the lock.
+- **Enforcement** (`bin/orbit-lock-hook`, a `PreToolUse` hook for `Edit`/`Write`/`MultiEdit`/`Bash`,
+  wired from the trusted install): read-only → allow; write + no lock → auto-acquire (atomic `O_EXCL`,
+  so two sessions can't both win the race); write + you own it → heartbeat; write under a **foreign**
+  lock → **deny** with an `orbit-lock break --reason …` recovery line; a foreign write to
+  `.orbit/STATE.md` → **always deny**. Bash write-intent is classified (commits, `rm`, redirects incl.
+  the no-space `x>f` form, migrations, `tee`, `sed -i`…); it's an honest operational wall, not a sandbox.
+- **Fails open, never bricks.** Any infrastructure error (unreadable payload, missing binary, exception)
+  → allow. Kill switch `ORBIT_LOCK_DISABLE=1`. A *corrupt* lock file fails closed for writes but open for
+  reads, always with the recovery line — so it can't silently brick.
+- **CLI + visibility.** `scripts/orbit-lock status|acquire|heartbeat|release|break` (break requires a
+  reason, appended to `.orbit/locks/events.jsonl`). `orbit-status` shows the lock owner; the status line
+  shows `🔒 read-only` when another session holds it; `route.py` injects a read-only banner into a
+  foreign session so it stays useful (inspect/analyze/report) instead of racing writes. `orbit-doctor`
+  reports the lock hook as a drift dimension; `orbit-uninstall` removes it.
+- Three test files (`test_writer_lock`, `_hook`, `_scaffold`) covering the decision table, the classifier
+  incl. the red-teamed bypasses, the concurrency race, fail-open, and scaffold wiring. Full suite (29
+  files) + coherence + `claude plugin validate` green.
+
 ## 0.29.0
 
 **Project freshness gets a first-class doctor + safe managed-hook patching — and a real clobber bug is

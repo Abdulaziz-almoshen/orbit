@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+#
+# orbit-lock (project wrapper) — manage this repo's single-writer lock.
+#
+# This is a THIN shim: it resolves the TRUSTED Orbit install and runs its `bin/orbit-lock`. The lock
+# logic deliberately lives in the plugin, not in the repo, so a project can't weaken its own lock wall.
+#
+#   scripts/orbit-lock status
+#   scripts/orbit-lock acquire --task "F1-S4" --owner interactive
+#   scripts/orbit-lock release
+#   scripts/orbit-lock break --reason "stale abandoned session"
+#
+# (Enforcement is automatic via the PreToolUse hook; you rarely need this by hand — mostly `status`
+# and `break` to recover a stale lock.)
+set -u
+
+# Run against the project root so the lock file resolves regardless of the current subdirectory.
+cd "${CLAUDE_PROJECT_DIR:-.}" 2>/dev/null || true
+
+for p in "${CLAUDE_PLUGIN_ROOT:-}/bin/orbit-lock" \
+         "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/orbit/bin/orbit-lock" \
+         "$HOME"/.claude/plugins/cache/*/orbit/*/bin/orbit-lock \
+         "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/*/orbit/*/bin/orbit-lock; do
+  [ -f "$p" ] && exec python3 "$p" "$@"
+done
+echo "orbit-lock: trusted Orbit install not found (looked in CLAUDE_PLUGIN_ROOT, ~/.claude/skills/orbit, plugin cache)." >&2
+exit 1

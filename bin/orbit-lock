@@ -1,0 +1,153 @@
+#!/usr/bin/env python3
+"""
+orbit-lock — manage the single-writer lock for an Orbit repo (many readers, one writer).
+
+  orbit-lock status    --target .                          # who owns the repo right now (read-only, exit 0)
+  orbit-lock acquire   --target . --task "F1-S4" --owner interactive [--break-stale]
+  orbit-lock heartbeat --target .                          # refresh my lock's TTL (only if I own it)
+  orbit-lock release   --target . [--force]                # drop my lock (or any, with --force)
+  orbit-lock break     --target . --reason "stale abandoned session"   # take/clear a foreign lock — logged
+
+Identity comes from the environment (ORBIT_SESSION_ID / CLAUDE_SESSION_ID / TERM_SESSION_ID, else a
+cwd hash). The PreToolUse enforcement path lives in `orbit-lock-hook`, which resolves identity from the
+hook payload's session_id. Both share orbit_lock_lib so they can't drift.
+
+Exit codes: 0 = success / no-op; 3 = refused (foreign or stale lock — see message); 2 = usage error.
+`status` always exits 0 (it's a read).
+"""
+import argparse
+import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import orbit_lock_lib as L  # noqa: E402
+
+
+def _fmt_lock(data, now):
+    stale = " (STALE)" if L.is_stale(data, now) else ""
+    return (f"owner={data.get('owner_kind', '?')} session={str(data.get('session_id', '?'))[:12]}{stale}\n"
+            f"  task={data.get('task') or '—'}  branch={data.get('branch') or '—'}  head={data.get('git_head') or '—'}\n"
+            f"  started={data.get('started_at')}  heartbeat={data.get('heartbeat_at')}  ttl={data.get('ttl_seconds')}s")
+
+
+def cmd_status(target, args, ident, now):
+    state, data = L.read_lock(target)
+    if args.json:
+        import json
+        print(json.dumps({"state": state, "lock": data, "you": ident["owner_id"],
+                          "you_own": bool(data and data.get("owner_id") == ident["owner_id"]),
+                          "stale": bool(data and L.is_stale(data, now))}))
+        return 0
+    if state == "none":
+        print("writer lock: FREE (no active writer)")
+    elif state == "malformed":
+        print("writer lock: CORRUPT lock file — recover with: orbit-lock break --reason 'corrupt lock'")
+    else:
+        mine = " ← that's you" if data.get("owner_id") == ident["owner_id"] else ""
+        print(f"writer lock: HELD{mine}\n  " + _fmt_lock(data, now))
+    return 0
+
+
+def cmd_acquire(target, args, ident, now):
+    if args.owner:
+        ident["owner_kind"] = args.owner
+    state, data = L.read_lock(target)
+    if state == "ok" and data.get("owner_id") == ident["owner_id"]:
+        data["heartbeat_at"] = L.iso(now)
+        L.write_lock_atomic(target, data)
+        print("writer lock: already yours (heartbeat refreshed)")
+        return 0
+    if state == "ok" and not (L.is_stale(data, now) and args.break_stale):
+        stale = " STALE" if L.is_stale(data, now) else ""
+        print(f"writer lock: REFUSED — held by another{stale} session "
+              f"({data.get('owner_kind', '?')} {str(data.get('session_id', '?'))[:12]}).\n"
+              f"  Take it explicitly with: orbit-lock break --reason '<why>'", file=sys.stderr)
+        return 3
+    if state == "malformed" and not args.break_stale:
+        print("writer lock: REFUSED — lock file is corrupt. Clear it with: "
+              "orbit-lock break --reason 'corrupt lock'", file=sys.stderr)
+        return 3
+    if state in ("ok", "malformed"):  # --break-stale path over a stale/corrupt lock
+        L.log_event(target, "broke", ident, now, reason="acquire --break-stale",
+                    old_owner=(data or {}).get("owner_id"))
+        L.log_activity(target, "broke", "stale writer lock broken on acquire")
+    L.write_lock_atomic(target, L.new_lock(target, ident, args.task, now))
+    L.log_event(target, "acquired", ident, now, task=args.task)
+    L.log_activity(target, "acquired", f"writer lock acquired by {ident['owner_kind']}")
+    print(f"writer lock: ACQUIRED by {ident['owner_kind']} ({str(ident['owner_id'])[:12]})")
+    return 0
+
+
+def cmd_heartbeat(target, args, ident, now):
+    state, data = L.read_lock(target)
+    if state == "ok" and data.get("owner_id") == ident["owner_id"]:
+        data["heartbeat_at"] = L.iso(now)
+        L.write_lock_atomic(target, data)
+        return 0
+    return 0  # not mine → silent no-op (heartbeat is best-effort)
+
+
+def cmd_release(target, args, ident, now):
+    state, data = L.read_lock(target)
+    if state == "ok" and data.get("owner_id") == ident["owner_id"]:
+        L.remove_lock(target)
+        L.log_event(target, "released", ident, now)
+        L.log_activity(target, "released", "writer lock released")
+        print("writer lock: RELEASED")
+        return 0
+    if state == "ok" and args.force:
+        L.log_event(target, "released", ident, now, forced=True, old_owner=data.get("owner_id"))
+        L.log_activity(target, "released", "writer lock force-released")
+        L.remove_lock(target)
+        print("writer lock: FORCE-RELEASED (was another session's)")
+        return 0
+    if state == "malformed" and args.force:
+        L.remove_lock(target)
+        print("writer lock: corrupt lock cleared")
+        return 0
+    if state == "none":
+        print("writer lock: already free")
+        return 0
+    print("writer lock: REFUSED — not yours (use --force to override)", file=sys.stderr)
+    return 3
+
+
+def cmd_break(target, args, ident, now):
+    if not args.reason:
+        print("orbit-lock break requires --reason (breaking ownership is a deliberate, logged act)", file=sys.stderr)
+        return 2
+    state, data = L.read_lock(target)
+    L.log_event(target, "broke", ident, now, reason=args.reason, old_owner=(data or {}).get("owner_id"))
+    L.log_activity(target, "broke", f"writer lock broken: {args.reason}")
+    L.remove_lock(target)
+    print(f"writer lock: BROKEN and cleared ({args.reason}). The next writer will acquire it.")
+    return 0
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="orbit-lock", description="single-writer lock for an Orbit repo")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    for name in ("status", "acquire", "heartbeat", "release", "break"):
+        sp = sub.add_parser(name)
+        sp.add_argument("--target", default=".", type=Path)
+        sp.add_argument("--json", action="store_true")
+        sp.add_argument("--task", default="")
+        sp.add_argument("--owner", default="", help="owner_kind: interactive|background|agent")
+        sp.add_argument("--break-stale", action="store_true")
+        sp.add_argument("--force", action="store_true")
+        sp.add_argument("--reason", default="")
+    args = ap.parse_args(argv)
+    target = args.target.resolve()
+    if not (target / ".orbit").is_dir():
+        print(f"orbit-lock: {target} is not an Orbit-scaffolded repo (no .orbit/).", file=sys.stderr)
+        return 2
+    (target / ".orbit" / "locks").mkdir(parents=True, exist_ok=True)
+    ident = L.resolve_identity(None)
+    now = L.now_utc()
+    return {"status": cmd_status, "acquire": cmd_acquire, "heartbeat": cmd_heartbeat,
+            "release": cmd_release, "break": cmd_break}[args.cmd](target, args, ident, now)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

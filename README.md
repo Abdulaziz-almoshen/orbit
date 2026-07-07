@@ -15,7 +15,7 @@ updates itself.
 
 <br/>
 
-![version](https://img.shields.io/badge/version-0.29.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.30.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![self-updating](https://img.shields.io/badge/self--updating-yes-22863a)
@@ -71,6 +71,7 @@ the exact same clone + `./setup`. More options (marketplace plugin, "let Claude 
 | `/orbit:orbit-run <task>` | In a product repo | Force a task through the loop explicitly, bypassing the router's default-lane classification |
 | `scripts/orbit-status --follow` | In a product repo (terminal) | Live who's-talking dashboard — the headless-runner equivalent of the pinned Claude Code checklist |
 | `orbit-doctor` [`--fix`] | In a product repo | **Read-only** health check: scaffold drift (version · missing files/hooks · role/prose drift · preserved custom guard) **+** a safe-refresh plan for the managed hooks. `--fix` applies only the safe changes (add missing + upgrade *unmodified* hooks, backups kept) — **never** touches a customized hook |
+| `scripts/orbit-lock` `status`\|`break` | In a product repo | Inspect or recover the single-writer lock (enforcement is automatic via a hook). `status` = who owns the repo; `break --reason …` = clear a stale/abandoned lock (required reason, audited) |
 | `orbit-uninstall` [`--force`] | In a product repo | Remove Orbit's engine files + hooks from that repo (partial by design — see [Safety](#safety--what-binds-and-what-doesnt)) |
 | `/orbit-upgrade` | Anywhere | Upgrade the Orbit plugin itself (fetches latest, shows what changed) — see [Self-update](#self-update) |
 
@@ -380,6 +381,7 @@ guarantee and a suggestion:
 | Layer | Status | What it is |
 |---|---|---|
 | **Safety wall** (`PreToolUse` → `guard.py`) | ✅ **binds** | Denies force-push, `push --mirror`, `rm -rf` of a root/home/system path, and disk wipes (`dd`/`mkfs` to a device); asks before a plain push, `reset --hard`, `clean -f`, `rm -rf` of a hidden/`.git`/`.orbit`/absolute path, and `curl \| sh` — *before* the tool runs, model has no say. Sees through `cd x && …`, `sudo`/`env X=1 …`, subshells `( )`, brace groups, `\`-newline continuations, `$( )`/backticks, and `sh -lc` (recurses). **Threat model:** it stops obvious/accidental danger and common obfuscation and asks when a command is un-inspectable — it does *not* claim to defeat deliberate self-obfuscation (a script file, `python -c`, runtime aliases); nothing at the shell layer can. Add your repo's deploy/migration/secret-branch rules in one line. (59-case `tests/test_guard.py`.) |
+| **Single-writer lock** (`PreToolUse` → `orbit-lock-hook`) | ✅ **binds** | Many readers, one writer. Denies `Edit`/`Write`/`MultiEdit` and write-intent `Bash` (commits, `rm`, redirects, migrations…) when **another session** holds the repo — and *always* denies a foreign write to `.orbit/STATE.md` (the memory spine). One Claude Code session (its sub-agents share its `session_id`) is one writer; a second window or a headless `claude -p` loop is a foreign writer, serialized behind the lock. Auto-acquired on first write (atomic `O_EXCL` — no double-writer race), heartbeated, stale after ~30 min. **Fails open** on any error and honors `ORBIT_LOCK_DISABLE=1` — a lock bug never bricks the repo. Recover a stale lock explicitly + logged: `scripts/orbit-lock break --reason …`. (`tests/test_writer_lock*.py`.) |
 | **Iteration + runtime caps** (`ralph_loop.sh`) | ✅ **binds** | The runner stops the loop at the cap (max iterations, runtime, the STOP sentinel, and the gate-failure streak). |
 | **Token + cost budgets** | ✅ **binds on the runner** | `ralph_loop.sh` meters `claude -p --output-format json`; `loop.py` tracks + persists spend across `--resume`. `move_money` is `FORBIDDEN` (raises). |
 | **Router classification** (`UserPromptSubmit` → `route.py`) | ⚖️ **system decides, model executes** | A deterministic keyword classifier picks the lane (task→loop / question→direct) and injects it every turn — that call is the system's. But the model still *runs* the loop; a hook can't spawn the sub-agents itself. |
@@ -445,6 +447,9 @@ orbit/                          ← this repo == the skill dir (clones to ~/.cla
 │   ├── orbit-hook              # telemetry collector wired to Claude Code run events (trusted-install)
 │   ├── orbit-update-check      # prints UPGRADE_AVAILABLE / JUST_UPGRADED / nothing
 │   ├── orbit-doctor            # read-only project health: scaffold drift + safe-refresh plan (--fix applies safe)
+│   ├── orbit-lock              # single-writer lock CLI (status/acquire/heartbeat/release/break)
+│   ├── orbit-lock-hook         # PreToolUse enforcement of the writer lock (trusted-install, fail-open)
+│   ├── orbit_lock_lib.py       # shared lock core (decision table, classifier, atomic O_EXCL acquire)
 │   └── orbit-uninstall         # removes the Orbit scaffold from a product repo
 ├── references/                 # methodology, templates, roles, loop design, observability,
 │                               #   hooks/enforcement, profiles, playbooks (the skill library)

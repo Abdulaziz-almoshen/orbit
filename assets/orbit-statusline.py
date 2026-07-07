@@ -72,8 +72,10 @@ def _dur(secs):
     return f"{secs}s" if secs < 60 else f"{secs // 60}m{secs % 60}s" if secs < 3600 else f"{secs // 3600}h"
 
 
-def build_line(claude: dict, run: dict, agents: dict = None) -> str:
+def build_line(claude: dict, run: dict, agents: dict = None, lock_seg: str = "") -> str:
     seg = []
+    if lock_seg:
+        seg.append(lock_seg)                       # 🔒 read-only — another session holds the writer lock
     blocked = run.get("blocked_question")
     if blocked:
         seg.append("⚠ needs input")
@@ -150,8 +152,17 @@ def main():
             agents = {}
     except Exception:
         agents = {}
+    lock_seg = ""
+    try:                                                    # 🔒 only when ANOTHER session holds the lock
+        lk = json.loads((orbit / "locks" / "active-writer.json").read_text()) if orbit else {}
+        me = (claude.get("session_id") or os.environ.get("ORBIT_SESSION_ID")
+              or os.environ.get("CLAUDE_SESSION_ID") or os.environ.get("TERM_SESSION_ID"))
+        if isinstance(lk, dict) and lk.get("owner_id") and lk.get("owner_id") != me:
+            lock_seg = "🔒 read-only"
+    except Exception:
+        lock_seg = ""
     try:
-        print(build_line(claude, run, agents))
+        print(build_line(claude, run, agents, lock_seg))
     except Exception:
         print("")                                           # never crash the status line
 
