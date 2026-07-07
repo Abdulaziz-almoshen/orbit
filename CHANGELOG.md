@@ -3,6 +3,24 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.35.0
+
+**Train D (part 1) — the screenshot QA gate is now REQUIRED on HEAVY UI, and it BLOCKS.** Promotes the
+visual helpers from "nice to have" to a gate the Reviewer can't wave HEAVY UI past without evidence.
+
+`.orbit/qa/visual-gate.py` (new, provisioned on frontend repos): on HEAVY work (`design/approved.json`
+`impact_level=HEAVY`) it enforces the non-negotiables that "the process ran" can't paper over —
+- **no screenshot at all → BLOCK** (you cannot pass HEAVY UI on prose; produce evidence),
+- **blank canvas → BLOCK**, **mobile horizontal overflow → BLOCK** (full-page mobile capture wider than
+  the viewport), **sub-AA body contrast → BLOCK** (pure WCAG math from the token contract — no browser),
+- token drift → WARN (BLOCK with `--strict-tokens`); non-HEAVY work is N/A.
+
+**Honest degradation, never a silent pass:** PNG dimensions + contrast need no dependencies; blank/overlap
+pixel checks use Pillow if importable, else a 3-tier compressed-size heuristic (clearly-flat blocks,
+ambiguous warns). If evidence can't be produced, it blocks rather than passing HEAVY work through. Wired
+into `qa-validation.md`. New `tests/test_visual_gate.py` (crafts real PNGs: missing/blank/good/overflow/
+contrast/non-HEAVY). Full suite (35 files) + coherence + validate green.
+
 ## 0.34.0
 
 **Train C (part 2) — the visual dashboard: the terminal board as a premium read-only web app.**

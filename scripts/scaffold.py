@@ -223,7 +223,8 @@ PLAYBOOKS_FRONTEND = ["design-methodology.md", "anti-ai-aesthetics.md", "design-
 # since they act on a rendered UI. Helpers, not a bundled browser — they degrade gracefully when
 # Playwright isn't installed. Placed executable into .orbit/qa/. (src under assets/qa/ -> dst rel.)
 QA_FRONTEND = [("qa/snapshot.py", ".orbit/qa/snapshot.py"),
-               ("qa/extract-tokens.py", ".orbit/qa/extract-tokens.py")]
+               ("qa/extract-tokens.py", ".orbit/qa/extract-tokens.py"),
+               ("qa/visual-gate.py", ".orbit/qa/visual-gate.py")]   # REQUIRED visual gate for HEAVY UI
 
 # The design gate hook (Phase 2) — a coarse PreToolUse backstop that asks once per cycle when a
 # UI production file is edited with no design-decision record. Frontend-only (it acts on a

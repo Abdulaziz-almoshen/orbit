@@ -61,6 +61,15 @@ subcommand is pure-python and needs nothing. When Playwright isn't installed, pr
 chain, in order: **(1)** an installed browser MCP tool → **(2)** gstack `/browse` if present →
 **(3)** a manual screenshot + `snapshot.py diff`. The helpers exit 2 with the install line (never a
 traceback), so a missing browser degrades the check — it never crashes the cycle.
+
+**The gate itself — `.orbit/qa/visual-gate.py` is REQUIRED on HEAVY UI, and it BLOCKS.** Run it before
+you score fidelity: `python3 .orbit/qa/visual-gate.py --root . --screenshot build.png --mobile
+build-mobile.png --contract DESIGN.tokens.json` (exit 1 = BLOCKED). It enforces the non-negotiables that
+"the process ran" can't paper over: **HEAVY UI with no screenshot at all → BLOCK** (you cannot pass HEAVY
+UI on prose — produce evidence), a **blank canvas → BLOCK**, **mobile horizontal overflow → BLOCK**, and
+**sub-AA body contrast → BLOCK** (pure math from the token contract, no browser needed); token drift is a
+WARN (BLOCK with `--strict-tokens`). It degrades honestly — dimensions + contrast need no dependencies,
+and it never *silent-passes*: if evidence can't be produced it blocks rather than waving HEAVY work through.
 3. **Intentional change?** Never self-approve a visual delta — batch the diffs into **one
    `AskUserQuestion`** (per-change options: Accept / Reject, with the diff evidence linked and your
    recommendation labeled "(Recommended)"); accepted changes advance the baseline. Never a prose ask.
