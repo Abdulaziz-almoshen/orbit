@@ -3,6 +3,32 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.31.1
+
+**P0 refresh-safety fix: a poisoned manifest can no longer let a "safe" refresh clobber a customized
+guard.** `orbit-doctor` was giving two incompatible answers about the same file — drift said
+"customized — preserved" while the refresh plan said "unmodified — would auto-upgrade." Root cause: the
+0.28.1 fix stopped *writing* laundered manifest entries but still *trusted* one written by an older
+scaffold. A pre-0.28.1 scaffold could record a **customized** guard's hash as if Orbit placed it, so
+`_classify_managed` saw `cur == manifest[rel]` and classified it "upgrade" — and both the refresh plan
+*and* the full `/orbit` re-run's `migrate_hooks` would then overwrite it.
+
+The fix (guard.py is the safety wall, so it gets the strongest protection):
+- **The guard never upgrades on a manifest vouch** — only if its bytes match a hash Orbit *knows* it
+  shipped (`_LEGACY_OLD`), which can't have been laundered. Other hooks may still trust the manifest.
+- **Repo-policy markers force "customized"** for any managed check (`REQUIRE_DEPLOY_APPROVAL`, `STANDING
+  DEPLOY AUTHORITY`, …) — content Orbit never ships, so a manifest can't launder it back to "managed."
+- **Manifest repair:** on a write path, a laundered entry (manifest vouches for marker-bearing content)
+  is removed and reported ("manifest repaired — a customized check was mis-recorded as Orbit-managed").
+- **Drift and the refresh plan now derive from the *same* classifier**, so they can never disagree; and
+  `migrate_hooks` has a hard safety net that refuses to overwrite a policy-bearing guard whatever else says.
+- The legitimate path is intact: an *unmodified* old check still auto-upgrades on its manifest vouch
+  ("unknown hash" alone is not poison — only policy markers are).
+
+Regression tests use the real `REQUIRE_DEPLOY_APPROVAL = False` marker + a markerless-customization case;
+`--apply-safe-refresh` leaves the guard byte-for-byte unchanged across repeated runs. Full suite (30
+files) + coherence + validate green.
+
 ## 0.31.0
 
 **Trusted safety runner — a repo can no longer silently weaken its own safety wall.** (Train A keystone.)

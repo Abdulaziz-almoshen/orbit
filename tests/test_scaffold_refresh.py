@@ -158,6 +158,61 @@ def test_repeated_full_scaffold_preserves_customization():
             fails.append("[repeated-scaffold] customized guard clobbered across two /orbit re-runs")
 
 
+def test_poisoned_manifest_never_clobbers_customized_guard():
+    """P0 regression (v0.31.1): a pre-0.28.1 scaffold could 'launder' a CUSTOMIZED guard's hash into the
+    manifest, so a later 'safe' refresh believed it was Orbit-owned and would overwrite it. The guard now
+    upgrades ONLY on a known-shipped hash (never a manifest vouch), policy markers force 'customized', and
+    the manifest is repaired. Uses the real recruitment-platform marker `REQUIRE_DEPLOY_APPROVAL = False`."""
+    with tempfile.TemporaryDirectory() as d:
+        t = Path(d)
+        _scaffold(t)
+        guard = t / ".orbit/checks/guard.py"
+        guard.write_bytes(guard.read_bytes() + b"\n# recruitment-platform specifics\nREQUIRE_DEPLOY_APPROVAL = False\n")
+        sha0 = _sha(guard)
+        # POISON the manifest exactly as a pre-fix scaffold did: record the CUSTOMIZED hash as "placed"
+        man = t / MANIFEST_REL
+        m = json.loads(man.read_text())
+        m[".orbit/checks/guard.py"] = sha0
+        man.write_text(json.dumps(m, indent=2, sort_keys=True) + "\n")
+        # drift and plan must AGREE that it's customized (no "would auto-upgrade")
+        drift = _run("--check-drift", "--target", str(t)).stdout
+        plan = _run("--plan-refresh", "--target", str(t)).stdout
+        if "guard.py is customized" not in drift:
+            fails.append(f"[poisoned] drift must call the guard customized; got:\n{drift[:300]}")
+        if "guard.py" in plan and "auto-upgrade" in plan:
+            fails.append(f"[poisoned] plan must NOT offer to auto-upgrade the customized guard; got:\n{plan[:300]}")
+        # apply-safe-refresh must leave the guard byte-for-byte unchanged (repeatedly) and repair the manifest
+        for i in (1, 2, 3):
+            _run("--apply-safe-refresh", "--target", str(t))
+            if _sha(guard) != sha0:
+                fails.append(f"[poisoned] guard was CLOBBERED on apply #{i} (the P0 bug)")
+                break
+        if b"REQUIRE_DEPLOY_APPROVAL" not in guard.read_bytes():
+            fails.append("[poisoned] the guard lost its repo policy")
+        if list((t / ".orbit/checks").glob("guard.py.bak.*")):
+            fails.append("[poisoned] a customized guard was backed-up/replaced — must be untouched")
+        if ".orbit/checks/guard.py" in json.loads((t / MANIFEST_REL).read_text()):
+            fails.append("[poisoned] the laundered manifest entry was not repaired (removed)")
+
+
+def test_markerless_custom_guard_also_protected():
+    """Defense-in-depth: even WITHOUT a policy marker, a guard whose bytes aren't a known-shipped version
+    is never auto-upgraded on a manifest vouch (the guard trusts only known-shipped hashes)."""
+    with tempfile.TemporaryDirectory() as d:
+        t = Path(d)
+        _scaffold(t)
+        guard = t / ".orbit/checks/guard.py"
+        guard.write_bytes(guard.read_bytes() + b"\n# a quiet local tweak, no policy marker\n")
+        sha0 = _sha(guard)
+        man = t / MANIFEST_REL
+        m = json.loads(man.read_text())
+        m[".orbit/checks/guard.py"] = sha0
+        man.write_text(json.dumps(m, indent=2, sort_keys=True) + "\n")
+        _run("--apply-safe-refresh", "--target", str(t))
+        if _sha(guard) != sha0:
+            fails.append("[markerless] a customized guard with a poisoned manifest was clobbered")
+
+
 def test_orbit_doctor_is_read_only():
     doctor = ROOT / "bin" / "orbit-doctor"
     if not os.access(doctor, os.X_OK):
@@ -180,7 +235,9 @@ def test_orbit_doctor_is_read_only():
 def main():
     for fn in (test_plan_refresh_is_read_only, test_plan_refresh_classifies_and_shows_diff,
                test_apply_safe_refresh_upgrades_adds_preserves, test_repeated_refresh_preserves_customization,
-               test_repeated_full_scaffold_preserves_customization, test_orbit_doctor_is_read_only):
+               test_repeated_full_scaffold_preserves_customization,
+               test_poisoned_manifest_never_clobbers_customized_guard, test_markerless_custom_guard_also_protected,
+               test_orbit_doctor_is_read_only):
         try:
             fn()
         except Exception as e:

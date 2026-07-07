@@ -65,6 +65,17 @@ def _sha(b: bytes) -> str:
     return hashlib.sha256(b).hexdigest()
 
 
+# Repo-policy content Orbit never ships in a stock check. Its presence is a strong "this file was
+# customized" signal that OVERRIDES any manifest vouch — a poisoned pre-0.28.1 manifest (which recorded a
+# CUSTOMIZED hash as if we placed it) can't launder such a file back to "managed/safe-to-upgrade".
+_POLICY_MARKERS = (b"REQUIRE_DEPLOY_APPROVAL", b"STANDING DEPLOY AUTHORITY", b"DEPLOY_APPROVAL",
+                   b"STANDING_DEPLOY_AUTHORITY")
+
+
+def _has_policy_markers(content: bytes) -> bool:
+    return any(m in content for m in _POLICY_MARKERS)
+
+
 def _read_json(p: Path) -> dict:
     try:
         return json.loads(p.read_text())
@@ -88,26 +99,80 @@ def _classify_managed(rel: str, content: bytes, manifest: dict):
     cur = _sha(content)
     if cur == _sha(new):
         return ("current", new)                             # already the current shipped version
-    unmodified = (rel in manifest and cur == manifest[rel]) or cur in _LEGACY_OLD.get(rel, set())
-    return (("upgrade" if unmodified else "customized"), new)
+
+    # It differs from the current shipped bytes → "unmodified Orbit code (safe to swap)" or "the user
+    # customized it (hands off)"? Two hard rules protect the safety wall from the manifest-laundering bug:
+    #   (a) ANY repo-policy marker ⇒ customized, full stop (a poisoned manifest can't override content).
+    #   (b) guard.py is the safety wall: NEVER trust a manifest vouch for it (a pre-0.28.1 scaffold could
+    #       have recorded a customized guard's hash). It upgrades ONLY if its bytes match a hash we KNOW
+    #       we shipped (_LEGACY_OLD) — a hash we can't have laundered. Other hooks may trust the manifest.
+    if _has_policy_markers(content):
+        return ("customized", new)
+    known_shipped = cur in _LEGACY_OLD.get(rel, set())
+    if rel.endswith("checks/guard.py"):
+        return ("upgrade", new) if known_shipped else ("customized", new)
+    manifest_vouch = rel in manifest and cur == manifest[rel]
+    return (("upgrade" if (known_shipped or manifest_vouch) else "customized"), new)
+
+
+def repair_manifest(target: Path) -> list:
+    """Remove POISONED manifest entries. The manifest records the SHIPPED bytes we placed, so a re-run
+    can tell 'unmodified since we placed it' from 'the user customized it'. A pre-0.28.1 scaffold could
+    record a CUSTOMIZED check's own hash as if we placed it (manifest laundering), which would let a
+    later 'safe' refresh clobber it. An entry is poisoned when it vouches for the file's CURRENT bytes
+    but those bytes aren't a version we shipped (current or known-old), or the file carries repo-policy
+    markers. Dropping the entry makes the file classify (correctly) as 'customized' thereafter. Returns
+    the repaired rels; writes only when something changed."""
+    p = target / MANIFEST_REL
+    manifest = _read_json(p)
+    if not isinstance(manifest, dict) or not manifest:
+        return []
+    repaired = []
+    for rel in list(manifest):
+        if rel not in MANAGED_CHECKS:
+            continue
+        f = target / rel
+        if not f.exists():
+            continue
+        content = f.read_bytes()
+        cur = _sha(content)
+        if manifest.get(rel) != cur:
+            continue                                        # manifest already differs from the file → not this bug
+        # Poisoned = the manifest vouches for content carrying REPO-POLICY markers (Orbit never ships those,
+        # so we can't have placed it). NOTE: 'unknown hash' alone is NOT poison — a legitimately old,
+        # UNMODIFIED check has a non-current hash the manifest rightly vouches for (that's how it upgrades).
+        if _has_policy_markers(content):
+            del manifest[rel]
+            repaired.append(rel)
+    if repaired:
+        p.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+    return repaired
 
 
 def migrate_hooks(target: Path, created, warnings):
     """Carry existing repos forward to the current shipped check hooks (security/correctness fixes).
-    Auto-replaces a managed check ONLY when it is UNMODIFIED — byte-identical to what we placed (the
-    manifest) or to a known-old shipped version. A locally-modified hook (e.g. a guard with custom
-    §8 rules) is warned about and NEVER overwritten; an already-current hook is left untouched."""
+    Auto-replaces a managed check ONLY when it is UNMODIFIED — a known-old shipped version (or, for
+    non-guard hooks, the manifest vouches unmodified-since-placed). A locally-modified hook (e.g. a
+    guard with custom §8 rules) is warned about and NEVER overwritten; an already-current hook is left
+    untouched. Repairs a poisoned (laundered) manifest FIRST, so a customized guard can't be clobbered."""
+    for rel in repair_manifest(target):
+        created.append(f"{rel}  (manifest repaired — a CUSTOMIZED check had been mis-recorded as "
+                       f"Orbit-managed; it will NOT be auto-upgraded)")
     manifest = _read_json(target / MANIFEST_REL)
     for rel, (src_rel, marker) in MANAGED_CHECKS.items():
         dst = target / rel
         if not dst.exists():
             continue                                        # fresh file — normal _place copies the new one
-        state, new = _classify_managed(rel, dst.read_bytes(), manifest)
+        content = dst.read_bytes()
+        state, new = _classify_managed(rel, content, manifest)
+        # HARD safety net for the wall: never overwrite a guard that carries repo policy, whatever else says.
+        if rel.endswith("checks/guard.py") and _has_policy_markers(content):
+            state = "customized"
         if state in ("foreign", "current"):
             continue
         if state == "upgrade":                              # ours, unchanged by the user → carry forward
             bak = dst.with_name(dst.name + f".bak.{int(time.time())}")
-            bak.write_bytes(dst.read_bytes())
+            bak.write_bytes(content)
             dst.write_bytes(new)
             dst.chmod(0o755)
             created.append(f"{rel}  (⚠ UPDATED to the current shipped version — security/correctness "
@@ -384,8 +449,11 @@ def scaffold_drift(target: Path) -> dict:
     if "guard.py" not in wired and "orbit-guard" not in wired:   # either wall counts as wired
         hook_drift.insert(0, "safety guard")
     guard = target / ".orbit/checks/guard.py"
-    guard_custom = bool(guard.exists() and b"Orbit safety guard" in guard.read_bytes()
-                        and _sha(guard.read_bytes()) != _sha((ASSETS / "checks/guard.py").read_bytes()))
+    guard_custom = False                                     # derive from the SAME classifier the refresh
+    if guard.exists():                                       # plan uses, so drift + plan can never disagree
+        _gstate, _ = _classify_managed(".orbit/checks/guard.py", guard.read_bytes(),
+                                       _read_json(target / MANIFEST_REL))
+        guard_custom = (_gstate == "customized")
     stale_prose = []
     for rel in (".orbit/STATE.md", "CLAUDE.md"):
         f = target / rel
