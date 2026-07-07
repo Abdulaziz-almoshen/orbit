@@ -1,0 +1,17 @@
+// Router corpus — user prompt → expected lane (task | question | ambiguous | skip). Deterministic
+// keyword classification (assets/checks/route.py). Comments start with //.
+{"prompt": "add a dark mode toggle to the settings page", "expect": "task", "note": "build request"}
+{"prompt": "fix the failing checkout test", "expect": "task", "note": "fix request"}
+{"prompt": "refactor the auth module to use async", "expect": "task", "note": "refactor"}
+{"prompt": "implement pagination on the results endpoint", "expect": "task", "note": "implement"}
+{"prompt": "build a CSV export for the reports screen", "expect": "task", "note": "build"}
+{"prompt": "migrate the users table to add a phone column", "expect": "task", "note": "migration task"}
+{"prompt": "what does the dispatcher role do?", "expect": "question", "note": "explanation"}
+{"prompt": "how does the router decide the lane?", "expect": "question", "note": "how-question"}
+{"prompt": "why is the guard fail-open?", "expect": "question", "note": "why-question"}
+{"prompt": "which file holds the loop config?", "expect": "question", "note": "which-question"}
+{"prompt": "explain the gearbox tiers", "expect": "question", "note": "explain"}
+{"prompt": "yes", "expect": "skip", "note": "bare acknowledgment"}
+{"prompt": "ok thanks", "expect": "skip", "note": "acknowledgment"}
+{"prompt": "go ahead", "expect": "skip", "note": "approval"}
+{"prompt": "perfect", "expect": "skip", "note": "praise"}

@@ -15,7 +15,7 @@ updates itself.
 
 <br/>
 
-![version](https://img.shields.io/badge/version-0.35.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.36.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![self-updating](https://img.shields.io/badge/self--updating-yes-22863a)
@@ -423,9 +423,12 @@ whose brakes actually bind — and that part is proven, not asserted:
 - 📓 **[Case study](docs/case-study.md)** — a real, reproducible walkthrough on a messy demo repo:
   the scaffold, the surface-fitted team, and the safety wall / router / budgets binding, with the
   actual command output pasted in (no mock-ups).
-- 🧪 **[Evals](docs/evals.md)** — harness invariants that pass **3/3** (deterministic, runnable now)
-  plus an honest, still-empty task-quality A/B table. We publish real numbers or none — never faked.
-- ✅ **19 automated test files + the coherence gate** — guard schema + 70+ bypass/wrapper cases,
+- 🧪 **[Evals](docs/evals.md)** — harness invariants that pass **3/3**, plus **deterministic corpora at
+  100%**: a **40-case guard red-team corpus** (deny/ask/allow incl. `cd x && …` / `sh -c` / `$( )` /
+  quoted-var obfuscation) and a **15-case router corpus** (task/question/skip) — `python3
+  evals/run-corpus.py` (CI-gated by `tests/test_eval_corpus.py`, fails on any regression). Plus an honest,
+  still-empty task-quality A/B table. We publish real numbers or none — never faked.
+- ✅ **36 automated test files + the coherence gate** — guard schema + 70+ bypass/wrapper cases,
   router accuracy (69/69), budget persistence, migration safety, install/uninstall behavior,
   scaffold idempotency, config-vs-code consistency, hook-drift detection, telemetry schema +
   prompt redaction, the hook collector, the dashboard/status line, confidence + lifecycle, and

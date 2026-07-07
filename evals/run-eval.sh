@@ -38,6 +38,10 @@ else
   echo "❌ HARNESS INVARIANTS: $failed/$total cases had a failing invariant (see above)."
 fi
 
+echo
+echo "═══ A2. DETERMINISTIC CORPORA (guard red-team + router; machine-checkable, no model) ═══"
+python3 evals/run-corpus.py --suite all
+
 cat <<'PROTOCOL'
 
 ═══ B. TASK-QUALITY A/B (manual — protocol, not fabricated numbers) ═══

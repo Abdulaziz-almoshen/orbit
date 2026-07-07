@@ -3,6 +3,21 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.36.0
+
+**Train D (part 2) — deterministic eval corpora with a published pass-rate, CI-gated.** The eval story
+had structural harness invariants + a manual (model-needed) task-quality A/B. This adds the model-free
+half: two machine-checkable corpora that turn "the guard/router still behave" into a number CI enforces.
+
+- **`evals/corpus/guard.jsonl`** — a **40-case guard red-team corpus** (deny/ask/allow), codifying the
+  hardened behaviour incl. the obfuscation cases from the red-team rounds (`cd x && rm -rf /`, `sh -c`,
+  `$( )`, `eval`, quoted-var command names, dry-run force-push, relative-vs-sensitive `rm`).
+- **`evals/corpus/router.jsonl`** — a **15-case router corpus** (task / question / skip).
+- **`evals/run-corpus.py`** `[--suite guard|router|all] [--json]` runs them (exit 1 on any regression);
+  wired into `evals/run-eval.sh` as section A2. Both corpora are at **100%**.
+- **`tests/test_eval_corpus.py`** gates it in CI — a single mismatch fails the suite, so the published
+  rate can't silently rot. README Maturity section updated. Full suite (36 files) + coherence + validate green.
+
 ## 0.35.0
 
 **Train D (part 1) — the screenshot QA gate is now REQUIRED on HEAVY UI, and it BLOCKS.** Promotes the
