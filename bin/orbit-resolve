@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+"""
+orbit-resolve — the single deterministic "where is Orbit, and is it current?" resolver.
+
+Replaces the model-executed candidate-loop prose that made `/orbit-upgrade` feel brittle ("standard
+paths didn't resolve", "I found it eventually"). The ACTIVE install is simply the one running this
+script (it's invoked from the loaded install's own `bin/`), so it can ALWAYS name it — there is no
+search-and-maybe-fail. Other installs (e.g. a stale plugin-cache copy) are listed but never confused
+for the active one. Prints one JSON object; never errors the caller (exit 0).
+
+Usage:
+  orbit-resolve                 # resolve + report (no network)
+  orbit-resolve --upgrade-check # also `git fetch` + compute how many commits behind origin
+"""
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+
+def _git(cwd, *args, timeout=8):
+    try:
+        r = subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True, timeout=timeout)
+        return r.stdout.strip() if r.returncode == 0 else ""
+    except Exception:
+        return ""
+
+
+def _version(root: Path) -> str:
+    try:
+        return (root / "VERSION").read_text().strip() or "unknown"
+    except Exception:
+        return "unknown"
+
+
+def _active_root() -> Path:
+    """The install running this script: <root>/bin/orbit-resolve. Prefer CLAUDE_PLUGIN_ROOT when it is
+    a VERSION-bearing Orbit root (the marketplace path); else this script's own grandparent."""
+    root = os.environ.get("CLAUDE_PLUGIN_ROOT")
+    if root and (Path(root) / "VERSION").is_file():
+        return Path(root)
+    return Path(__file__).resolve().parent.parent
+
+
+def _candidate_roots():
+    """Every Orbit install we can find on disk: the skills-dir clone(s) + any marketplace plugin-cache
+    copies (~/.claude/plugins/cache/*/orbit/*/). Deduped by resolved path."""
+    home = Path(os.path.expanduser("~"))
+    cc = Path(os.environ.get("CLAUDE_CONFIG_DIR") or (home / ".claude"))
+    roots = [cc / "skills" / "orbit", home / ".claude" / "skills" / "orbit"]
+    for base in [home / ".claude" / "plugins" / "cache", cc / "plugins" / "cache"]:
+        if base.is_dir():
+            try:
+                for vfile in base.glob("*/orbit/*/VERSION"):
+                    roots.append(vfile.parent)
+            except Exception:
+                pass
+    seen, out = set(), []
+    for r in roots:
+        try:
+            rp = r.resolve()
+        except Exception:
+            continue
+        if rp.is_dir() and (rp / "VERSION").is_file() and str(rp) not in seen:
+            seen.add(str(rp))
+            out.append(rp)
+    return out
+
+
+def main():
+    upgrade_check = "--upgrade-check" in sys.argv
+    active = _active_root().resolve()
+    is_git = (active / ".git").is_dir()
+    branch = (_git(active, "rev-parse", "--abbrev-ref", "HEAD") or "main") if is_git else "main"
+    commit = _git(active, "rev-parse", "--short", "HEAD") if is_git else ""
+    porcelain = _git(active, "status", "--porcelain") if is_git else ""
+    # porcelain line = 2-col status + path; strip the status + surrounding space to get just the path
+    dirty_files = [ln[2:].strip() for ln in porcelain.splitlines() if ln.strip()]
+
+    behind = 0
+    if upgrade_check and is_git:
+        _git(active, "fetch", "origin", branch, timeout=25)
+        cnt = _git(active, "rev-list", "--count", f"HEAD..origin/{branch}")
+        behind = int(cnt) if cnt.isdigit() else 0
+
+    others = []
+    for r in _candidate_roots():
+        if r == active:
+            continue
+        others.append({"path": str(r), "version": _version(r), "active": False})
+
+    print(json.dumps({
+        "active_install": str(active),
+        "version": _version(active),
+        "commit": commit,
+        "branch": branch,
+        "is_git": is_git,
+        "behind": behind,
+        "dirty": bool(dirty_files),
+        "dirty_files": dirty_files[:50],
+        "other_installs": others,
+    }, indent=2))
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

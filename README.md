@@ -15,7 +15,7 @@ updates itself.
 
 <br/>
 
-![version](https://img.shields.io/badge/version-0.31.1-2b6cb0)
+![version](https://img.shields.io/badge/version-0.31.2-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![self-updating](https://img.shields.io/badge/self--updating-yes-22863a)
@@ -445,7 +445,8 @@ orbit/                          ← this repo == the skill dir (clones to ~/.cla
 ├── bin/
 │   ├── orbit-preamble          # the skill's STEP 0 in one command (resolve + version check)
 │   ├── orbit-hook              # telemetry collector wired to Claude Code run events (trusted-install)
-│   ├── orbit-update-check      # prints UPGRADE_AVAILABLE / JUST_UPGRADED / nothing
+│   ├── orbit-update-check      # prints UPGRADE_AVAILABLE / JUST_UPGRADED / nothing (throttled bg check)
+│   ├── orbit-resolve           # deterministic "where is Orbit + is it current?" → JSON (active/stale/dirty/behind)
 │   ├── orbit-doctor            # read-only project health: scaffold drift + safe-refresh plan (--fix applies safe)
 │   ├── orbit-lock              # single-writer lock CLI (status/acquire/heartbeat/release/break)
 │   ├── orbit-lock-hook         # PreToolUse enforcement of the writer lock (trusted-install, fail-open)

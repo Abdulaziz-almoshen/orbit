@@ -66,6 +66,17 @@ def main():
         if "./orbit-update-check" not in upb[0]:
             fails.append("[AC2] the forced check should invoke a LITERAL ./orbit-update-check")
 
+    # AC2b — the /orbit-upgrade Step 0 resolver block must also evaluate to None (literal ./orbit-resolve)
+    rb = [b for b in _bash_blocks(_read("orbit-upgrade", "SKILL.md")) if "orbit-resolve --upgrade-check" in b]
+    if not rb:
+        fails.append("[AC2b] could not locate the /orbit-upgrade Step 0 resolver block")
+    else:
+        v = g.evaluate(rb[0])
+        if v is not None:
+            fails.append(f"[AC2b] the /orbit-upgrade Step 0 resolver block must evaluate to None, got {v}")
+        if "./orbit-resolve" not in rb[0]:
+            fails.append("[AC2b] Step 0 should invoke a LITERAL ./orbit-resolve")
+
     # AC3 — the guard is NOT loosened: still asks on a bare-$var command, denies a real substitution
     ax = g.evaluate('"$X" arg')
     if not ax or ax[0] != "ask":

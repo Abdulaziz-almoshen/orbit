@@ -3,6 +3,26 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.31.2
+
+**`/orbit-upgrade` becomes boring — one deterministic resolver instead of a narrated candidate search.**
+The upgrade flow used to run a shell loop over candidate paths + a fallback `find`, so it could say
+things like "standard paths didn't resolve" or "I found it eventually" even when the answer was correct.
+For a tool whose whole job is *find Orbit and update it*, boring is the right emotion.
+
+- **`bin/orbit-resolve`** (new): the single source of truth for "where is Orbit, and is it current?"
+  It ALWAYS names the active install (it runs from it — no search that can fail) and prints JSON:
+  `active_install`, `version`, `commit`, `branch`, `is_git`, `behind` (commits behind origin, with
+  `--upgrade-check`), `dirty` + `dirty_files`, and `other_installs` (e.g. a stale plugin-cache copy like
+  `…/orbit/orbit/0.4.0`, listed as `active:false` so it's never confused for the live one). Never errors
+  the caller.
+- **`/orbit-upgrade` Step 0** is now a single literal call — `( cd <install>/bin && ./orbit-resolve
+  --upgrade-check )`, same guard-safe literal-executable style as the `/orbit` preamble — and the model
+  just reads the JSON. No candidate loop, no narrated search.
+- New `tests/test_orbit_resolve.py` (active-vs-stale, dirty tracked files, behind counts commits, never
+  fails without git) + the Step 0 block is pinned guard-safe in `test_generated_commands.py`. Full suite
+  (31 files) + coherence + validate green.
+
 ## 0.31.1
 
 **P0 refresh-safety fix: a poisoned manifest can no longer let a "safe" refresh clobber a customized

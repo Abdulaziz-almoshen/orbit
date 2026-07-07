@@ -23,29 +23,33 @@ scaffolded into a product repo (those are that project's files).
 This section is referenced by the `/orbit` preamble when it detects
 `UPGRADE_AVAILABLE <old> <new>`. Run the steps in order.
 
-### Step 0: locate the install
+### Step 0: resolve the install (one deterministic call — no candidate loop)
+
+Run the trusted resolver. It ALWAYS names the active install (it runs from it), and reports version,
+commit, how many commits behind origin, dirty tracked files, and any stale copies — so there is no
+narrated search and no "standard paths didn't resolve." The executable is literal (`./orbit-resolve`),
+the variable is only a `cd` argument — same style as the `/orbit` preamble, so the guard never prompts.
 
 ```bash
-# Resolve the plugin root (holds VERSION, bin/, CHANGELOG.md, skills/).
-CANDIDATES="
-${CLAUDE_PLUGIN_ROOT:-}
-$HOME/.claude/plugins/cache/orbit/orbit
-$HOME/.claude/skills/orbit
-.claude/skills/orbit
-"
-INSTALL_DIR=""
-for _c in $CANDIDATES; do
-  [ -n "$_c" ] && [ -f "$_c/VERSION" ] && { INSTALL_DIR="$(cd "$_c" && pwd -P)"; break; }
-done
-# Fallback: search the plugin cache for our VERSION-bearing root.
-if [ -z "$INSTALL_DIR" ]; then
-  INSTALL_DIR="$(find "$HOME/.claude/plugins/cache" -maxdepth 3 -type f -name VERSION 2>/dev/null \
-    | while read -r v; do d="$(dirname "$v")"; [ -d "$d/skills/orbit" ] && echo "$d" && break; done)"
+_CC="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+if   [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -x "$CLAUDE_PLUGIN_ROOT/bin/orbit-resolve" ]; then ( cd "$CLAUDE_PLUGIN_ROOT/bin" && ./orbit-resolve --upgrade-check )
+elif [ -x "$_CC/skills/orbit/bin/orbit-resolve" ];          then ( cd "$_CC/skills/orbit/bin" && ./orbit-resolve --upgrade-check )
+elif [ -x "$HOME/.claude/skills/orbit/bin/orbit-resolve" ]; then ( cd "$HOME/.claude/skills/orbit/bin" && ./orbit-resolve --upgrade-check )
+elif [ -x ".claude/skills/orbit/bin/orbit-resolve" ];       then ( cd .claude/skills/orbit/bin && ./orbit-resolve --upgrade-check )
 fi
-[ -z "$INSTALL_DIR" ] && { echo "ERROR: orbit install not found"; exit 1; }
-echo "INSTALL_DIR=$INSTALL_DIR"
-echo "IS_GIT=$([ -d "$INSTALL_DIR/.git" ] && echo yes || echo no)"
 ```
+
+Read the JSON it prints:
+- `active_install` → **`INSTALL_DIR`** for the rest of these steps; `is_git` → **`IS_GIT`**.
+- `behind > 0` → an upgrade is available (proceed). `behind == 0` → already current (tell the user the
+  version and stop, unless they explicitly asked to re-pull).
+- `dirty == true` → mention `dirty_files` before Step 3 (they'll be stashed).
+- `other_installs` non-empty → note the stale copy (e.g. an old plugin-cache `…/orbit/orbit/0.4.0`) so
+  the user can remove it; it is NOT the active install and won't be touched.
+
+(Only if the resolver produced no output — a broken/very old install without `bin/orbit-resolve` — fall
+back to: read `VERSION` from `${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/orbit}` and treat `IS_GIT` from
+whether that dir has `.git`.)
 
 ### Step 1: ask once, then honor the choice (consent-once, opt-out default)
 
