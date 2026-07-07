@@ -25,6 +25,17 @@ chmod +x "$HERE"/assets/checks/*.py 2>/dev/null || true
 VER="$(tr -d '[:space:]' < "$HERE/VERSION" 2>/dev/null || echo '?')"
 SHA="$(git -C "$HERE" rev-parse --short HEAD 2>/dev/null || echo 'not a git checkout')"
 
+# Record verifiable-install metadata in ORBIT_HOME (version/commit/tag/manifest-checksum/channel/time),
+# so `orbit-verify` and `/orbit-upgrade` can state exactly what's installed. A checksums.txt.asc (signed
+# in CI) would make `channel` "release"; without it we honestly record "dev" (unsigned mutable branch).
+_TAG="$(git -C "$HERE" describe --tags --exact-match 2>/dev/null || echo '')"
+_CKSUM="$(shasum -a 256 "$HERE/checksums.txt" 2>/dev/null | cut -d' ' -f1 || echo '')"
+_CHANNEL="dev"; [ -f "$HERE/checksums.txt.asc" ] && _CHANNEL="release"
+_OH="${ORBIT_HOME:-$HOME/.orbit}"; mkdir -p "$_OH" 2>/dev/null || true
+_INSTALLED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo '')"
+printf '{\n  "version": "%s",\n  "commit": "%s",\n  "tag": "%s",\n  "manifest_sha256": "%s",\n  "channel": "%s",\n  "path": "%s",\n  "installed_at": "%s"\n}\n' \
+  "$VER" "$SHA" "$_TAG" "$_CKSUM" "$_CHANNEL" "$HERE" "$_INSTALLED_AT" > "$_OH/install.json" 2>/dev/null || true
+
 # 2. is this a valid install location? (~/.claude/skills/orbit) — decide BEFORE touching anything
 #    outside $HERE, so a mis-placed clone leaves no stray symlinks in the parent dir.
 _expect="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills"

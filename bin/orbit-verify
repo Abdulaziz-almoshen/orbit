@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+"""
+orbit-verify — verify an Orbit install against its signed-manifest substrate. Recomputes the sha256 of
+every file listed in `checksums.txt` and reports OK / MODIFIED / MISSING — so you can prove the installed
+tree is exactly what shipped (integrity + tamper detection), the point of a verifiable release.
+
+  orbit-verify                 # verify the install this script lives in
+  orbit-verify --root DIR      # verify a specific install tree
+  orbit-verify --json
+
+Signature (when present): if `checksums.txt.asc` exists AND `gpg` is available, the detached signature of
+checksums.txt is checked first — a bad/absent signature is reported. Without it we still verify integrity
+against the committed manifest, and say plainly that the channel is unsigned (a mutable branch), so the
+output never overstates trust. Exit: 0 = all files match (and signature ok/absent-but-clean) · 1 = a
+file was MODIFIED or is MISSING · 2 = no manifest / usage error.
+"""
+import argparse
+import hashlib
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+
+def _verify_signature(root: Path):
+    asc = root / "checksums.txt.asc"
+    if not asc.exists():
+        return ("unsigned", "no checksums.txt.asc — this is a dev channel (unsigned, mutable branch)")
+    try:
+        r = subprocess.run(["gpg", "--verify", str(asc), str(root / "checksums.txt")],
+                           capture_output=True, text=True, timeout=15)
+        return ("signed-ok", "gpg signature verified") if r.returncode == 0 else \
+               ("signed-bad", "gpg signature FAILED to verify")
+    except Exception:
+        return ("unverified", "checksums.txt.asc present but gpg is unavailable — signature not checked")
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Verify an Orbit install against checksums.txt")
+    ap.add_argument("--root", default="", help="install tree to verify (default: this script's install)")
+    ap.add_argument("--json", action="store_true")
+    a = ap.parse_args()
+    root = Path(a.root).resolve() if a.root else Path(__file__).resolve().parent.parent
+    manifest = root / "checksums.txt"
+    if not manifest.exists():
+        msg = f"no checksums.txt in {root} — nothing to verify (pre-verifiable-release install?)"
+        print(json.dumps({"ok": False, "reason": msg}) if a.json else msg, file=sys.stderr)
+        sys.exit(2)
+
+    modified, missing, checked = [], [], 0
+    for line in manifest.read_text().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        want, _, rel = line.partition("  ")
+        f = root / rel
+        if not f.is_file():
+            missing.append(rel)
+            continue
+        checked += 1
+        if hashlib.sha256(f.read_bytes()).hexdigest() != want:
+            modified.append(rel)
+
+    sig_state, sig_msg = _verify_signature(root)
+    ok = not modified and not missing and sig_state != "signed-bad"
+    result = {"ok": ok, "root": str(root), "checked": checked,
+              "modified": modified, "missing": missing, "signature": sig_state, "signature_note": sig_msg}
+    if a.json:
+        print(json.dumps(result, indent=2))
+    else:
+        print(f"orbit-verify {root}")
+        print(f"  {checked} files match" if not modified and not missing
+              else f"  {len(modified)} MODIFIED, {len(missing)} MISSING of {checked + len(missing)}")
+        for m in modified:
+            print(f"  ✗ MODIFIED {m}")
+        for m in missing:
+            print(f"  ✗ MISSING  {m}")
+        print(f"  signature: {sig_state} — {sig_msg}")
+        print("  ✅ verified" if ok else "  ❌ verification FAILED")
+    sys.exit(0 if ok else 1)
+
+
+if __name__ == "__main__":
+    main()

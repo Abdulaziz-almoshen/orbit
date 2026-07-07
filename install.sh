@@ -52,5 +52,8 @@ fi
 # which code you have, since installs currently track a mutable branch, not a signed release.
 _SHA="$(git -C "$DEST" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 echo "Orbit is now at commit $_SHA (branch: $BRANCH). Verify: git -C \"$DEST\" log -1 --oneline"
+# Integrity: recompute every shipped file's hash against the committed manifest (checksums.txt). This is
+# a dev channel (mutable branch, unsigned) until a signed checksums.txt.asc ships — orbit-verify says so.
+echo "Integrity:  python3 \"$DEST/bin/orbit-verify\" --root \"$DEST\"   (checks the shipped tree is intact)"
 
 cd "$DEST" && ./setup
