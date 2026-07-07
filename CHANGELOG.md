@@ -3,6 +3,26 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.33.0
+
+**Train C (part 1) — memory hygiene: active learning stays useful instead of becoming poisoned lore.**
+The active-learning ledger (`.orbit/learnings.jsonl`) already tracked provenance (`user-stated` /
+`observed` / `inferred`), scanned for injected insights at record time, and decayed unverified notes.
+This adds the mechanical **promotion boundary**.
+
+- **Nothing auto-promotes.** A learning becomes a durable **cross-project** rule (in
+  `${ORBIT_HOME:-~/.orbit}/durable-rules.jsonl`) only via an explicit `orbit-memory promote <key>` — and
+  it's **mechanically refused** unless `source == user-stated` *and* it passes the injection scan. So a
+  prompt-injected "rule" (observed/inferred at best, and refused at record time if it smells injected)
+  can never become standing policy.
+- **`orbit-memory` review surface** (new `scripts/orbit-memory` → `learn.py`): `review` shows what's
+  live / promotable / **conflicted** (a key recorded with two sources or two insights) / durable;
+  `promote <key>` (the gated human act); `forget <key>` tombstones a learning out of the live view
+  (append-only — history preserved). Old observed notes decay ~1 point/30 days; user-stated never decays.
+- New `tests/test_memory_hygiene.py`: only-user-stated-promotes, injected-can't-promote (incl. a
+  hand-planted poisoned row — promote re-scans), nothing-auto-promotes, decay/hold, conflict + forget.
+  Full suite (33 files) + coherence + validate green.
+
 ## 0.32.0
 
 **Train B — `loop.py` durability: the portable runner survives a restart and never double-fires.** The

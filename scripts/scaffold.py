@@ -198,6 +198,7 @@ FILE_PLAN = [
     ("lifecycle.py",     ".orbit/lifecycle.py",     None),   # mode detection + phase strip
     ("ralph_loop.sh",    "scripts/ralph_loop.sh",     0o755),
     ("orbit-lock",       "scripts/orbit-lock",        0o755),   # thin wrapper → trusted bin/orbit-lock
+    ("orbit-memory",     "scripts/orbit-memory",      0o755),   # review/promote/forget the learning ledger
     ("orbit-status",     "scripts/orbit-status",      0o755),
     ("orbit-statusline.py", "scripts/orbit-statusline", 0o755),  # the one-line Claude Code status line
 

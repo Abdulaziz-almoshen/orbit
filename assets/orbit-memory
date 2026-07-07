@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+#
+# orbit-memory — review + curate this repo's active-learning ledger (.orbit/learnings.jsonl).
+#
+#   orbit-memory review          # what's live, what's promotable, what CONFLICTS, what's durable
+#   orbit-memory promote <key>   # promote a USER-STATED learning to a durable cross-project rule
+#   orbit-memory forget  <key>   # tombstone a learning (drops from the live view; history preserved)
+#   orbit-memory recall [--limit N]
+#   orbit-memory record '<json>'
+#
+# The security boundary: NOTHING auto-promotes. Promotion to a standing cross-project rule is always a
+# deliberate human act AND is gated on source==user-stated + an injection scan — so a prompt-injected
+# "rule" (observed/inferred at best, refused at record time if it smells injected) can never become one.
+exec python3 "${CLAUDE_PROJECT_DIR:-.}/.orbit/checks/learn.py" "$@"
