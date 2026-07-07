@@ -33,7 +33,7 @@ for t in "${TARGETS[@]}"; do [ -e "$t" ] && echo "  - $t"; done
 # install-path telemetry collector (orbit-hook).
 HOOK_HITS=0
 if [ -f "$SETTINGS" ]; then
-  HOOK_HITS=$(python3 -c "import json;d=json.load(open('$SETTINGS'));b=json.dumps(d.get('hooks',{}))+json.dumps(d.get('statusLine',{}));print(b.count('.orbit/')+b.count('orbit-hook')+b.count('orbit-lock-hook')+b.count('orbit-statusline'))" 2>/dev/null || echo 0)
+  HOOK_HITS=$(python3 -c "import json;d=json.load(open('$SETTINGS'));b=json.dumps(d.get('hooks',{}))+json.dumps(d.get('statusLine',{}));print(b.count('.orbit/')+b.count('orbit-hook')+b.count('orbit-lock-hook')+b.count('orbit-guard')+b.count('orbit-statusline'))" 2>/dev/null || echo 0)
   [ "${HOOK_HITS:-0}" != "0" ] && echo "  - Orbit hook(s) in $SETTINGS (the rest of the file is preserved)"
 fi
 echo
@@ -65,8 +65,8 @@ def keep(group):
     out = []
     for entry in group:
         cmds = json.dumps(entry.get("hooks", entry))
-        if ".orbit/" in cmds or "orbit-hook" in cmds or "orbit-lock-hook" in cmds:   # guard/route/design-gate · telemetry · writer-lock
-            continue
+        if ".orbit/" in cmds or "orbit-hook" in cmds or "orbit-lock-hook" in cmds or "orbit-guard" in cmds:
+            continue   # project guard/route/design-gate · telemetry · writer-lock · trusted safety wall
         out.append(entry)
     return out
 for event in list(hooks.keys()):

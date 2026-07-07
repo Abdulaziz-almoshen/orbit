@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+"""
+orbit-guard — the TRUSTED safety wall (v0.31.0). A `PreToolUse(Bash)` hook, wired from the trusted
+Orbit INSTALL (not the repo), that runs:
+
+  1. the plugin's hardened built-in guard (the 25-red-team-fix engine in assets/checks/guard.py), PLUS
+  2. a repo's DECLARATIVE rules from `.orbit/security/rules.json` (data, never code).
+
+Why trusted, not project-local: the old `.orbit/checks/guard.py` could be edited to REMOVE denies
+(a repo silently weakening its own wall), and its fixes never propagated to already-scaffolded repos.
+Here the executable logic lives with the plugin and upgrades with it; the repo contributes only
+declarative rules — which can ADD caution but can NEVER downgrade a built-in deny (see guard.compile_rules
++ _eval_argv). A tampered old `.orbit/checks/guard.py` is simply irrelevant once this is wired.
+
+FAIL OPEN on any error (can't load the engine, unreadable payload, exception) — a guard must never brick
+the shell. A missing/corrupt `rules.json` falls back to the built-in wall (still fully enforced).
+"""
+import json
+import os
+import sys
+from pathlib import Path
+
+
+def _allow():
+    sys.exit(0)  # emit nothing → the command runs
+
+
+def _load_plugin_guard():
+    """Load the plugin's hardened guard from its EXACT path (assets/checks/guard.py), preferring
+    CLAUDE_PLUGIN_ROOT, else this script's own location (<plugin>/bin/orbit-guard). Loaded by explicit
+    file path via importlib — NOT `import guard` on sys.path — so a repo can't shadow it with a fake
+    guard.py in its own tree. The path sources are the plugin install only; never the project."""
+    import importlib.util
+    root = os.environ.get("CLAUDE_PLUGIN_ROOT")
+    candidates = ([Path(root)] if root else []) + [Path(__file__).resolve().parent.parent]
+    for base in candidates:
+        gp = base / "assets" / "checks" / "guard.py"
+        if gp.is_file():
+            spec = importlib.util.spec_from_file_location("_orbit_builtin_guard", gp)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return mod
+    return None
+
+
+def _find_project(start):
+    try:
+        p = Path(start).resolve()
+    except Exception:
+        return None
+    for d in [p, *p.parents]:
+        if (d / ".orbit").is_dir():
+            return d
+    return None
+
+
+def main():
+    try:
+        data = json.load(sys.stdin)
+    except Exception:
+        _allow()  # can't read our own payload → fail open
+
+    try:
+        if not isinstance(data, dict) or data.get("tool_name") != "Bash":
+            _allow()
+        cmd = (data.get("tool_input") or {}).get("command", "") or ""
+
+        guard = _load_plugin_guard()
+        if guard is None:
+            _allow()  # can't load the built-in wall → fail open, never brick
+
+        proj = _find_project(data.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or ".")
+        guard.EXTRA_RULES = []
+        if proj is not None:
+            try:
+                doc = json.loads((proj / ".orbit" / "security" / "rules.json").read_text())
+                rules = doc.get("rules") if isinstance(doc, dict) else doc
+                guard.EXTRA_RULES = guard.compile_rules(rules)
+            except Exception:
+                guard.EXTRA_RULES = []  # missing/corrupt rules → built-in wall still fully enforced
+
+        hit = guard.evaluate(cmd)
+        if hit:
+            print(json.dumps({"hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": hit[0],
+                "permissionDecisionReason": f"[orbit] {hit[1]}",
+            }}))
+        sys.exit(0)
+    except SystemExit:
+        raise
+    except Exception:
+        _allow()  # ANY error → fail open
+
+
+if __name__ == "__main__":
+    main()

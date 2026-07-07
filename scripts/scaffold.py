@@ -136,7 +136,8 @@ FILE_PLAN = [
     ("orbit-status",     "scripts/orbit-status",      0o755),
     ("orbit-statusline.py", "scripts/orbit-statusline", 0o755),  # the one-line Claude Code status line
 
-    ("checks/guard.py",  ".orbit/checks/guard.py",    0o755),  # placed, NOT wired (see skill Phase 6a)
+    ("security/rules.json", ".orbit/security/rules.json", None),  # declarative repo rules for the trusted guard
+    ("checks/guard.py",  ".orbit/checks/guard.py",    0o755),  # built-in ruleset reference (the wired wall is the trusted orbit-guard)
     ("checks/route.py",  ".orbit/checks/route.py",    0o755),  # the UserPromptSubmit router (Phase 6a)
     ("checks/orbit-stop-check.py", ".orbit/checks/orbit-stop-check.py", 0o755),  # Stop: observability backstop
     ("checks/learn.py",  ".orbit/checks/learn.py",    0o755),  # the active-learning ledger helper
@@ -188,7 +189,8 @@ UI_SURFACES = {"web", "frontend", "ui", "mobile", "ios", "android"}  # → stand
 
 DIRS = [
     ".orbit", ".orbit/roles", ".orbit/skills",
-    ".orbit/artifacts", ".orbit/checks", ".orbit/decisions", ".orbit/locks", ".claude/agents", "scripts",
+    ".orbit/artifacts", ".orbit/checks", ".orbit/decisions", ".orbit/locks", ".orbit/security",
+    ".claude/agents", "scripts",
 ]
 
 GUARD_CMD = 'python3 "$CLAUDE_PROJECT_DIR/.orbit/checks/guard.py"'
@@ -210,6 +212,18 @@ ORBIT_HOOK_CMD = (
     '"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/orbit/bin/orbit-hook" '
     '"$HOME"/.claude/plugins/cache/*/orbit/*/bin/orbit-hook '
     '"${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/*/orbit/*/bin/orbit-hook; '
+    "do [ -f \"$p\" ] && exec python3 \"$p\"; done; exit 0'"
+)
+# The TRUSTED safety wall (v0.31.0): runs the plugin's hardened built-in guard + the repo's DECLARATIVE
+# .orbit/security/rules.json, from the trusted install — so a repo can't weaken its own wall by editing
+# a Python file, and guard fixes upgrade with the plugin. Fails open. NEW scaffolds wire this instead of
+# the project-local guard.py; existing repos that already wired guard.py keep it (never re-wired/clobbered).
+ORBIT_GUARD_CMD = (
+    "sh -c 'for p in "
+    '"${CLAUDE_PLUGIN_ROOT:-}/bin/orbit-guard" '
+    '"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/orbit/bin/orbit-guard" '
+    '"$HOME"/.claude/plugins/cache/*/orbit/*/bin/orbit-guard '
+    '"${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/*/orbit/*/bin/orbit-guard; '
     "do [ -f \"$p\" ] && exec python3 \"$p\"; done; exit 0'"
 )
 ORBIT_HOOK_EVENTS = ["SubagentStart", "SubagentStop", "TaskCreated", "TaskCompleted",
@@ -364,9 +378,11 @@ def scaffold_drift(target: Path) -> dict:
     settings = _read_json(target / ".claude/settings.json")
     wired = json.dumps(settings.get("hooks", {})) + json.dumps(settings.get("statusLine", {}))
     hook_drift = [name for name, tok in (
-        ("safety guard", "guard.py"), ("router", "route.py"),
+        ("router", "route.py"),
         ("observability Stop hook", "orbit-stop-check.py"), ("telemetry", "orbit-hook"),
         ("writer lock", "orbit-lock-hook"), ("status line", "orbit-statusline")) if tok not in wired]
+    if "guard.py" not in wired and "orbit-guard" not in wired:   # either wall counts as wired
+        hook_drift.insert(0, "safety guard")
     guard = target / ".orbit/checks/guard.py"
     guard_custom = bool(guard.exists() and b"Orbit safety guard" in guard.read_bytes()
                         and _sha(guard.read_bytes()) != _sha((ASSETS / "checks/guard.py").read_bytes()))
@@ -385,6 +401,7 @@ def scaffold_drift(target: Path) -> dict:
         "role_template_drift_advisory": (proj_v != cur),     # roles/CLAUDE.md are never overwritten → may lag
         "stale_prose_advisory": stale_prose,
         "guard_customized_preserved": guard_custom,
+        "legacy_guard_wired": ("guard.py" in wired and "orbit-guard" not in wired),
     }
 
 
@@ -395,6 +412,11 @@ def _print_drift(target: Path) -> None:
     fresh = (not d["metadata_stale_or_missing"] and not d["missing_files"] and not d["hook_drift"])
     print(f"Orbit scaffold drift — plugin v{d['plugin_version']} · this project's scaffold "
           f"v{d['scaffold_version'] or 'unknown'}")
+    if d.get("legacy_guard_wired"):
+        print("  • safety wall: this repo wires the legacy project-local guard.py (still hardened + "
+              "carried forward). You can migrate to the TRUSTED orbit-guard (built-in + declarative\n"
+              "    .orbit/security/rules.json, un-weakenable) — move your custom rules into rules.json, "
+              "then swap the PreToolUse Bash hook to orbit-guard. Optional; the legacy guard is not clobbered.")
     if fresh:
         print("  ✓ up to date — scaffold matches the current plugin."); return
     print("  ✓ plugin is current (that's what /orbit-upgrade checks) — but this PROJECT's scaffold is behind:")
@@ -508,7 +530,9 @@ def _apply_safe_refresh(target: Path) -> None:
 def install_hooks(target: Path, has_ui: bool = False) -> None:
     """Wire Orbit's always-on hooks into .claude/settings.json (default-on + announced):
 
-      • PreToolUse(Bash) → guard.py  — the binding safety wall (deny/ask on dangerous commands).
+      • PreToolUse(Bash) → orbit-guard  — the binding safety wall (deny/ask on dangerous commands),
+        TRUSTED-install resolved = built-in hardened rules + the repo's declarative
+        .orbit/security/rules.json. A repo that already wired the legacy project-local guard.py keeps it.
       • UserPromptSubmit → route.py  — the deterministic router: classifies every message
         (task → loop, question → direct) and injects the decision as the default lane.
       • PreToolUse(Edit|Write|MultiEdit) → design-gate.py — UI repos only (has_ui): a coarse
@@ -541,9 +565,15 @@ def install_hooks(target: Path, has_ui: bool = False) -> None:
     added = []
 
     pre = hooks.setdefault("PreToolUse", [])
-    if not any("guard.py" in json.dumps(e) for e in pre):
-        pre.append({"matcher": "Bash", "hooks": [{"type": "command", "command": GUARD_CMD}]})
-        added.append("PreToolUse[matcher=Bash] → guard.py   (safety: deny/ask on dangerous commands)")
+    # The safety wall. NEW repos wire the TRUSTED orbit-guard (built-in rules + declarative
+    # .orbit/security/rules.json, resolved from the install so the repo can't weaken its own wall).
+    # A repo that ALREADY wired the project-local guard.py keeps it — we never re-wire or clobber it
+    # (its custom §8 rules are preserved; `orbit-doctor` suggests migrating to rules.json).
+    _guard_wired = any(("guard.py" in json.dumps(e) or "orbit-guard" in json.dumps(e)) for e in pre)
+    if not _guard_wired:
+        pre.append({"matcher": "Bash", "hooks": [{"type": "command", "command": ORBIT_GUARD_CMD}]})
+        added.append("PreToolUse[matcher=Bash] → orbit-guard   (TRUSTED safety wall: built-in rules + "
+                     ".orbit/security/rules.json; a repo can't weaken its own wall)")
 
     ups = hooks.setdefault("UserPromptSubmit", [])
     if not any("route.py" in json.dumps(e) for e in ups):
@@ -762,8 +792,11 @@ def main():
         install_hooks(target, has_ui)
     else:
         print(
-            "\nSafety guard: .orbit/checks/guard.py is PLACED but NOT wired (re-run with\n"
-            "--install-hooks to wire it, or let the skill do it by default in Phase 6a)."
+            "\nSafety guard: NOT wired yet (re-run with --install-hooks, or let the skill do it in\n"
+            "Phase 6a). When wired it's the TRUSTED orbit-guard (built-in wall + your declarative\n"
+            ".orbit/security/rules.json) — a repo can't weaken its own wall. Add repo rules in\n"
+            "rules.json; .orbit/checks/guard.py is the built-in ruleset reference (editing it does\n"
+            "nothing once the trusted runner is wired)."
         )
     print(
         "\nTo undo everything later: run `orbit-uninstall` from this repo — or its full path\n"

@@ -15,7 +15,7 @@ updates itself.
 
 <br/>
 
-![version](https://img.shields.io/badge/version-0.30.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.31.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![self-updating](https://img.shields.io/badge/self--updating-yes-22863a)
@@ -380,7 +380,7 @@ guarantee and a suggestion:
 
 | Layer | Status | What it is |
 |---|---|---|
-| **Safety wall** (`PreToolUse` → `guard.py`) | ✅ **binds** | Denies force-push, `push --mirror`, `rm -rf` of a root/home/system path, and disk wipes (`dd`/`mkfs` to a device); asks before a plain push, `reset --hard`, `clean -f`, `rm -rf` of a hidden/`.git`/`.orbit`/absolute path, and `curl \| sh` — *before* the tool runs, model has no say. Sees through `cd x && …`, `sudo`/`env X=1 …`, subshells `( )`, brace groups, `\`-newline continuations, `$( )`/backticks, and `sh -lc` (recurses). **Threat model:** it stops obvious/accidental danger and common obfuscation and asks when a command is un-inspectable — it does *not* claim to defeat deliberate self-obfuscation (a script file, `python -c`, runtime aliases); nothing at the shell layer can. Add your repo's deploy/migration/secret-branch rules in one line. (59-case `tests/test_guard.py`.) |
+| **Safety wall** (`PreToolUse` → `orbit-guard`, **trusted install**) | ✅ **binds** | Denies force-push, `push --mirror`, `rm -rf` of a root/home/system path, and disk wipes (`dd`/`mkfs` to a device); asks before a plain push, `reset --hard`, `clean -f`, `rm -rf` of a hidden/`.git`/`.orbit`/absolute path, and `curl \| sh` — *before* the tool runs, model has no say. Sees through `cd x && …`, `sudo`/`env X=1 …`, subshells `( )`, brace groups, `\`-newline continuations, `$( )`/backticks, and `sh -lc` (recurses). **Runs from the trusted install** (not the repo), so a repo **can't weaken its own wall** and guard fixes upgrade with the plugin. Add your repo's deploy/migration/secret-branch rules **declaratively** in `.orbit/security/rules.json` — rules can only *add* an `ask`/`deny`, **never** downgrade a built-in deny (an `allow` is ignored; a corrupt rules file falls back to the built-in wall). **Threat model:** stops obvious/accidental danger + common obfuscation and asks when un-inspectable; it does *not* claim to defeat deliberate self-obfuscation (a script file, `python -c`, runtime aliases). (123-case `tests/test_guard.py` + `tests/test_trusted_guard.py`; existing repos keep the legacy project-local `guard.py`, never clobbered.) |
 | **Single-writer lock** (`PreToolUse` → `orbit-lock-hook`) | ✅ **binds** | Many readers, one writer. Denies `Edit`/`Write`/`MultiEdit` and write-intent `Bash` (commits, `rm`, redirects, migrations…) when **another session** holds the repo — and *always* denies a foreign write to `.orbit/STATE.md` (the memory spine). One Claude Code session (its sub-agents share its `session_id`) is one writer; a second window or a headless `claude -p` loop is a foreign writer, serialized behind the lock. Auto-acquired on first write (atomic `O_EXCL` — no double-writer race), heartbeated, stale after ~30 min. **Fails open** on any error and honors `ORBIT_LOCK_DISABLE=1` — a lock bug never bricks the repo. Recover a stale lock explicitly + logged: `scripts/orbit-lock break --reason …`. (`tests/test_writer_lock*.py`.) |
 | **Iteration + runtime caps** (`ralph_loop.sh`) | ✅ **binds** | The runner stops the loop at the cap (max iterations, runtime, the STOP sentinel, and the gate-failure streak). |
 | **Token + cost budgets** | ✅ **binds on the runner** | `ralph_loop.sh` meters `claude -p --output-format json`; `loop.py` tracks + persists spend across `--resume`. `move_money` is `FORBIDDEN` (raises). |
@@ -450,6 +450,7 @@ orbit/                          ← this repo == the skill dir (clones to ~/.cla
 │   ├── orbit-lock              # single-writer lock CLI (status/acquire/heartbeat/release/break)
 │   ├── orbit-lock-hook         # PreToolUse enforcement of the writer lock (trusted-install, fail-open)
 │   ├── orbit_lock_lib.py       # shared lock core (decision table, classifier, atomic O_EXCL acquire)
+│   ├── orbit-guard             # TRUSTED safety wall: built-in rules + .orbit/security/rules.json (un-weakenable)
 │   └── orbit-uninstall         # removes the Orbit scaffold from a product repo
 ├── references/                 # methodology, templates, roles, loop design, observability,
 │                               #   hooks/enforcement, profiles, playbooks (the skill library)

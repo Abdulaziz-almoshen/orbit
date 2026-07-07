@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "_readme": "Declarative safety rules for THIS repo, enforced by the TRUSTED orbit-guard ON TOP of Orbit's built-in wall (force-push, rm -rf / of a root/home/system path, disk wipes, curl|sh, unresolved $VAR commands, …). Rules here can only ADD caution — a rule can raise a command to 'ask' or 'deny', but can NEVER weaken a built-in deny, and 'allow' is not honored. No code, data only: the executable wall lives in the trusted plugin, so this repo can't disable its own protection. Add rules to the 'rules' array below; the '_examples' are shown for shape only and are NOT applied.",
+  "_examples": [
+    {"id": "deploys-are-a-checkpoint", "decision": "ask", "match": {"argv_contains": ["deploy"]}, "reason": "deploys are a human checkpoint here."},
+    {"id": "schema-frozen", "decision": "deny", "match": {"argv_contains": ["manage.py", "migrate"]}, "reason": "the DB schema is frozen — no migrations from the loop."},
+    {"id": "protected-branch-push", "decision": "ask", "match": {"argv_regex": "push .*(prod|release)"}, "reason": "pushing a protected branch — confirm the target."}
+  ],
+  "rules": []
+}

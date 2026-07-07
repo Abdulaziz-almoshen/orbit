@@ -267,6 +267,48 @@ RULES = [
      _var_command),
 ]
 
+# Declarative project rules, layered on top of the built-in RULES by the TRUSTED runner (bin/orbit-guard)
+# from a repo's .orbit/security/rules.json. Empty for the standalone project-local guard.py, so its
+# behaviour is byte-identical. Project rules can only ADD caution (escalate via _max) — they can never
+# downgrade a built-in deny or introduce an 'allow' (see compile_rules + _eval_argv).
+EXTRA_RULES = []
+
+
+def compile_rules(rules):
+    """Compile DECLARATIVE project rules (pure data, never code) into (decision, reason, predicate)
+    tuples. Honors only 'ask'/'deny' — a repo can add caution but can NOT weaken the built-in wall.
+    Match keys (ANDed within a rule), tested against the fully-resolved argv `t`:
+      • argv_contains: [str, …]  → every token must be present in the argv
+      • argv_regex:   "…"        → regex search over the joined argv (input-capped; safe-compiled)
+    Unknown/invalid rules are skipped; at most 200 rules are honored (a runaway-file backstop)."""
+    out = []
+    for r in (rules if isinstance(rules, list) else [])[:200]:
+        try:
+            if not isinstance(r, dict) or r.get("decision") not in ("ask", "deny"):
+                continue
+            decision = r["decision"]
+            reason = str(r.get("reason") or "repo policy rule")[:300]   # cap a project-supplied string
+            m = r.get("match") or {}
+            conds = []
+            contains = m.get("argv_contains")
+            if isinstance(contains, list) and contains:
+                need = [str(x) for x in contains]
+                conds.append(lambda t, need=need: all(x in t for x in need))
+            rx = m.get("argv_regex")
+            if isinstance(rx, str) and rx:
+                try:
+                    cre = re.compile(rx)
+                    conds.append(lambda t, cre=cre: bool(cre.search(" ".join(t)[:4096])))
+                except re.error:
+                    pass
+            if not conds:
+                continue
+            out.append((decision, reason, lambda t, conds=conds: all(c(t) for c in conds)))
+        except Exception:
+            continue
+    return out
+
+
 _SEVERITY = {"deny": 2, "ask": 1}
 
 
@@ -791,13 +833,21 @@ def _eval_argv(t, depth):
         return evaluate(sc, depth + 1)
     if t[0] == "eval":                                     # eval <string> → evaluate the string
         return evaluate(" ".join(t[1:]), depth + 1)
-    for decision, reason, pred in RULES:
+    best = None
+    for decision, reason, pred in RULES:                   # built-in wall: deny-first ordered → first match wins
         try:
             if pred(t):
-                return (decision, reason)
+                best = (decision, reason)
+                break
         except Exception:
             continue
-    return None
+    for decision, reason, pred in EXTRA_RULES:             # declarative project rules: escalate-only via _max
+        try:
+            if pred(t):
+                best = _max(best, (decision, reason))       # a repo can raise ask→deny, never lower a built-in deny
+        except Exception:
+            continue
+    return best
 
 
 def main():

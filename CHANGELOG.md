@@ -3,6 +3,33 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.31.0
+
+**Trusted safety runner — a repo can no longer silently weaken its own safety wall.** (Train A keystone.)
+
+The guard's executable logic now runs from the TRUSTED install (`bin/orbit-guard`, a `PreToolUse(Bash)`
+hook resolved from the plugin, like `orbit-hook`), and a repo contributes only **declarative** rules in
+`.orbit/security/rules.json`. Two problems this closes: a project-local `guard.py` could be *edited to
+remove denies* (a repo weakening its own wall), and guard fixes never *propagated* to already-scaffolded
+repos. Now the hardened engine lives with the plugin and upgrades with it; the repo supplies data, not code.
+
+- **Escalate-only project rules.** `{id, decision: ask|deny, match: {argv_contains | argv_regex}, reason}`
+  — matched against the fully-resolved argv, so they inherit all the tokenizer/variable-resolution
+  hardening. A rule can raise a command to `ask`/`deny` but can **never** downgrade a built-in deny; an
+  `allow` is ignored; a corrupt/missing `rules.json` falls back to the built-in wall (still fully
+  enforced). Implemented as a thin `EXTRA_RULES`/`compile_rules` layer in `guard.py` combined via `_max`,
+  so the built-in behaviour is **byte-identical** when there are no project rules.
+- **Reuses the hardened engine, doesn't reimplement it.** `orbit-guard` loads the plugin's guard by
+  *exact file path* (importlib, not `sys.path`) — so a repo can't shadow it with a fake `guard.py` in its
+  own tree (verified). The project-supplied `reason` is capped; `rules.json` is capped at 200 rules.
+- **Additive + backward-compatible.** NEW scaffolds wire `orbit-guard` + provision `.orbit/security/
+  rules.json`; existing repos that already wired the project-local `guard.py` **keep it** (never re-wired
+  or clobbered — its custom §8 rules are preserved), and `orbit-doctor` suggests migrating. `orbit-uninstall`
+  removes the trusted-guard wire.
+- Adversarial pass (deny hooks earn guard-level scrutiny): confirmed no `rules.json` variant weakens the
+  wall, and the engine can't be shadowed. New `tests/test_trusted_guard.py`; the 123-case built-in guard
+  suite still passes unchanged. Full suite (30 files) + coherence + `claude plugin validate` green.
+
 ## 0.30.0
 
 **Single-writer lock — many readers, one writer. Protects the memory spine from two sessions racing
