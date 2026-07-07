@@ -15,7 +15,7 @@ updates itself.
 
 <br/>
 
-![version](https://img.shields.io/badge/version-0.28.3-2b6cb0)
+![version](https://img.shields.io/badge/version-0.29.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![self-updating](https://img.shields.io/badge/self--updating-yes-22863a)
@@ -70,6 +70,7 @@ the exact same clone + `./setup`. More options (marketplace plugin, "let Claude 
 | `/orbit` | In a product repo | Scaffold the governed loop, or merge template updates into an already-scaffolded repo |
 | `/orbit:orbit-run <task>` | In a product repo | Force a task through the loop explicitly, bypassing the router's default-lane classification |
 | `scripts/orbit-status --follow` | In a product repo (terminal) | Live who's-talking dashboard — the headless-runner equivalent of the pinned Claude Code checklist |
+| `orbit-doctor` [`--fix`] | In a product repo | **Read-only** health check: scaffold drift (version · missing files/hooks · role/prose drift · preserved custom guard) **+** a safe-refresh plan for the managed hooks. `--fix` applies only the safe changes (add missing + upgrade *unmodified* hooks, backups kept) — **never** touches a customized hook |
 | `orbit-uninstall` [`--force`] | In a product repo | Remove Orbit's engine files + hooks from that repo (partial by design — see [Safety](#safety--what-binds-and-what-doesnt)) |
 | `/orbit-upgrade` | Anywhere | Upgrade the Orbit plugin itself (fetches latest, shows what changed) — see [Self-update](#self-update) |
 
@@ -443,6 +444,7 @@ orbit/                          ← this repo == the skill dir (clones to ~/.cla
 │   ├── orbit-preamble          # the skill's STEP 0 in one command (resolve + version check)
 │   ├── orbit-hook              # telemetry collector wired to Claude Code run events (trusted-install)
 │   ├── orbit-update-check      # prints UPGRADE_AVAILABLE / JUST_UPGRADED / nothing
+│   ├── orbit-doctor            # read-only project health: scaffold drift + safe-refresh plan (--fix applies safe)
 │   └── orbit-uninstall         # removes the Orbit scaffold from a product repo
 ├── references/                 # methodology, templates, roles, loop design, observability,
 │                               #   hooks/enforcement, profiles, playbooks (the skill library)

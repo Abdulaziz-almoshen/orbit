@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+#
+# orbit-doctor — READ-ONLY health check of a scaffolded project vs the installed Orbit plugin.
+#
+# Answers "is THIS project's Orbit scaffold stale, and what would a safe refresh do?" in one place:
+#   1. scaffold drift   — version · missing files · hook-wiring drift · role/prose drift · custom guard
+#   2. safe-refresh plan — which managed hooks (guard·route·stop-check·learn) would auto-upgrade / be
+#                          added / stay customized (with a patch suggestion), if you ran a refresh
+#
+# It NEVER writes. To act on the safe items:  orbit-doctor --fix   (adds missing + upgrades unmodified
+# managed hooks, backups kept; NEVER touches a customized hook). For missing playbooks/roles and the
+# version stamp, re-run `/orbit` in the project (it merges, never clobbers).
+#
+# Usage:
+#   orbit-doctor [PROJECT_DIR]        # defaults to the current directory
+#   orbit-doctor --fix [PROJECT_DIR]  # apply ONLY the safe managed-hook changes
+#
+# The check always runs against the INSTALLED plugin's scaffold.py — so it reflects the latest shipped
+# checks, which is the whole point of a plugin-owned doctor (a project-local copy would go stale).
+set -u
+
+FIX=0
+if [ "${1:-}" = "--fix" ]; then FIX=1; shift; fi
+TARGET="${1:-$PWD}"
+
+# This script lives in <plugin_root>/bin/ ; scaffold.py + VERSION live in <plugin_root>/.
+SELF="$(cd "$(dirname "$0")" 2>/dev/null && pwd -P)"
+ROOT="$(cd "$SELF/.." 2>/dev/null && pwd -P)"
+# Prefer the plugin root Claude Code hands us, when it holds our scaffold.py.
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/scripts/scaffold.py" ]; then
+  ROOT="$CLAUDE_PLUGIN_ROOT"
+fi
+SCAFFOLD="$ROOT/scripts/scaffold.py"
+
+if [ ! -f "$SCAFFOLD" ]; then
+  echo "orbit-doctor: cannot locate scaffold.py (looked in $ROOT/scripts). Is the plugin installed?" >&2
+  exit 1
+fi
+if [ ! -d "$TARGET/.orbit" ]; then
+  echo "orbit-doctor: $TARGET is not an Orbit-scaffolded repo (no .orbit/). Run /orbit there first." >&2
+  exit 1
+fi
+
+if [ "$FIX" -eq 1 ]; then
+  python3 "$SCAFFOLD" --apply-safe-refresh --target "$TARGET"
+  exit $?
+fi
+
+python3 "$SCAFFOLD" --check-drift --target "$TARGET"
+echo
+python3 "$SCAFFOLD" --plan-refresh --target "$TARGET"

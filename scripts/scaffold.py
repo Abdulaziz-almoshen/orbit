@@ -72,6 +72,26 @@ def _read_json(p: Path) -> dict:
         return {}
 
 
+def _classify_managed(rel: str, content: bytes, manifest: dict):
+    """Classify a managed check file that EXISTS at `rel` with bytes `content`. The single source of
+    truth for 'is this safe to auto-upgrade?' — used by both migrate_hooks (the full-scaffold path)
+    and the --plan-refresh / --apply-safe-refresh modes. Returns (state, new_bytes):
+      • foreign    — not our hook of this kind (marker absent) → never touch; new_bytes is None
+      • current    — already byte-identical to the shipped version → nothing to do
+      • upgrade     — unmodified since WE placed it (manifest/legacy match) but shipped moved → safe swap
+      • customized  — an Orbit hook the user changed (or unknown provenance) → hands off; suggest a diff
+    """
+    src_rel, marker = MANAGED_CHECKS[rel]
+    if marker not in content:
+        return ("foreign", None)                            # not an Orbit hook of this kind — leave it
+    new = (ASSETS / src_rel).read_bytes()
+    cur = _sha(content)
+    if cur == _sha(new):
+        return ("current", new)                             # already the current shipped version
+    unmodified = (rel in manifest and cur == manifest[rel]) or cur in _LEGACY_OLD.get(rel, set())
+    return (("upgrade" if unmodified else "customized"), new)
+
+
 def migrate_hooks(target: Path, created, warnings):
     """Carry existing repos forward to the current shipped check hooks (security/correctness fixes).
     Auto-replaces a managed check ONLY when it is UNMODIFIED — byte-identical to what we placed (the
@@ -82,17 +102,12 @@ def migrate_hooks(target: Path, created, warnings):
         dst = target / rel
         if not dst.exists():
             continue                                        # fresh file — normal _place copies the new one
-        content = dst.read_bytes()
-        if marker not in content:
-            continue                                        # not an Orbit hook of this kind — leave it
-        new = (ASSETS / src_rel).read_bytes()
-        cur = _sha(content)
-        if cur == _sha(new):
-            continue                                        # already the current shipped version
-        unmodified = (rel in manifest and cur == manifest[rel]) or cur in _LEGACY_OLD.get(rel, set())
-        if unmodified:                                      # ours, unchanged by the user → carry forward
+        state, new = _classify_managed(rel, dst.read_bytes(), manifest)
+        if state in ("foreign", "current"):
+            continue
+        if state == "upgrade":                              # ours, unchanged by the user → carry forward
             bak = dst.with_name(dst.name + f".bak.{int(time.time())}")
-            bak.write_bytes(content)
+            bak.write_bytes(dst.read_bytes())
             dst.write_bytes(new)
             dst.chmod(0o755)
             created.append(f"{rel}  (⚠ UPDATED to the current shipped version — security/correctness "
@@ -270,10 +285,28 @@ def _orbit_version() -> str:
 
 
 def _write_manifest(target: Path) -> None:
-    """Record the sha256 of each managed check file WE placed, so a later re-run can tell 'unmodified
-    since we placed it' (safe to carry forward) from 'the user customized it' (hands off). Idempotent:
-    same files → same content → no rewrite."""
-    m = {rel: _sha((target / rel).read_bytes()) for rel in MANAGED_CHECKS if (target / rel).exists()}
+    """Record the sha256 of each managed check WE placed, so a later re-run can tell 'unmodified since
+    we placed it' (safe to carry forward) from 'the user customized it' (hands off).
+
+    CRITICAL: the manifest must only ever hold hashes of the SHIPPED bytes we actually wrote — never the
+    hash of a customized file. If we recorded a customized guard's own hash, the very next re-run would
+    see cur == manifest[rel], read it as 'unmodified since placed', and CLOBBER the customization (the
+    'never clobber the customized guard' invariant, silently broken on the 2nd re-run). So: record the
+    current hash only when the on-disk file IS the current shipped version; for a customized/old file,
+    preserve the prior manifest entry (the shipped hash from when we placed it) and never overwrite it.
+    Idempotent: same files → same content → no rewrite."""
+    prev = _read_json(target / MANIFEST_REL)
+    m = {}
+    for rel, (src_rel, _marker) in MANAGED_CHECKS.items():
+        p = target / rel
+        if not p.exists():
+            continue
+        cur = _sha(p.read_bytes())
+        if cur == _sha((ASSETS / src_rel).read_bytes()):
+            m[rel] = cur                                    # we own the current shipped bytes → record them
+        elif rel in prev:
+            m[rel] = prev[rel]                              # customized/old → keep the hash of what WE placed
+        # else: customized with no prior record → do NOT fabricate an entry (stays 'customized' forever)
     out = target / MANIFEST_REL
     text = json.dumps(m, indent=2, sort_keys=True) + "\n"
     try:
@@ -370,6 +403,95 @@ def _print_drift(target: Path) -> None:
         print("  • your guard.py is customized — it will be PRESERVED (warned, not overwritten) on a re-run")
     print("  Fix: re-run `/orbit` here — it adds the missing files/hooks and re-stamps the version,\n"
           "       hash-gating (never clobbering) your customized guard.")
+
+
+def refresh_plan(target: Path) -> list:
+    """READ-ONLY: what a SAFE refresh would do to the managed check hooks (guard, route, stop-check,
+    learn), per file. Never writes. Each entry is {rel, state} with state ∈
+    add | upgrade | customized | current | foreign — the exact classification --apply-safe-refresh acts
+    on (it applies add + upgrade, leaves customized/foreign/current alone)."""
+    manifest = _read_json(target / MANIFEST_REL)
+    out = []
+    for rel in MANAGED_CHECKS:
+        dst = target / rel
+        if not dst.exists():
+            out.append({"rel": rel, "state": "add"})
+            continue
+        state, _ = _classify_managed(rel, dst.read_bytes(), manifest)
+        out.append({"rel": rel, "state": state})
+    return out
+
+
+def _managed_diff(target: Path, rel: str, max_lines: int = 40) -> str:
+    """A bounded unified diff of a CUSTOMIZED managed hook (the project's version → the current shipped
+    one) so the user can hand-merge the newer fixes. Suggestion only — never applied."""
+    import difflib
+    src_rel, _ = MANAGED_CHECKS[rel]
+    yours = (target / rel).read_text(errors="replace").splitlines(keepends=True)
+    shipped = (ASSETS / src_rel).read_text(errors="replace").splitlines(keepends=True)
+    diff = list(difflib.unified_diff(yours, shipped, fromfile=f"a/{rel} (yours)",
+                                     tofile=f"b/{rel} (current shipped)", n=2))
+    body = "".join(diff[:max_lines])
+    if len(diff) > max_lines:
+        body += f"      … ({len(diff) - max_lines} more diff lines — run `diff` yourself to see all)\n"
+    return body
+
+
+def _print_refresh_plan(target: Path) -> None:
+    """READ-ONLY preview for `--plan-refresh`: what the safe managed-hook refresh would change, with a
+    patch suggestion for any customized hook. Writes nothing."""
+    if not (target / ".orbit").is_dir():
+        print("Not an Orbit-scaffolded repo (no .orbit/). Run /orbit to set it up."); return
+    plan = refresh_plan(target)
+    by = {s: [p["rel"] for p in plan if p["state"] == s]
+          for s in ("add", "upgrade", "customized", "current", "foreign")}
+    print(f"Orbit safe-refresh plan (READ-ONLY) — managed safety/router hooks · plugin v{_orbit_version()}")
+    if by["upgrade"]:
+        print(f"  ⬆ would auto-upgrade (unmodified since placed → current; backup kept): {len(by['upgrade'])}")
+        for rel in by["upgrade"]:
+            print(f"      {rel}")
+    if by["add"]:
+        print(f"  + would add (managed hook missing): {len(by['add'])}")
+        for rel in by["add"]:
+            print(f"      {rel}")
+    if by["current"]:
+        print(f"  ✓ already current: {len(by['current'])}")
+    if by["customized"]:
+        print(f"  ⚠ customized — NOT auto-applied (your changes are preserved): {len(by['customized'])}")
+        for rel in by["customized"]:
+            print(f"      {rel} — diff (yours → current shipped):")
+            print(_managed_diff(target, rel), end="")
+    if by["upgrade"] or by["add"]:
+        print("\n  Apply just the SAFE ones (never customized files):"
+              "  python3 scaffold.py --apply-safe-refresh --target <repo>")
+    else:
+        print("\n  Nothing to auto-apply. ✓  (customized hooks, if any, are yours to hand-merge.)")
+
+
+def _apply_safe_refresh(target: Path) -> None:
+    """WRITE ONLY THE SAFE FILES for `--apply-safe-refresh`: add missing managed hooks + upgrade the
+    ones unmodified since we placed them (backups kept). NEVER touches a customized hook — it's printed
+    as a patch suggestion instead. Idempotent: a second run on a current project changes nothing. Does
+    NOT re-stamp the version or add playbooks/roles — that's a full `/orbit` re-run's job (noted below)."""
+    if not (target / ".orbit").is_dir():
+        print("Not an Orbit-scaffolded repo (no .orbit/). Run /orbit to set it up."); return
+    created, warnings = [], []
+    for rel, (src_rel, _marker) in MANAGED_CHECKS.items():          # add missing managed hooks (ours, safe)
+        dst = target / rel
+        if not dst.exists():
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_bytes((ASSETS / src_rel).read_bytes())
+            dst.chmod(0o755)
+            created.append(f"{rel}  (added — was missing)")
+    migrate_hooks(target, created, warnings)                        # upgrade unmodified, warn on customized
+    _write_manifest(target)                                         # record what we now have as 'ours'
+    print(f"Orbit safe-refresh applied — managed safety/router hooks · plugin v{_orbit_version()}")
+    for c in created or ["(nothing to add or upgrade — all managed hooks are current or customized)"]:
+        print("  +", c)
+    for w in warnings:
+        print("  ! ", w)
+    print("\n  Scope: this refreshes ONLY the managed hooks (guard · route · orbit-stop-check · learn).\n"
+          "  For missing playbooks/roles and the version stamp, run `/orbit` here (it merges, never clobbers).")
 
 
 def install_hooks(target: Path, has_ui: bool = False) -> None:
@@ -482,11 +604,23 @@ def main():
                     help="also wire the always-on safety hook into .claude/settings.json")
     ap.add_argument("--check-drift", action="store_true",
                     help="READ-ONLY: report how stale this project's scaffold is vs the current plugin, then exit")
+    ap.add_argument("--plan-refresh", action="store_true",
+                    help="READ-ONLY: preview what a safe managed-hook refresh would change (with a patch "
+                         "suggestion for any customized hook), then exit")
+    ap.add_argument("--apply-safe-refresh", action="store_true",
+                    help="WRITE ONLY SAFE FILES: add missing managed hooks + upgrade unmodified ones "
+                         "(backups kept); never touches a customized hook. Then exit.")
     args = ap.parse_args()
     target = args.target.resolve()
 
     if args.check_drift:                                     # read-only staleness report — never writes
         _print_drift(target)
+        return
+    if args.plan_refresh:                                    # read-only refresh preview — never writes
+        _print_refresh_plan(target)
+        return
+    if args.apply_safe_refresh:                              # writes ONLY the safe (unmodified/missing) hooks
+        _apply_safe_refresh(target)
         return
 
     if not target.is_dir():

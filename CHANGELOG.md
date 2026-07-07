@@ -3,6 +3,34 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.29.0
+
+**Project freshness gets a first-class doctor + safe managed-hook patching — and a real clobber bug is
+fixed.** (Train A of the trust/durability/visibility roadmap — completing the freshness engine started
+in 0.28.1 rather than rebuilding it.)
+
+- **`orbit-doctor`** (new `bin/`) — a read-only health check for a scaffolded project: scaffold drift
+  (version · missing files/hooks · role/prose drift · preserved custom guard) **plus** a safe-refresh
+  plan for the managed hooks, in one command. `orbit-doctor --fix` applies only the safe changes. It
+  runs against the *installed* plugin (a project-local copy would go stale), and it's literal-executable
+  so it never trips the guard. `/orbit`'s re-run path and `/orbit-upgrade` both point at it now.
+- **`scaffold.py --plan-refresh`** (read-only) previews exactly what a safe managed-hook refresh would
+  do — which hooks (`guard`·`route`·`orbit-stop-check`·`learn`) would **auto-upgrade** (unmodified since
+  we placed them), be **added** (missing), or stay **customized** — and prints a **unified-diff patch
+  suggestion** for each customized hook so you can hand-merge. **`--apply-safe-refresh`** writes only the
+  safe ones (add + upgrade, backups kept) and **never touches a customized hook**. One shared classifier
+  (`_classify_managed`) now backs both these modes and the full-scaffold migration.
+- **Bugfix (the important one): a customized guard is no longer clobbered on the *second* refresh.**
+  `_write_manifest` used to record the hash of whatever was on disk — including a *customized* guard —
+  which "laundered" the customization into looking unmodified, so the next `/orbit` re-run (or refresh)
+  auto-upgraded and **overwrote** it. This was a latent break of the "never clobber the customized guard"
+  invariant, live since 0.28.1. The manifest now records **only shipped hashes**; a customized file keeps
+  the hash of what *we* last placed, so it reads as customized forever. Pinned by two regression tests
+  (`repeated_refresh_preserves_customization`, `repeated_full_scaffold_preserves_customization`).
+
+New `tests/test_scaffold_refresh.py` (6 cases). Full suite (26 files) + coherence + `claude plugin
+validate` green.
+
 ## 0.28.3
 
 **The `/orbit` preamble now runs with zero PreToolUse prompts — the executable is always literal.**

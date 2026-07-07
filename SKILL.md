@@ -166,14 +166,20 @@ Setup must feel like gstack: smooth, near-zero questions. **Inference is the def
 is the fallback.** Interrogating the user with four questions is a failure mode.
 
 1. **If `.orbit/setup.json` exists**, this repo is already scaffolded → this is a **re-run / refresh**,
-   not a fresh setup. Read it and reuse those answers — don't re-ask. **First, surface scaffold drift:**
-   run `scripts/scaffold.py --check-drift --target .` (read-only) and show the user the result —
-   because the *plugin* being current (what `/orbit-upgrade` reports) does NOT mean this *project's*
-   scaffold is current. If it's behind (old `orbit_version`, missing files/hooks, drifted roles), tell
-   them what the refresh will do, then proceed with the normal scaffold, which **adds the missing
-   files/hooks and re-stamps `setup.json`'s `orbit_version` deterministically** — while **hash-gating
-   (never clobbering) a customized `guard.py`**. (The scaffolder stamps the version; you no longer
-   hand-write it.)
+   not a fresh setup. Read it and reuse those answers — don't re-ask. **First, run the doctor** (read-only
+   health check): the plugin's `bin/orbit-doctor` (resolve it the same way the Step 0 preamble resolved
+   `bin/`, and run it as a literal executable — `( cd <plugin>/bin && ./orbit-doctor "$PWD" )`). It prints
+   both the drift report and the refresh plan; under the hood that's `scaffold.py --check-drift` +
+   `--plan-refresh` against this repo. Show the user the result — because the *plugin* being current
+   (what `/orbit-upgrade` reports)
+   does NOT mean this *project's* scaffold is current. The drift report covers version · missing
+   files/hooks · role/prose drift · a preserved custom guard; the refresh plan says which managed hooks
+   (guard·route·stop-check·learn) would auto-upgrade / be added / stay customized (with a patch
+   suggestion). If it's behind, tell them what the refresh will do, then proceed with the normal
+   scaffold, which **adds the missing files/hooks and re-stamps `setup.json`'s `orbit_version`
+   deterministically** — while **hash-gating (never clobbering) a customized `guard.py`**. (Just the
+   safe managed-hook changes, no full re-scaffold? `orbit-doctor --fix` / `scaffold.py
+   --apply-safe-refresh` applies add+upgrade only and never touches a customized hook.)
 2. **Mine the repo and INFER** product, goal, "most expensive mistake," and integrations
    from README, package manifests (package.json, *.csproj, requirements.txt…), config, and
    code. Read `references/profiles/generic.md` for what to look for.
