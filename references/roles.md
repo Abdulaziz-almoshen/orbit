@@ -6,6 +6,9 @@ payroll**: keep narrow specialists available, then activate zero or one by defau
 fan-out. This file defines the standard roster, the activation policy, the spec format, the handoff
 protocol, and how to render each role for both output layers.
 
+Orbit also has a **model-switching rule**: ordinary execution stays on the Executor lane, while the
+read-only **Advisor** runs on Opus 4.8 only when a costly decision needs deeper judgment.
+
 Adapt names and scope to the product — but keep the *shape*: one planner, several
 executors, one safety gate, one quality gate. The roster below is a domain-neutral
 default; rename and re-scope each role to the real subtasks of the product you're in.
@@ -16,6 +19,7 @@ default; rename and re-scope each role to the real subtasks of the product you'r
 |------|-------|-------|--------|
 | **Dispatcher / Router** | Classify each request: **question** → answer directly (no loop); **task** → first **clarify & challenge** (infer from the repo, surface premises, ask only the gap), then hand to the Orchestrator to route through the loop (CLAUDE.md §10). Loads `clarify-and-challenge`. No edit tools. | the user request, CLAUDE.md §10 | a routing decision + clarified intent |
 | **Orchestrator / PM** | **Conducts** the loop: sizes the gear, keeps Cost Mode Lite by default, uses role lenses before workers, owns STATE.md (sole writer), checks stop conditions. On substantial work it may request one specialist for a proof gap, or ask before wider fan-out. Loads `loop-tiers` + `planning-and-decision-briefs`. | CLAUDE.md, STATE.md, selected briefs | STATE.md, ratified plan |
+| **Advisor** *(Opus 4.8, on demand)* | Senior judgment lane for costly forks: architecture one-way doors, safety/compliance uncertainty, repeated gate failure, or decisions expensive to get wrong. Read-only, max one call per cycle by default; advises, never builds. | a tiny decision packet, selected files | compact verdict + proof/check |
 | **Product Discovery Manager** *(planning phase, on demand)* | De-risk the *bet* before building: frame the **outcome** + the user's **job**, map opportunities from evidence, kill the four risks (value/usability/feasibility/viability), name the **riskiest assumption + cheapest test**. Use as a lens first; spawn only when the bet is genuinely uncertain. Loads `product-discovery`. | clarified intent, repo/analytics, market brief | `discovery-brief.md` |
 | **Market & Competitive Researcher** *(planning phase, on demand)* | What already exists, what the user would use instead, where the gap is — a **reuse-vs-build verdict**, graded feature matrix, positioning. Timeboxed, cited. Use only for external uncertainty that changes the decision. Loads `market-and-competitive-research`. Distinct from Input/Research below. | the JTBD/intent, the web, deps | `market-brief.md` |
 | **Planner** *(planning phase, substantial lane)* | Turn the validated, de-risked bet into the **plan of record** — thin vertical slices, sequenced by dependency + risk, a proof bar per slice, hand-off specs. Emits **decision briefs** in the standard format up to the Orchestrator. Loads `planning-and-decision-briefs`. | discovery + market briefs, §3 criteria | `plan.md` + decision briefs |
@@ -34,8 +38,8 @@ output is good enough to count as progress (it is the quality gate). The Orchest
 delegate freely but cannot overrule either gate without a human.
 
 **Which roles `/orbit` always provisions — the universal spine** (dispatcher, orchestrator,
-product-discovery, market-researcher, planner, reviewer, qa-engineer, reporter, safety-gate):
-Dispatcher, Orchestrator, Product Discovery Manager, Market & Competitive Researcher, Planner,
+advisor, product-discovery, market-researcher, planner, reviewer, qa-engineer, reporter, safety-gate):
+Dispatcher, Orchestrator, Advisor, Product Discovery Manager, Market & Competitive Researcher, Planner,
 Reviewer, QA Engineer, Reporter, Safety/Compliance — plus **one Builder/Engineer per detected surface** (web →
 Frontend Engineer, api → Backend Engineer, etc.). This list is canonical in
 `scripts/scaffold.py` → `ROLES_CORE` + `SURFACE_ENGINEERS`; `scripts/check-coherence.py`
@@ -118,6 +122,7 @@ name: <role-slug>
 description: <when the Orchestrator should delegate to this role — be specific so it
   triggers reliably>
 tools: <only the tools this role needs — least privilege>
+model: <optional; advisor uses opus, most roles inherit/default>
 ---
 
 <the role's mission, procedure, outputs, and limits — same content as the role spec,
@@ -159,6 +164,9 @@ Parallel roles must not corrupt shared state. The rules:
   the system quick (CLAUDE.md §10).
 - **Agents are catalog, not payroll.** The standard roster is available capability. It is not a default
   meeting. Start with 0 sub-agents; use at most 1 without approval; ask before 2+.
+- **Switch models only for judgment.** The Executor lane does normal work; the Advisor lane is Opus 4.8
+  on demand for architecture forks, safety/compliance uncertainty, repeated gate failure, or expensive
+  decisions. Log the advisor reason, keep it read-only, and cap the response.
 - **Use lenses before workers.** For T2, wear the product, market, safety, and reviewer hats yourself
   unless one of them needs independent evidence. A role becomes a sub-agent only when it has a concrete
   question to answer or a proof gap to close.

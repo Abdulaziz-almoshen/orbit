@@ -71,12 +71,40 @@
     "status_budget_lines": 20
   },
 
+  "_model_policy_help": "Two-lane model switching. The everyday executor runs the loop cheaply; the Advisor is an on-demand Opus judgment call, not a default worker. Claude Code subagents use aliases ('sonnet'/'opus') so the host resolves to the current account model family; display names preserve the intended product language.",
+  "model_policy": {
+    "default": "executor",
+    "executor": {
+      "role": "executor",
+      "model": "sonnet",
+      "display": "Sonnet 5",
+      "runs": "every_turn",
+      "purpose": "Plan/build/verify ordinary loop work under Cost Mode Lite."
+    },
+    "advisor": {
+      "role": "advisor",
+      "model": "opus",
+      "display": "Opus 4.8",
+      "runs": "on_demand",
+      "max_calls_per_cycle": 1,
+      "requires_reason": true,
+      "output_word_limit": 400,
+      "allowed_triggers": [
+        "architecture_fork",
+        "safety_or_compliance_uncertainty",
+        "repeated_gate_failure",
+        "expensive_if_wrong_decision",
+        "user_requests_deep_judgment"
+      ]
+    }
+  },
+
   "done_when": "STATE.md run_goal satisfied AND the Reviewer quality gate passed",
 
   "_proof_help": "First-class verification: the CONCRETE evidence a cycle actually worked, not just 'looks done'. kind: command (run it, expect exit 0) | metric (read a number, compare) | checklist (all items true) | review (Reviewer rubric >= threshold). The loop must produce this proof before calling a task done.",
   "proof": { "kind": "review", "expect": "reviewer_score >= eval_gates.quality.min_reviewer_score", "command": "" },
 
-  "_dispatch_help": "The model seam. orchestrator names the backend wired into loop.py dispatch(); model is its id. Swapping models is a one-function change.",
+  "_dispatch_help": "The model seam. model_policy declares the executor/advisor lanes; dispatch() should choose the configured model for the role it is running. orchestrator names the backend wired into loop.py dispatch(); model is the legacy single-model fallback.",
   "dispatch": { "orchestrator": "your-orchestrator", "model": "<model-id>" },
 
   "_paths_help": "Where the loop reads/writes. Relative to repo root.",

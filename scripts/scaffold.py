@@ -234,7 +234,7 @@ DESIGN_GATE_FRONTEND = [("checks/design-gate.py", ".orbit/checks/design-gate.py"
 
 # The UNIVERSAL spine — every project gets these (routing, planning, gates, reporting). Copied
 # verbatim to .claude/agents/<role>.md and, frontmatter-stripped, to .orbit/roles/<role>.md.
-ROLES_CORE = ["dispatcher", "orchestrator", "product-discovery", "market-researcher", "planner",
+ROLES_CORE = ["dispatcher", "orchestrator", "advisor", "product-discovery", "market-researcher", "planner",
               "reviewer", "qa-engineer", "reporter", "safety-gate"]
 
 # The PROJECT-SPECIFIC specialists — provisioned from the detected surfaces, NOT a fixed template.

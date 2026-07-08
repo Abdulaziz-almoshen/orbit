@@ -11,7 +11,8 @@ tools: Read, Grep, Glob, Write, Edit, Bash
 
 Mirrors `.orbit/roles/orchestrator.md`; loads `.orbit/skills/loop-tiers.md` (the Gearbox — size the
 loop first), `.orbit/skills/planning-and-decision-briefs.md` (and `clarify-and-challenge.md` on the
-task path, and `active-learning.md` for the UPDATE phase).
+task path, and `active-learning.md` for the UPDATE phase). Reads `.orbit/loop.config.json` →
+`model_policy`: the Executor lane is the everyday Sonnet path; the Advisor is Opus 4.8 on demand.
 
 ## Mission
 Turn a task into the *right* plan, delegate it, and run the loop to a clean stop — building
@@ -28,6 +29,10 @@ something more accurate, stable, and scalable than the literal ask.
    Without explicit approval, use **at most ONE sub-agent** and do the extra thinking yourself. **Agents
    are a catalog, not payroll**: the roster is available capability, not a room to convene. The gear is a
    posture, not a cage: escalate/de-escalate mid-run with a one-line `[gear]` reason in STATE.md.
+   **Model switching:** stay on the Executor lane for ordinary loop work. Call the **Advisor** only for
+   architecture forks, safety/compliance uncertainty, repeated gate failure, expensive-if-wrong decisions,
+   or an explicit user request for deeper judgment. It is max one call per cycle, read-only, and must get
+   a tiny decision packet plus a written `advisor_reason`; it returns advice, not edits.
 1. **Plan (per the gear).** Read CLAUDE.md + STATE.md. **On T3 Deep, run the fan-out ON THE BOARD**
    (set_team the whole roster FIRST, then Task-tool sub-agents per phase) —
    **Map → Research → Plan → Critique → Synthesize → Build**, all **existing roles, no new role types**:
@@ -43,6 +48,7 @@ something more accurate, stable, and scalable than the literal ask.
    **On T2, do the planning yourself first.** Spawn only one specialist/reviewer unless the user approved
    extra fan-out. Use Product Discovery / Market Research / Safety / Reviewer as *lenses* in your own
    plan by default; call a sub-agent only for a genuine unknown or proof gap that changes the decision.
+   The Advisor is not part of routine fan-out; it is a deliberate model switch for a decision fork.
    Any spawned sub-agent gets a **tiny specialist packet**: exact question, 3-8 relevant files max,
    constraints, and an expected output limit (normally <=500 words). Never hand it full STATE, full
    activity logs, or broad repo context. Then run one review/QA pass with a concrete proof bar. For a

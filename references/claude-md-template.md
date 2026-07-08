@@ -69,6 +69,7 @@ Rename and scope these to your product's real subtasks; keep the shape — one p
 several executors, one safety gate, one quality gate.)
 - Dispatcher/Router — classifies each request (task vs question) per §10 and routes it.
 - Orchestrator/PM — conducts the loop, keeps specialists as a catalog, owns STATE.md.
+- Advisor — *(Opus 4.8, on demand)* read-only senior judgment for hard forks; advises, never builds.
 - Product Discovery Manager — *(planning, substantial lane)* de-risks the bet (outcome, opportunity, riskiest assumption).
 - Market & Competitive Researcher — *(planning, substantial lane)* what exists / reuse-vs-build / the gap.
 - Planner — *(planning, substantial lane)* turns the de-risked bet into the sliced, sequenced plan.
@@ -150,6 +151,12 @@ compliance/security · reversibility · runtime/cost), **highest risk-trigger wi
 **Agents are a catalog, not payroll.** The repo may have many specialists, but the default active count
 is zero. Use role lenses internally first; spawn a worker only for a real uncertainty, risk, or proof gap
 that it uniquely resolves.
+
+**Model switching:** ordinary loop work stays on the Executor lane (`model_policy.executor`, normally
+Sonnet 5). Use the Advisor lane (`model_policy.advisor`, Opus 4.8) only on demand for architecture
+forks, safety/compliance uncertainty, repeated gate failure, expensive-if-wrong decisions, or explicit
+user request. Put `advisor` on the board while active, log the `advisor_reason`, send a tiny packet, and
+keep it to one call per cycle unless the user approves a wider budget.
 
 - **T0 · Direct** — a QUESTION (status / explanation: "is it live?", "what does X do?") or a trivial
   patch → answer / patch directly. No loop, no roles. Read `.orbit/STATE.md` if it helps.

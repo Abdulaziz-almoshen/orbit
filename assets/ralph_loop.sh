@@ -32,6 +32,13 @@ COST_PER_CYCLE="$(read_cfg "['hard_limits']['cost_budget_usd']['per_cycle']" 0)"
 GATE_STREAK_MAX="$(read_cfg "['hard_limits']['gate_failure_streak']" 0)"
 STOP_SENTINEL="$(read_cfg "['paths']['stop_sentinel']" .orbit/STOP)"
 STATE_FILE="$(read_cfg "['paths']['state']" .orbit/STATE.md)"
+EXECUTOR_MODEL="$(read_cfg "['model_policy']['executor']['model']" "")"
+EXECUTOR_DISPLAY="$(read_cfg "['model_policy']['executor']['display']" "executor")"
+ADVISOR_DISPLAY="$(read_cfg "['model_policy']['advisor']['display']" "advisor")"
+CLAUDE_MODEL_ARGS=()
+if [ -n "$EXECUTOR_MODEL" ] && [ "$EXECUTOR_MODEL" != "inherit" ]; then
+  CLAUDE_MODEL_ARGS=(--model "$EXECUTOR_MODEL")
+fi
 
 START="$(date +%s)"
 ITER=1
@@ -56,6 +63,9 @@ Run exactly ONE cycle of the self-prompting loop, then stop:
    back. Each role announces itself: open its report with "[role] ..." and emit to
    .orbit/activity.py; keep the checklist current (TaskCreate/TaskUpdate, and .orbit/tasks.json for
    the orbit-status dashboard) so a watcher can see who's talking and what's done.
+   Honor .orbit/loop.config.json model_policy: the executor lane does ordinary loop work; call the
+   Advisor (Opus) only on-demand for a real decision fork, max once this cycle, with a tiny packet and
+   an advisor_reason recorded in STATE/activity.
 4. EVALUATE: check the output against CLAUDE.md section 3 and the eval gates in
    .orbit/loop.config.json (input / quality / safety). Safety has veto power. If an eval gate
    FAILS this cycle, append the line "GATE_FAILED: <which gate + why>" to STATE.md (the runner
@@ -71,7 +81,7 @@ money). Never take an irreversible, financial, or outward-facing action without 
 propose it via STATE.md instead. Then STOP; do not start another cycle yourself.
 EOF
 
-echo "Ralph loop starting: max_iters=$MAX_ITERS max_runtime=${MAX_RUNTIME}s token_budget=$TOKEN_BUDGET/run ($TOKEN_PER_CYCLE/cycle) cost_budget=\$$COST_BUDGET/run gate_streak=$GATE_STREAK_MAX"
+echo "Ralph loop starting: max_iters=$MAX_ITERS max_runtime=${MAX_RUNTIME}s token_budget=$TOKEN_BUDGET/run ($TOKEN_PER_CYCLE/cycle) cost_budget=\$$COST_BUDGET/run gate_streak=$GATE_STREAK_MAX executor=$EXECUTOR_DISPLAY advisor=$ADVISOR_DISPLAY/on-demand"
 echo "Tip: in another pane, run  scripts/orbit-status --follow  to watch live (Ctrl-C to stop)."
 
 while :; do
@@ -89,7 +99,7 @@ while :; do
 
   # --- one fresh-context cycle (JSON output so we can meter cost + tokens) -----------
   TMPOUT="$(mktemp)"
-  if ! claude -p --output-format json "$CYCLE_PROMPT" > "$TMPOUT"; then
+  if ! claude -p --output-format json "${CLAUDE_MODEL_ARGS[@]}" "$CYCLE_PROMPT" > "$TMPOUT"; then
     echo "[STOP] claude exited non-zero on cycle $ITER"; rm -f "$TMPOUT"; break
   fi
   # show the agent's result text so progress is visible

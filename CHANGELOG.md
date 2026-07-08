@@ -3,6 +3,24 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.39.0
+
+**Model switching — cheap executor, Opus advisor on demand.** Orbit now treats model choice as part
+of the loop contract instead of an invisible Claude Code setting.
+
+- **`model_policy` in `loop.config.json`** declares two lanes: the everyday Executor (`sonnet`, display
+  `Sonnet 5`) and the on-demand Advisor (`opus`, display `Opus 4.8`). The Advisor is capped to one call
+  per cycle, requires a written reason, and returns a short decision verdict — it is not another worker
+  in the default roster.
+- **New `advisor` subagent** is provisioned as part of the universal spine, with Claude Code
+  frontmatter `model: opus` and read-only tools. It is dormant by default and only fires for hard forks:
+  architectural one-way doors, safety/compliance uncertainty, repeated gate failure, or decisions that
+  are expensive to get wrong.
+- **Ralph loop model selection** now reads the executor model from config and passes it to `claude -p`
+  when set, while the prompt reminds the loop that Opus advice is on-demand, not every cycle.
+- Router, Orchestrator, Gearbox, CLAUDE.md template, README, and role docs now describe the same
+  executor/advisor operating model. New `tests/test_model_switching.py` guards the contract.
+
 ## 0.38.0
 
 **Cost Mode — Orbit Lite by default, with a context budget gate.** This release fixes the failure mode

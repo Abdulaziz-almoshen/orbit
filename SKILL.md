@@ -253,7 +253,7 @@ python3 "$ORBIT/scripts/scaffold.py" --target . --surfaces <detected> [--install
   (never clobbers) if you'd edited them. Tell the user plainly when this fires.
 
 This replaces hand-authoring ~20 files. The **universal spine** (dispatcher, orchestrator,
-product-discovery, market-researcher, planner, reviewer, qa-engineer, reporter, safety-gate) is the same every
+advisor, product-discovery, market-researcher, planner, reviewer, qa-engineer, reporter, safety-gate) is the same every
 project; the **specialists vary by the code** (the per-surface engineers + the conditional Designer).
 Everything is in place and working — **don't re-author any of it.**
 
@@ -397,10 +397,10 @@ user sees is **what you print in chat.** Therefore **do THREE things every cycle
    🛰 Orbit · cycle 2
    ✓ main owner — planned the change
    ▸ 🟢 frontend-engineer — building the form (active 2m 10s)
-   available: 🟡 reviewer · 🔴 safety · 🧪 qa (not running)
+   available: 🧠 advisor · 🟡 reviewer · 🔴 safety · 🧪 qa (not running)
    ```
    (The headless equivalent is `scripts/orbit-status --team`, off the same `agents.json`.)
-   (🔵 dispatcher · 🟣 planner · 🔭 discovery · 📊 market · 🟢 engineer · 🟪 designer · 🟡 reviewer · 🧪 qa · 🔴 safety · ⚪ reporter — same
+   (🔵 dispatcher · 🟣 planner · 🧠 advisor · 🔭 discovery · 📊 market · 🟢 engineer · 🟪 designer · 🟡 reviewer · 🧪 qa · 🔴 safety · ⚪ reporter — same
    colors as `orbit-status`.) **The board also carries the team's voice** — a one-line "why this task
    matters" at kickoff, a progress-aware "the owner is heads-down — N of M done, almost there" during
    the pause, and an earned close on completion. Mandatory; warm and genuine, tone calibrated to the

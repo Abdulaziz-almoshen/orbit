@@ -85,10 +85,10 @@ for the template with inline comments. Shape:
 {
   "run_goal": "one sentence; mirrors STATE.md run goal",
   "hard_limits": {
-    "max_iterations": 3,
-    "token_budget": { "per_cycle": 60000, "per_run": 250000 },
-    "cost_budget_usd": { "per_run": 5.0 },
-    "max_runtime_seconds": 1800,
+    "max_iterations": 2,
+    "token_budget": { "per_cycle": 20000, "per_run": 80000 },
+    "cost_budget_usd": { "per_cycle": 0.35, "per_run": 1.25 },
+    "max_runtime_seconds": 900,
     "gate_failure_streak": 2
   },
   "eval_gates": {
@@ -154,7 +154,7 @@ A durable engine enforces this natively; the portable runner uses a lockfile.
 
 Start small and boring on purpose. A good first loop:
 - the smallest useful unit of work, dry-run / sandbox only,
-- `max_iterations: 3`, tight `per_run` token + dollar budget, `max_runtime_seconds` short,
+- `max_iterations: 2`, tight `per_run` token + dollar budget, `max_runtime_seconds` short,
 - every checkpoint that could matter set to `human`,
 - success = "produce one validated output that passes the quality and safety gates,"
 - and you watch the first run end-to-end before you ever leave it unattended.

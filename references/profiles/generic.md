@@ -58,7 +58,7 @@ delete data, those specific actions need a human at the gate.
 ## First run recommendation
 
 Same philosophy as every profile: start small and prove the brakes. Pick the smallest
-useful unit of work, `max_iterations: 3`, tight budgets, short runtime, every uncertain
+useful unit of work, `max_iterations: 2`, tight budgets, short runtime, every uncertain
 checkpoint set to `human`. Success = "produce one validated output that passes the quality
 gate." Watch the first run end to end and confirm it stops on its own before you ever
 leave it unattended. Confidence in the stop conditions comes before any autonomy.

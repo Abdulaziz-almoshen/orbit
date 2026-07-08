@@ -15,7 +15,7 @@ updates itself.
 
 <br/>
 
-![version](https://img.shields.io/badge/version-0.38.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.39.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![self-updating](https://img.shields.io/badge/self--updating-yes-22863a)
@@ -208,8 +208,9 @@ Run `/orbit` in a repo and it audits the project, then scaffolds two layers:
 - **native TaskCreate/TaskUpdate checklist** — the pinned, auto-crossed-off list, role-tagged per item
 
 **The team** it stands up: a **Dispatcher** that clarifies and challenges the ask, an
-**Orchestrator** that plans and delegates, the **specialists** your domain needs (including a
-**Designer** on frontend repos), a **Safety gate** with veto power, a **Reviewer gate** that
+**Orchestrator** that plans and delegates, an on-demand **Advisor** for Opus-level judgment on
+costly forks, the **specialists** your domain needs (including a **Designer** on frontend repos),
+a **Safety gate** with veto power, a **Reviewer gate** that
 reviews like a senior engineer — correctness, security, concurrency, migrations, tests,
 blast-radius — and **proves** the work (runs the tests, quotes the line) before it counts as
 progress, and a **Reporter**. No single agent does everything.
@@ -239,6 +240,14 @@ senior engineer + a sharp CEO in the same room:
   asks rather than improvising something irreversible.
 
 > Playbooks: `planning-and-decision-briefs.md` + `clarify-and-challenge.md`.
+
+### ⚙️ It switches models deliberately
+
+Orbit's default loop stays cheap: the Executor lane does ordinary work on the configured Sonnet lane.
+When a decision is genuinely expensive to get wrong — architecture fork, safety/compliance uncertainty,
+repeated gate failure, or a user-requested deep judgment — the Orchestrator can call the read-only
+Advisor lane on Opus 4.8. That call is visible on the board, capped to one per cycle by default, and
+returns a compact recommendation instead of another pile of work.
 
 ### 🎨 It designs — distinctively, not generically
 
@@ -386,7 +395,9 @@ guarantee and a suggestion:
 | **Single-writer lock** (`PreToolUse` → `orbit-lock-hook`) | ✅ **binds** | Many readers, one writer. Denies `Edit`/`Write`/`MultiEdit` and write-intent `Bash` (commits, `rm`, redirects, migrations…) when **another session** holds the repo — and *always* denies a foreign write to `.orbit/STATE.md` (the memory spine). One Claude Code session (its sub-agents share its `session_id`) is one writer; a second window or a headless `claude -p` loop is a foreign writer, serialized behind the lock. Auto-acquired on first write (atomic `O_EXCL` — no double-writer race), heartbeated, stale after ~30 min. **Fails open** on any error and honors `ORBIT_LOCK_DISABLE=1` — a lock bug never bricks the repo. Recover a stale lock explicitly + logged: `scripts/orbit-lock break --reason …`. (`tests/test_writer_lock*.py`.) |
 | **Iteration + runtime caps** (`ralph_loop.sh`) | ✅ **binds** | The runner stops the loop at the cap (max iterations, runtime, the STOP sentinel, and the gate-failure streak). |
 | **Token + cost budgets** | ✅ **binds on the runner** | `ralph_loop.sh` meters `claude -p --output-format json`; `loop.py` tracks + persists spend across `--resume`. `move_money` is `FORBIDDEN` (raises). |
+| **Executor model selection** (`ralph_loop.sh` → `model_policy.executor`) | ✅ **binds on the runner** | The headless runner passes the configured executor model to `claude -p` when set, so everyday cycles stay on the cheaper lane. |
 | **Router classification** (`UserPromptSubmit` → `route.py`) | ⚖️ **system decides, model executes** | A deterministic keyword classifier picks the lane (task→loop / question→direct) and injects it every turn — that call is the system's. But the model still *runs* the loop; a hook can't spawn the sub-agents itself. |
+| **Advisor model switch** (`advisor` subagent → `model: opus`) | ⚖️ **host-enforced when invoked** | Claude Code honors the subagent `model:` field; Orbit's prompts/config decide when to invoke it. The policy is max one Advisor call per cycle by default, but the invocation decision is still prompt-governed. |
 | **Roles, playbooks, the review/QA gates** | 📋 **advisory** | Prompt-driven discipline the model follows reliably — strong, but not mechanically enforced. |
 | **Telemetry / status line** (`orbit-hook`, `orbit-status`, `orbit-statusline`) | 👁️ **observe-only** | A hook collector on Claude Code's real run events feeds the live dashboard + status line. Never blocks a tool, never logs a raw prompt (redacted; secrets scrubbed), fails open, and is wired from the trusted Orbit install — resolved at hook-run time for **both** the skills-dir clone and the marketplace plugin cache. Records what happened; changes nothing. |
 | **Design gate** (the Designer's prototype-before-develop flow, frontend repos) | ⚖️ **advisory determination + a coarse hook ask** | The HEAVY-vs-TRIVIAL call and the 2–5 prototype build are model judgment, same as any routing call. A `PreToolUse` hook (`design-gate.py`, `Edit\|Write\|MultiEdit`) backstops the *silent skip*: it asks (never denies) once per cycle if a UI production file is touched with no `design/approved.json` or `.orbit/design/TRIVIAL` on record. It's a **coarse traceability backstop** — it can only see the file path, not the content, so it catches "no design process happened," not "the wrong prototype won." |

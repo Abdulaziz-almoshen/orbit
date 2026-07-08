@@ -208,6 +208,15 @@ def dispatch(role: str, task: dict, context: str, cfg: dict) -> dict:
     raise NotImplementedError("Wire dispatch() to your orchestrator (e.g. Gemini).")
 
 
+def model_lane(role: str, cfg: dict) -> dict:
+    """Return the configured model lane for a role. The portable runner is model-agnostic, but
+    adapters should use this to keep the cheap Executor / on-demand Advisor split consistent."""
+    policy = cfg.get("model_policy", {}) or {}
+    if role == "advisor":
+        return policy.get("advisor", policy.get("executor", {}))
+    return policy.get("executor", {})
+
+
 def evaluate_gates(cycle_output: dict, cfg: dict) -> dict:
     """Evaluate the eval gates against this cycle's output. Return
     {"input": bool, "quality": bool, "safety": bool, "reasons": {gate: str}}.
@@ -329,7 +338,7 @@ def run(cfg: dict, resume: bool = False):
         # plans a task list (set_tasks) and dispatches each item to its owning role,
         # emitting start/done around every dispatch so the live view shows who's talking.
         emit("orchestrator", "plan", "info", "planning next action", cycle=cycle)
-        task = {"goal": cfg.get("run_goal", "")}
+        task = {"goal": cfg.get("run_goal", ""), "model_lane": model_lane("orchestrator", cfg)}
         emit("orchestrator", "act", "start", "delegating to specialist(s)", cycle=cycle)
         # Checkpointed: on resume, a completed act is NOT re-dispatched (no re-charged model
         # call, no duplicate side effect) — its result is read back from the checkpoint.

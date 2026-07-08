@@ -31,6 +31,21 @@ no red-team fleet, no background workflow, no repeated long status narration. In
 from sharper selection, not more agents.
 That means one sub-agent maximum by default.
 
+## Model switching — Executor + Advisor
+Orbit runs as a two-lane loop:
+
+| Lane | Model | When it runs | Job |
+|---|---|---|---|
+| **Executor** | `Sonnet 5` (`model_policy.executor.model = sonnet`) | every turn / normal loop work | plan, build, verify, update memory |
+| **Advisor** | `Opus 4.8` (`model_policy.advisor.model = opus`) | on demand only | one compact recommendation on a costly decision |
+
+The Advisor is **not** the default reviewer and not a hidden fleet. Use it only for: architecture forks,
+safety/compliance uncertainty, repeated gate failure, a decision that is expensive to get wrong, or an
+explicit user request for deep judgment. One Advisor call per cycle by default; log the `advisor_reason`,
+put `advisor` on the visible board while it is active, send a tiny packet, and keep the answer under the
+configured word limit. If you would ask the Advisor twice, stop and ask the user to approve the wider
+budget first.
+
 ## Agent Activation — catalog, not payroll
 Orbit can provision many specialists. That is inventory, not an instruction to wake them. The default
 run has one owner: the main agent. Use role **lenses** internally before spawning role **workers**.
