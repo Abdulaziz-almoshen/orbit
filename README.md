@@ -13,6 +13,8 @@ a specialized sub-agent team, packaged skills, and a real run→evaluate→decid
 **real brakes**: a PreToolUse hook that blocks catastrophic git commands, iteration/runtime
 caps that bind the loop, and token/cost budgets metered on the runner. It also attacks risky
 assumptions before implementation and turns review failures into bounded, evidence-backed repairs.
+When work can be split safely, Orbit gives each worker an isolated Git worktree, a small budget,
+and a completion packet for coordinator review instead of letting sessions collide in one checkout.
 
 One command sets it up. It runs today on Claude Code's own sub-agents; a portable runner with the
 same durability/budget logic is included for your own orchestrator, one function-wire away. It
@@ -36,6 +38,22 @@ project. It adds missing Orbit-owned files, carries forward managed checks only 
 proves they are unchanged, and keeps `setup.json` current. It does not touch project settings,
 customized files, or a repository under another Orbit writer lock, so deliberate hook removals remain
 removed. No separate doctor or refresh command is required for this baseline repair.
+
+## Parallel work without collisions
+
+Orbit keeps one coordinator checkout for the plan, integration, and final QA. Independent workers
+can work at the same time in isolated branches:
+
+```text
+Coordinator: plan · integrate · verify
+     ├── orbit/task-a  → worker + private worktree
+     └── orbit/task-b  → worker + private worktree
+```
+
+Workers do not share `STATE.md` or compete for one global write lock. They reserve a bounded token/USD
+budget, then submit changed files, tests, and a short summary to the coordinator merge queue. The
+coordinator remains the only integration writer. For a handoff inside one checkout, use the verified
+`scripts/orbit-lock takeover --reason "..."` path; Orbit confirms the new owner before allowing writes.
 
 ---
 
