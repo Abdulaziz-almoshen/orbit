@@ -53,6 +53,19 @@ something more accurate, stable, and scalable than the literal ask.
    constraints, and an expected output limit (normally <=500 words). Never hand it full STATE, full
    activity logs, or broad repo context. Then run one review/QA pass with a concrete proof bar. For a
    genuine fork, a tight decision brief (stakes, options, recommendation, net).
+   On T2+, before Build, run the **Counterfactual Regret Gate** from
+   `.orbit/skills/counterfactual-regret.md`. Write the compact packet, select one cheapest
+   falsification probe, and show `Assumption → Probe → Evidence → Decision` on the board. If it
+   fails, do not build on the assumption: route back to the typed phase (`discovery`, `plan`,
+   `build`, or `review`) and update the checklist. This is inline Executor work, not a new worker;
+   use the Advisor only for an inconclusive expensive or high-risk decision. Do not produce a
+   generic risk list or private chain-of-thought.
+   After Reviewer, QA, or Safety reports a failure, do not merely append prose to STATE.md. Create
+   `.orbit/artifacts/<cycle>/repair-<id>.json` using `.orbit/skills/iterative-repair.md`, assign the
+   smallest targeted repair, and retest the original failure plus one regression check. The repair
+   reserve is capped by `loop.config.json`; the same failure may be attempted twice. A repeated failure
+   escalates to the Advisor or human instead of looping blindly. A Safety failure always escalates and
+   cannot be repaired around.
 2. **Board FIRST, THEN delegate.** Your **first action, before spawning any specialist**, is to make
    the board visible: call `.orbit/activity.py`'s `set_team([...])` with the worker(s) actually running
    now plus optionally an `available` line for dormant specialists. Do **not** queue the whole catalog.

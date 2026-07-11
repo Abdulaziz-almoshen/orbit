@@ -71,6 +71,30 @@
     "status_budget_lines": 20
   },
 
+  "counterfactual": {
+    "enabled": true,
+    "minimum_gear": "T2",
+    "max_hypotheses": 3,
+    "max_probe_words": 120,
+    "max_packet_bytes": 12000,
+    "default_probe_budget_usd": 0.08,
+    "failure_routes": {
+      "missing_evidence": "discovery",
+      "wrong_assumption": "discovery",
+      "architecture_risk": "plan",
+      "implementation_defect": "build",
+      "verification_gap": "review"
+    }
+  },
+
+  "iteration": {
+    "enabled": true,
+    "max_repair_attempts": 2,
+    "repair_reserve_usd": 0.20,
+    "max_failure_packet_bytes": 12000,
+    "repeat_failure_action": "advisor_or_human"
+  },
+
   "_model_policy_help": "Two-lane model switching. The everyday executor runs the loop cheaply; the Advisor is an on-demand Opus judgment call, not a default worker. Claude Code subagents use aliases ('sonnet'/'opus') so the host resolves to the current account model family; display names preserve the intended product language.",
   "model_policy": {
     "default": "executor",

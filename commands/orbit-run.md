@@ -37,10 +37,18 @@ Task: $ARGUMENTS
    > the **Task tool** for sub-agents (each emits `start`/`done` via `.orbit/activity.py`) and drive
    > the checklist yourself. (`Workflow(...)` is fine for *developing Orbit itself*; it is banned as
    > the *run path for a scaffolded repo's tasks*.)
-4. **EVALUATE** against `CLAUDE.md` §3 and the gates in `.orbit/loop.config.json`. Honor the
+4. **COUNTERFACTUAL PREFLIGHT** for T2+ work, before implementation: use `.orbit/skills/counterfactual-regret.md`
+   and `.orbit/counterfactual.py` to attack the riskiest assumption with one cheap falsification probe.
+   Record `Assumption -> Probe -> Evidence -> Decision`. A failed probe must route back to its typed
+   phase (`discovery`, `plan`, `build`, or `review`) and update the checklist before continuing.
+5. **EVALUATE** against `CLAUDE.md` §3 and the gates in `.orbit/loop.config.json`. Honor the
    stop conditions (§8) and approval checkpoints — **propose, never auto-perform**, anything
    irreversible, financial, or outward-facing.
-5. **UPDATE + REPORT** — fold results into `.orbit/STATE.md` (snapshot, queue, cycle log) and
+6. **REPAIR ITERATIVELY** when Reviewer, QA, or Safety finds a failure: create a structured
+   `repair-<id>.json` packet per `.orbit/skills/iterative-repair.md`, assign a targeted fix, retest
+   the original failure plus a regression check, and backtrack to the right phase. Stop after two
+   attempts on the same failure and escalate; never repeat the same blind repair.
+7. **UPDATE + REPORT** — fold results into `.orbit/STATE.md` (snapshot, queue, cycle log) and
    give a short, decision-ready summary of what changed.
 
 Follow the routing rule in `CLAUDE.md` §10. Open with `[orchestrator] routing: $ARGUMENTS`.

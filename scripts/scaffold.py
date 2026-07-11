@@ -193,6 +193,8 @@ AGENTS = ASSETS / "claude-agents"
 FILE_PLAN = [
     ("loop.config.json", ".orbit/loop.config.json", None),
     ("loop.py",          ".orbit/loop.py",          0o755),
+    ("counterfactual.py", ".orbit/counterfactual.py", 0o755),  # bounded pre-build falsification gate
+    ("repair.py",        ".orbit/repair.py",        0o755),  # bounded post-review repair packets
     ("activity.py",      ".orbit/activity.py",      None),
     ("confidence.py",    ".orbit/confidence.py",    None),   # evidence-based delivery confidence
     ("lifecycle.py",     ".orbit/lifecycle.py",     None),   # mode detection + phase strip
@@ -216,7 +218,8 @@ PLAYBOOKS_ALWAYS = ["clarify-and-challenge.md", "planning-and-decision-briefs.md
                     "technical-review.md", "active-learning.md",
                     "product-discovery.md", "market-and-competitive-research.md",
                     "qa-validation.md", "goal-pipeline.md", "architecture-decisions.md",
-                    "safety-rules.md", "deliverable-reports.md", "loop-tiers.md"]
+                    "safety-rules.md", "deliverable-reports.md", "loop-tiers.md",
+                    "counterfactual-regret.md", "iterative-repair.md"]
 PLAYBOOKS_FRONTEND = ["design-methodology.md", "anti-ai-aesthetics.md", "design-styles.md",
                       "taste-preflight.md"]
 

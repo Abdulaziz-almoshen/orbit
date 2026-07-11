@@ -58,6 +58,12 @@ Run exactly ONE cycle of the self-prompting loop, then stop:
    prior conversation.
 2. PLAN: take the top item from STATE.md's task queue. For anything non-trivial, write the
    plan first.
+   For T2+ work, run the Counterfactual Regret Gate before ACT: write a compact
+   .orbit/artifacts/<cycle>/counterfactual.json packet, identify up to three ways the plan could be
+   wrong, and run the cheapest falsification probe. Record only Assumption -> Probe -> Evidence ->
+   Decision. A failed probe routes back to discovery, plan, build, or review; do not build on a failed
+   assumption. Validate the packet with .orbit/counterfactual.py. This is inline Executor work; do
+   not spawn another worker for it.
 3. ACT: delegate to the appropriate sub-agent(s) per .orbit/roles/ (use Claude Code
    subagents in .claude/agents/). Roles write artifacts to .orbit/artifacts/ and report
    back. Each role announces itself: open its report with "[role] ..." and emit to

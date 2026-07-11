@@ -311,7 +311,7 @@ The scaffolder placed `loop.config.json`, `loop.py`, and `ralph_loop.sh`. Your j
 **fill real thresholds** in `.orbit/loop.config.json` with the user (caps, eval gates, approval
 checkpoints) and wire `loop.py`'s `dispatch()` seam to their orchestrator.
 
-The loop is **read → plan → act → evaluate → update → decide**. The non-negotiable part is the
+The loop is **read → plan → counterfactual preflight → act → evaluate → update → decide**. The non-negotiable part is the
 stop conditions — Daisy stressed these to avoid runaway cost and damage. Every loop ships with, at
 minimum: a max-iterations cap, a token/cost budget per cycle and per run, a max-runtime wall
 clock, eval gates that block progress unless inputs/quality/safety checks pass, an explicit done
@@ -536,7 +536,9 @@ done. Make the user feel they just hired a team, and it's eager to start.
   requirements-traceability + pixel fidelity), `active-learning.md` (the Orchestrator's silent
   learn-gate in the UPDATE phase), `product-discovery.md` + `market-and-competitive-research.md`
   (the planning-phase **discovery team**), `goal-pipeline.md` (goal → story DAG → run-until-green →
-  polish), `architecture-decisions.md` (the CTO hat — ADRs, boring-tech, fitness functions).
+  polish), `architecture-decisions.md` (the CTO hat — ADRs, boring-tech, fitness functions),
+  `counterfactual-regret.md` (pre-build falsification and typed backtracking),
+  `iterative-repair.md` (failure packets, bounded repair, retest, and escalation).
   Grow this over time.
 - `assets/` — copyable `loop.config.json`, `loop.py`, `activity.py`, `ralph_loop.sh`,
   `orbit-status`, `checks/guard.py` (safety) + `checks/route.py` (router), `runners/inngest-loop.ts`,

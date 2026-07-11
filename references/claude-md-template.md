@@ -100,6 +100,10 @@ execution engine. See `references/durable-execution.md`.)
 - `.orbit/skills/qa-validation.md` — the QA Engineer's requirements-traceability + pixel-fidelity gate.
 - `.orbit/skills/goal-pipeline.md` — goal → spec → story DAG → run-until-green → polish (2 human gates).
 - `.orbit/skills/architecture-decisions.md` — the CTO hat: ADRs in `.orbit/decisions/`, boring-tech bar.
+- `.orbit/skills/counterfactual-regret.md` — pre-build falsification: attack the riskiest assumption,
+  run one cheap probe, and route failures back to the correct phase.
+- `.orbit/skills/iterative-repair.md` — post-build repair packets: target the failure, retest it,
+  prevent blind retries, and escalate repeated failures.
 
 **Design playbooks** (frontend repos only, provisioned when a UI surface is detected):
 - `.orbit/skills/design-methodology.md` — the Designer's process, including the **impact
