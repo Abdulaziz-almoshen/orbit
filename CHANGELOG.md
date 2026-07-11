@@ -3,6 +3,15 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.39.1
+
+**Guard fix — preserve shell variable scope inside command substitutions.** Browser QA commands that
+assign a tool path (`B=/.../browse`) and reuse it inside `$(...)` now pass through without a false
+unresolved-command prompt. Dangerous inherited commands remain subject to the existing deny/ask rules.
+
+- Propagate conservative literal variable bindings into nested substitutions and shell wrappers.
+- Add a regression case for the real multi-line gstack/browser QA loop.
+
 ## 0.39.0
 
 **Model switching — cheap executor, Opus advisor on demand.** Orbit now treats model choice as part

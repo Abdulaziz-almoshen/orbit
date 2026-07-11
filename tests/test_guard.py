@@ -138,6 +138,17 @@ CASES = [
     ('echo "`rm -rf /`"',                                "deny"),      # a real backtick sub INSIDE double quotes → still caught
     ("echo '$(rm -rf /)'",                               None),        # single-quoted → bash does NOT expand → literal → allow
     ('printf "(" ; git push --force origin main',        "deny"),      # a literal `(` in quotes must not hide the real force-push
+    # A real gstack/browser QA loop: B is assigned in the outer shell and reused inside command
+    # substitutions in a multi-line `for` body. The nested browser commands are benign and must
+    # inherit the outer literal assignment instead of tripping the unresolved-command safeguard.
+    ('''B=/opt/gstack/browse/dist/browse
+$B click @e5 >/dev/null 2>&1
+for i in 1 2 3 4; do
+  has_phone=$($B js "!!document.querySelector('input[name=phone]')" 2>/dev/null)
+  ref=$($B snapshot -i 2>/dev/null | grep -oE "@e[0-9]+" | head -1)
+  $B click "$ref" >/dev/null 2>&1
+done
+$B js "(function(){var c=document.querySelector('input[name=consent]');return c?('consent found; required='+c.required):'NO consent checkbox';})()" 2>/dev/null''', None),
 
     # --- red-team hardening (v0.27.1): 10 confirmed bypasses found by the adversarial pass ---
     # (a) parser: a stray/ANSI-C quote must not swallow a REAL substitution that follows it

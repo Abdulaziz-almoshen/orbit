@@ -769,23 +769,30 @@ def _split_heredocs(cmd):
     return "\n".join(code), "\n".join(bodies)
 
 
-def evaluate(cmd, _depth=0):
+def evaluate(cmd, _depth=0, inherited_vars=None):
     """Return the most severe (decision, reason) triggered by any segment, or None to allow."""
     if _depth > 6 or not cmd:
         return None
     cmd = cmd.replace("\\\n", "")                           # bash line-continuation joins with NO space
     best = None
     code, hbodies = _split_heredocs(cmd)                    # heredoc bodies are stdin data, not argv
+    # Shell variables assigned before a command substitution remain visible inside it. Carry the
+    # conservative literal map into nested evaluations so `B=/tool; x=$( $B js ... )` does not
+    # become an unrelated unresolved command. Local assignments are merged below; unsafe or
+    # non-literal local values still remove their name from the inherited map.
+    segs = _segments(code)
+    var_map = dict(inherited_vars or {})
+    for name, values in _resolve_map(segs).items():
+        var_map[name] = values
 
     # 1. recurse into hidden sub-commands (subshells / substitutions / backticks) in the code, PLUS
     #    unquoted-heredoc bodies (where `$( … )`/backticks run at setup); quoted bodies are inert.
     for inner in _inner_commands(code):
-        best = _max(best, evaluate(inner, _depth + 1))
+        best = _max(best, evaluate(inner, _depth + 1, var_map))
     for inner in _inner_commands(hbodies):
-        best = _max(best, evaluate(inner, _depth + 1))
+        best = _max(best, evaluate(inner, _depth + 1, var_map))
 
-    segs = _segments(code)                                  # NOT the heredoc body lines
-    var_map = _resolve_map(segs)               # {VAR: [candidates]} assigned in this same command
+    # `segs` and `var_map` were prepared before recursion so nested substitutions inherit scope.
 
     # 2. cross-segment: a downloader piped straight into a shell = unreviewed remote code. Resolve a
     #    `$VAR` command name first, so `C=curl; $C … | sh` and `curl … | $S`(S=sh) don't hide it.
