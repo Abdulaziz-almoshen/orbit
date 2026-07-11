@@ -3,6 +3,16 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.39.3
+
+**Iterative intelligence — counterfactual preflight plus bounded repair.** Orbit now attacks risky
+assumptions before building and turns review failures into targeted, evidence-backed repair attempts.
+
+- Counterfactual Regret Gate: one cheap falsification probe before T2+ implementation.
+- Structured repair packets with owner, evidence, root cause, required change, verification, and attempt.
+- Typed backtracking to discovery, plan, build, or review; repeated failures escalate after two attempts.
+- No new default worker and a reserved `$0.20` repair budget to preserve Lite-mode economics.
+
 ## 0.39.2
 
 **Context budget: `activity.jsonl` now auto-rotates — telemetry can't grow into token debt.** The
