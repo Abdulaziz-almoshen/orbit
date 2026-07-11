@@ -7,7 +7,8 @@
 Orbit turns any product repo into a **self-prompting agentic loop** — persistent memory,
 a specialized sub-agent team, packaged skills, and a real run→evaluate→decide loop with
 **real brakes**: a PreToolUse hook that blocks catastrophic git commands, iteration/runtime
-caps that bind the loop, and token/cost budgets metered on the runner.
+caps that bind the loop, and token/cost budgets metered on the runner. It also attacks risky
+assumptions before implementation and turns review failures into bounded, evidence-backed repairs.
 
 One command sets it up. It runs today on Claude Code's own sub-agents; a portable runner with the
 same durability/budget logic is included for your own orchestrator, one function-wire away. It
@@ -15,7 +16,7 @@ updates itself.
 
 <br/>
 
-![version](https://img.shields.io/badge/version-0.39.3-2b6cb0)
+![version](https://img.shields.io/badge/version-0.39.4-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![self-updating](https://img.shields.io/badge/self--updating-yes-22863a)
@@ -87,6 +88,8 @@ the exact same clone + `./setup`. More options (marketplace plugin, "let Claude 
 | It free-edits, force-pushes, wipes a directory | A guard **blocks** the catastrophic (force-push, `rm -rf /`, disk wipes) and **pauses** the risky; irreversible actions are *proposed*, never done alone. Add your repo's own rules (deploys, migrations) in one line |
 | A crash → it starts over and re-burns tokens | **Checkpointed** — resumes from the last finished step (on the `loop.py` runner / a durable engine; the dev loop restarts the cycle) |
 | It does exactly what you typed, bugs and all | It **plans like a senior** — clarifies, challenges weak assumptions, writes a decision brief, proposes a better approach |
+| It builds confidently on an untested assumption | A **counterfactual preflight** attacks the riskiest assumption and runs one cheap falsification probe before implementation |
+| QA finds a defect and the agent just reports it | A **repair packet** carries evidence, owner, root cause, required change, and retest checks back into the next cycle |
 | Generic, templated UI that screams "AI made this" | On frontend repos a real **Designer** stands up — a distinctive, on-brand Design Plan, not slop |
 
 You ask for a **task** → it runs the loop. You ask a **question** → it just answers. That split
@@ -103,9 +106,17 @@ Every cycle is the same honest shape — and you can watch each step happen:
 ```mermaid
 flowchart LR
     R["READ<br/>CLAUDE.md + STATE"] --> P["PLAN<br/>next action"]
-    P --> A["ACT<br/>sub-agent team"]
+    P --> C["COUNTERFACTUAL<br/>cheap falsification probe"]
+    C -->|assumption fails| B["BACKTRACK<br/>discovery / plan"]
+    B --> P
+    C -->|probe passes| A["ACT<br/>sub-agent team"]
     A --> E["EVALUATE<br/>input · quality · safety gates"]
-    E --> U["UPDATE<br/>state + memory"]
+    E --> G{"proof passes?"}
+    G -->|yes| U["UPDATE<br/>state + memory"]
+    G -->|no| F["REPAIR PACKET<br/>evidence · owner · fix"]
+    F --> T["RETEST<br/>original + regression"]
+    T -->|pass| U
+    T -->|repeat failure| H["ADVISOR / HUMAN<br/>escalate"]
     U --> D{"DECIDE"}
     D -->|continue| R
     D -->|done / cap hit / needs human| X["STOP"]
@@ -114,6 +125,22 @@ flowchart LR
 `DECIDE` is the brake — it runs every cycle and is the only place the loop is allowed to
 keep going. Hit an iteration / token / cost / runtime cap, fail a gate too many times, or
 reach an explicit "done", and it stops cleanly.
+
+### The intelligence gates
+
+Orbit has two complementary feedback loops:
+
+- **Counterfactual Regret Gate, before Build.** For T2+ work, the Executor writes up to three
+  plausible ways the plan could be wrong, selects the cheapest probe, and records only the useful
+  result: `Assumption → Probe → Evidence → Decision`. A failed assumption routes back to discovery
+  or planning instead of becoming expensive code.
+- **Iterative Repair Loop, after Evaluate.** A Reviewer, QA Engineer, or Safety gate produces a
+  typed `repair-<id>.json` packet. The Builder receives the smallest relevant context, fixes the
+  stated defect, retests the original failure plus a regression check, and returns to the gate.
+  The same failure gets at most two attempts; then Orbit escalates to Opus or a human.
+
+Neither path creates another always-on worker. The Executor handles normal reasoning inline, and
+the repair reserve is capped in `loop.config.json`, preserving Orbit Lite's token discipline.
 
 ## 👀 Watch it work — see *who's talking*, live
 
@@ -398,6 +425,7 @@ guarantee and a suggestion:
 | **Executor model selection** (`ralph_loop.sh` → `model_policy.executor`) | ✅ **binds on the runner** | The headless runner passes the configured executor model to `claude -p` when set, so everyday cycles stay on the cheaper lane. |
 | **Router classification** (`UserPromptSubmit` → `route.py`) | ⚖️ **system decides, model executes** | A deterministic keyword classifier picks the lane (task→loop / question→direct) and injects it every turn — that call is the system's. But the model still *runs* the loop; a hook can't spawn the sub-agents itself. |
 | **Advisor model switch** (`advisor` subagent → `model: opus`) | ⚖️ **host-enforced when invoked** | Claude Code honors the subagent `model:` field; Orbit's prompts/config decide when to invoke it. The policy is max one Advisor call per cycle by default, but the invocation decision is still prompt-governed. |
+| **Counterfactual preflight + repair packets** | ⚖️ **structured, prompt-driven** | Orbit validates packet shape, caps hypotheses and repair attempts, routes failures to typed phases, and preserves evidence. The model still performs the probe and the fix, so the quality judgment remains advisory. |
 | **Roles, playbooks, the review/QA gates** | 📋 **advisory** | Prompt-driven discipline the model follows reliably — strong, but not mechanically enforced. |
 | **Telemetry / status line** (`orbit-hook`, `orbit-status`, `orbit-statusline`) | 👁️ **observe-only** | A hook collector on Claude Code's real run events feeds the live dashboard + status line. Never blocks a tool, never logs a raw prompt (redacted; secrets scrubbed), fails open, and is wired from the trusted Orbit install — resolved at hook-run time for **both** the skills-dir clone and the marketplace plugin cache. Records what happened; changes nothing. |
 | **Design gate** (the Designer's prototype-before-develop flow, frontend repos) | ⚖️ **advisory determination + a coarse hook ask** | The HEAVY-vs-TRIVIAL call and the 2–5 prototype build are model judgment, same as any routing call. A `PreToolUse` hook (`design-gate.py`, `Edit\|Write\|MultiEdit`) backstops the *silent skip*: it asks (never denies) once per cycle if a UI production file is touched with no `design/approved.json` or `.orbit/design/TRIVIAL` on record. It's a **coarse traceability backstop** — it can only see the file path, not the content, so it catches "no design process happened," not "the wrong prototype won." |
@@ -439,7 +467,7 @@ whose brakes actually bind — and that part is proven, not asserted:
   quoted-var obfuscation) and a **15-case router corpus** (task/question/skip) — `python3
   evals/run-corpus.py` (CI-gated by `tests/test_eval_corpus.py`, fails on any regression). Plus an honest,
   still-empty task-quality A/B table. We publish real numbers or none — never faked.
-- ✅ **36 automated test files + the coherence gate** — guard schema + 70+ bypass/wrapper cases,
+- ✅ **43 automated test files + the coherence gate** — guard schema + 70+ bypass/wrapper cases,
   router accuracy (69/69), budget persistence, migration safety, install/uninstall behavior,
   scaffold idempotency, config-vs-code consistency, hook-drift detection, telemetry schema +
   prompt redaction, the hook collector, the dashboard/status line, confidence + lifecycle, and
@@ -473,8 +501,9 @@ orbit/                          ← this repo == the skill dir (clones to ~/.cla
 ├── references/                 # methodology, templates, roles, loop design, observability,
 │                               #   hooks/enforcement, profiles, playbooks (the skill library)
 ├── assets/                     # loop.py, loop.config.json, activity.py (schema-2 telemetry +
-│                               #   run.json), confidence.py, lifecycle.py, ralph_loop.sh,
-│                               #   orbit-status, orbit-statusline.py, checks/*, qa/ tools, role adapters
+│                               #   run.json), counterfactual.py, repair.py, confidence.py,
+│                               #   lifecycle.py, ralph_loop.sh, orbit-status, orbit-statusline.py,
+│                               #   checks/*, qa/ tools, role adapters
 ├── scripts/scaffold.py         # lays down the deterministic skeleton (Phase 2)
 ├── scripts/check-coherence.py  # the coherence gate (no phantom skills / roster drift)
 ├── scripts/verify-hooks.py     # detects drift between a repo's installed hooks and this install

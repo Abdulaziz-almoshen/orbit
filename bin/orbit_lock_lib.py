@@ -24,6 +24,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -267,6 +268,36 @@ def _touches_state(tool_name: str, tool_input: dict) -> bool:
     return False
 
 
+def _is_recovery_command(tool_name: str, tool_input: dict) -> bool:
+    """Recognize only the sanctioned lock escape hatch.
+
+    Allow exactly `orbit-lock break --reason <text>`, optionally preceded by one `cd <dir> &&`.
+    Reject chaining, redirects, substitutions, and every other subcommand.
+    """
+    if tool_name != "Bash":
+        return False
+    cmd = str((tool_input or {}).get("command") or "").strip()
+    if not cmd or any(ch in cmd for ch in ";|<>$()`") or re.search(r"(?<!&)&(?!&)", cmd):
+        return False
+    segments = re.split(r"\s*&&\s*", cmd)
+    if len(segments) > 2:
+        return False
+    if len(segments) == 2:
+        try:
+            first = shlex.split(segments[0])
+        except ValueError:
+            return False
+        if len(first) != 2 or first[0] != "cd":
+            return False
+    try:
+        words = shlex.split(segments[-1])
+    except ValueError:
+        return False
+    if len(words) != 4 or Path(words[0]).name != "orbit-lock":
+        return False
+    return words[1] == "break" and words[2] == "--reason" and bool(words[3].strip())
+
+
 # ─────────────────────────────── the decision ───────────────────────────────
 def _break_line(cmd="orbit-lock break --reason '<why>'"):
     return f"recover explicitly with: {cmd}"
@@ -275,6 +306,11 @@ def _break_line(cmd="orbit-lock break --reason '<why>'"):
 def evaluate(target: Path, tool_name: str, tool_input: dict, identity: dict, now: datetime) -> dict:
     """PURE decision (no writes): {decision: allow|deny, action: acquire|heartbeat|none, reason}.
     The hook performs `action` (acquire/heartbeat mutate the lock) and emits `decision`."""
+    # The writer wall must not deadlock the one command that clears a foreign/corrupt lock. The CLI
+    # still requires a reason and records the break in the audit log.
+    if _is_recovery_command(tool_name, tool_input):
+        return {"decision": "allow", "action": "none", "reason": "sanctioned writer-lock recovery"}
+
     intent = classify_write_intent(tool_name, tool_input)
     if intent == "read":
         return {"decision": "allow", "action": "none", "reason": "read-only"}

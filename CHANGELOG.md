@@ -3,6 +3,12 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.39.4
+
+**Lock recovery deadlock fix.** The writer-lock hook now permits only the exact audited
+`orbit-lock break --reason "…"` escape hatch, even when another session owns the lock. Chained
+commands, missing reasons, normal releases, and all other writes remain blocked.
+
 ## 0.39.3
 
 **Iterative intelligence — counterfactual preflight plus bounded repair.** Orbit now attacks risky

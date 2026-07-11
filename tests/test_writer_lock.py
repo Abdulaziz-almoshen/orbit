@@ -66,6 +66,10 @@ def test_decision_table():
         # 8) foreign + git commit → deny
         dec = L.evaluate(t, "Bash", {"command": "git commit -m x"}, _ident("B"), now)
         ck(dec["decision"] == "deny", f"8 foreign+git commit → {dec}")
+        dec = L.evaluate(t, "Bash", {"command": "scripts/orbit-lock break --reason 'stale abandoned session'"}, _ident("B"), now)
+        ck(dec["decision"] == "allow", f"foreign+orbit-lock break → {dec}")
+        dec = L.evaluate(t, "Bash", {"command": "scripts/orbit-lock release --force"}, _ident("B"), now)
+        ck(dec["decision"] == "deny", f"foreign+release --force must stay blocked → {dec}")
         # 5) stale foreign lock + Edit → deny WITH a break instruction
         stale = L.new_lock(t, _ident("A"), "", now)
         stale["heartbeat_at"] = "2000-01-01T00:00:00Z"
@@ -79,6 +83,10 @@ def test_decision_table():
            "11 malformed+write should deny (fail closed)")
         ck(L.evaluate(t, "Bash", {"command": "cat x"}, _ident("B"), now)["decision"] == "allow",
            "11 malformed+read should allow (fail open)")
+        ck(L.evaluate(t, "Bash", {"command": "cd /tmp && scripts/orbit-lock break --reason 'corrupt lock'"}, _ident("B"), now)["decision"] == "allow",
+           "malformed+cd then orbit-lock break must allow")
+        ck(L.evaluate(t, "Bash", {"command": "scripts/orbit-lock break"}, _ident("B"), now)["decision"] == "deny",
+           "orbit-lock break without reason must stay blocked")
 
 
 def test_classifier():

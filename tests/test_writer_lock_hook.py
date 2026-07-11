@@ -66,6 +66,10 @@ def test_enforcement():
         # 5) foreign B Write STATE.md → deny, reason names STATE.md
         dec, reason = run_hook(pay("B", t, "Write", {"file_path": str(t / ".orbit/STATE.md")}))
         ck(dec == "deny" and "STATE.md" in reason, f"B STATE.md → {dec} {reason!r}")
+        dec, reason = run_hook(pay("B", t, "Bash", {"command": "scripts/orbit-lock break --reason 'stale abandoned session'"}))
+        ck(dec == "allow", f"B orbit-lock break → {dec} {reason!r}")
+        ck(run_hook(pay("B", t, "Bash", {"command": "scripts/orbit-lock break --reason 'x' && touch pwned"}))[0] == "deny",
+           "chained recovery command must stay blocked")
 
 
 def test_safety_valves():

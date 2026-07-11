@@ -8,6 +8,7 @@ writer identity from its `session_id`, and:
   • write + no lock                              → auto-acquire the lock, allow
   • write + I already own the lock               → refresh heartbeat, allow
   • write + a FOREIGN session owns the lock       → DENY, with an `orbit-lock break --reason …` recovery line
+  • exact `orbit-lock break --reason <text>` command → ALLOW so the recovery path cannot deadlock itself
   • write to .orbit/STATE.md under a foreign lock → always DENY (the memory spine)
   • corrupt lock file + write                    → DENY (fail closed for writes), with recovery line
 

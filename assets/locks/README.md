@@ -48,6 +48,7 @@ stale; an abandoned one does after ~30 min.
 | write + a **foreign** session owns it | **deny** (with a `break` recovery line) |
 | write to `.orbit/STATE.md` under a foreign lock | **deny** (always — the memory spine) |
 | corrupt lock file + write | **deny** (fail closed for writes; reads stay open) |
+| exact `orbit-lock break --reason "…"` | **allow** (the audited recovery escape hatch; chained commands remain denied) |
 
 The hook **fails open** on any infrastructure error (a bug never bricks the repo), and can be disabled
 entirely with `ORBIT_LOCK_DISABLE=1`.
