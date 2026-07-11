@@ -3,6 +3,19 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.39.2
+
+**Context budget: `activity.jsonl` now auto-rotates — telemetry can't grow into token debt.** The
+context-budget gate (`orbit-context doctor`/`compact`, the `context_budget` thresholds, and the
+orchestrator's "run doctor before T2+" rule) already existed, but `compact` was *manual* — the
+append-only activity log still grew unbounded between runs, and a deep loop with N subagents re-reading a
+400 KB log burned ~100k tokens per pass. `activity.emit` now rotates the log the moment it crosses a byte
+cap (`ORBIT_ACTIVITY_MAX_BYTES`, default 256 KB): it keeps the last `ORBIT_ACTIVITY_KEEP` events (default
+500) live and appends the overflow to `.orbit/archive/activity/activity-<date>.jsonl`, atomically and
+fail-open. Self-limiting, no command to remember. New `tests/test_activity_rotation.py` proves the live
+log stays bounded by bytes, the overflow is archived (not dropped), zero events are lost, and recency is
+preserved.
+
 ## 0.39.1
 
 **Guard fix — preserve shell variable scope inside command substitutions.** Browser QA commands that

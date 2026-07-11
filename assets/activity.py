@@ -30,6 +30,34 @@ from pathlib import Path
 SCHEMA = 2
 ORBIT_DIR = Path(os.environ.get("ORBIT_DIR", ".orbit"))
 ACTIVITY = ORBIT_DIR / "activity.jsonl"
+
+# Activity is TELEMETRY, not memory — the append-only log must never grow into token debt (a subagent
+# that reads a 400KB log burns ~100k tokens). Cap it: keep the last KEEP_EVENTS live, archive the rest.
+MAX_ACTIVITY_BYTES = int(os.environ.get("ORBIT_ACTIVITY_MAX_BYTES", 256 * 1024))
+KEEP_EVENTS = int(os.environ.get("ORBIT_ACTIVITY_KEEP", 500))
+
+
+def _rotate_activity() -> None:
+    """Cap activity.jsonl: keep the last KEEP_EVENTS events live, append older ones to a dated archive
+    under .orbit/archive/activity/. Only runs when the file crosses MAX_ACTIVITY_BYTES (checked via a
+    cheap stat), so it's near-free per emit and self-limiting. Fails open — telemetry never breaks the run."""
+    try:
+        if not ACTIVITY.exists() or ACTIVITY.stat().st_size <= MAX_ACTIVITY_BYTES:
+            return
+        lines = [ln for ln in ACTIVITY.read_text().splitlines() if ln.strip()]
+        if len(lines) <= KEEP_EVENTS:
+            return
+        old, keep = lines[:-KEEP_EVENTS], lines[-KEEP_EVENTS:]
+        arc_dir = ORBIT_DIR / "archive" / "activity"
+        arc_dir.mkdir(parents=True, exist_ok=True)
+        arc = arc_dir / f"activity-{time.strftime('%Y-%m-%d', time.gmtime())}.jsonl"
+        with arc.open("a") as f:
+            f.write("\n".join(old) + "\n")
+        tmp = ACTIVITY.with_name("activity.jsonl.tmp")
+        tmp.write_text("\n".join(keep) + "\n")
+        tmp.replace(ACTIVITY)                          # atomic swap — no reader ever sees a half-file
+    except Exception:
+        pass
 TASKS = ORBIT_DIR / "tasks.json"
 RUN = ORBIT_DIR / "run.json"
 AGENTS = ORBIT_DIR / "agents.json"
@@ -344,6 +372,7 @@ def emit(role: str, phase: str = "", status: str = "info", msg: str = "",
             ev["files"] = files
         with ACTIVITY.open("a") as f:
             f.write(json.dumps(ev) + "\n")
+        _rotate_activity()                             # keep the live log bounded (telemetry ≠ memory)
         _update_snapshot(ev)
         # keep the team roster live off the same signal (so orbit-hook's emits feed it for free)
         if role and role != "?":
