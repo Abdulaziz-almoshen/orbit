@@ -201,6 +201,7 @@ FILE_PLAN = [
     ("lifecycle.py",     ".orbit/lifecycle.py",     None),   # mode detection + phase strip
     ("ralph_loop.sh",    "scripts/ralph_loop.sh",     0o755),
     ("orbit-lock",       "scripts/orbit-lock",        0o755),   # thin wrapper → trusted bin/orbit-lock
+    ("orbit-worktree",   "scripts/orbit-worktree",    0o755),   # isolated worker worktree manager
     ("orbit-memory",     "scripts/orbit-memory",      0o755),   # review/promote/forget the learning ledger
     ("orbit-context",    "scripts/orbit-context",     0o755),   # context budget doctor + safe compactor
     ("orbit-status",     "scripts/orbit-status",      0o755),

@@ -6,7 +6,8 @@ orbit-lock — manage the single-writer lock for an Orbit repo (many readers, on
   orbit-lock acquire   --target . --task "F1-S4" --owner interactive [--break-stale]
   orbit-lock heartbeat --target .                          # refresh my lock's TTL (only if I own it)
   orbit-lock release   --target . [--force]                # drop my lock (or any, with --force)
-  orbit-lock break     --target . --reason "stale abandoned session"   # take/clear a foreign lock — logged
+  orbit-lock break     --target . --reason "stale abandoned session"   # clear a foreign lock — logged
+  orbit-lock takeover  --target . --task "concierge-fix" --reason "approved handoff"  # clear + acquire + verify
 
 Identity comes from the environment (ORBIT_SESSION_ID / CLAUDE_SESSION_ID / TERM_SESSION_ID, else a
 cwd hash). The PreToolUse enforcement path lives in `orbit-lock-hook`, which resolves identity from the
@@ -125,10 +126,29 @@ def cmd_break(target, args, ident, now):
     return 0
 
 
+def cmd_takeover(target, args, ident, now):
+    if not args.reason.strip():
+        print("orbit-lock takeover requires --reason (the handoff must be deliberate and logged)", file=sys.stderr)
+        return 2
+    if args.owner:
+        ident["owner_kind"] = args.owner
+    try:
+        lease = L.takeover(target, ident, args.task, args.reason, now, allow_live=True)
+    except RuntimeError as exc:
+        print(f"writer lock: TAKEOVER REFUSED — {exc}", file=sys.stderr)
+        return 3
+    L.log_event(target, "takeover", ident, now, reason=args.reason, task=args.task,
+                verified_owner=lease.get("owner_id"))
+    L.log_activity(target, "takeover", f"writer lock takeover verified for {ident['owner_kind']}")
+    print(f"writer lock: TAKEOVER VERIFIED — {ident['owner_kind']} owns this checkout "
+          f"({str(ident['owner_id'])[:12]})")
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="orbit-lock", description="single-writer lock for an Orbit repo")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("status", "acquire", "heartbeat", "release", "break"):
+    for name in ("status", "acquire", "heartbeat", "release", "break", "takeover"):
         sp = sub.add_parser(name)
         sp.add_argument("--target", default=".", type=Path)
         sp.add_argument("--json", action="store_true")
@@ -146,7 +166,7 @@ def main(argv=None):
     ident = L.resolve_identity(None)
     now = L.now_utc()
     return {"status": cmd_status, "acquire": cmd_acquire, "heartbeat": cmd_heartbeat,
-            "release": cmd_release, "break": cmd_break}[args.cmd](target, args, ident, now)
+            "release": cmd_release, "break": cmd_break, "takeover": cmd_takeover}[args.cmd](target, args, ident, now)
 
 
 if __name__ == "__main__":

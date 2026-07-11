@@ -9,6 +9,15 @@
   "_concurrency_help": "Prevent collisions. singleton_key = run at most ONE instance per this key (e.g. per ticker/service/screen) so a scheduled run can't stomp a running one. Empty = no limit. A durable engine enforces this natively; the portable runner uses a lockfile.",
   "concurrency": { "singleton_key": "", "max_parallel": 1 },
 
+  "_worktrees_help": "Optional parallel worker mode. Each worker writes in an isolated Git worktree; the coordinator owns integration and merge. Keep max_workers small because isolation removes races but does not make model calls free.",
+  "worktrees": {
+    "enabled": true,
+    "control_plane": "git_common_dir",
+    "max_workers": 2,
+    "require_coordinator_merge": true,
+    "takeover_requires_reason": true
+  },
+
   "_hard_limits_help": "Absolute, judgment-free brakes. Checked every cycle by BOTH runners. per_run caps the whole run; per_cycle stops the loop if a single cycle blows its budget (a runaway signal). gate_failure_streak trips a hard stop after N consecutive gate failures (thrashing).",
   "hard_limits": {
     "max_iterations": 2,

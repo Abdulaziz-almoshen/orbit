@@ -64,6 +64,12 @@ forward, and `setup.json` is restamped. It never edits settings, roles, CLAUDE.m
 customized checks, or a project with an active writer lock. Deliberate hook removals therefore remain
 removed. The output reports `already healthy`, `repaired N file(s)`, or `preserved (active writer lock)`.
 
+For parallel implementation, keep the coordinator checkout as the integration writer and create an
+isolated worker with `scripts/orbit-worktree create --task <slug>`. Workers may write their own
+worktrees concurrently; they must return a focused completion packet for coordinator integration.
+If a live checkout lease must change hands, use `scripts/orbit-lock takeover --reason '<approved reason>'`:
+it acquires and verifies the new owner atomically before reporting success.
+
 ## The one idea everything serves
 
 > "You're not supposed to prompt Claude. You're supposed to build a system that prompts

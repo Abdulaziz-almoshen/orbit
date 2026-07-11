@@ -3,6 +3,22 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.40.0
+
+**Parallel work without shared-checkout races.** Orbit keeps the existing single-writer behavior for
+one checkout and adds an opt-in isolated worker path.
+
+- `orbit-lock takeover` atomically replaces a lease, acquires the new owner, and verifies ownership
+  before reporting success. The hook permits only the exact audited recovery command.
+- `orbit-worktree create/status/remove` manages task branches and isolated worktrees.
+- `orbit-worktree finish` writes a bounded completion packet and changed-file list to the coordinator's
+  merge queue; worker reservations are capped by `worktrees.max_workers` and carry token/USD budgets.
+- The worktree registry is serialized under Git's common directory; each worker keeps its own local
+  Orbit lock and metadata.
+- Project scaffolds receive `scripts/orbit-worktree` as a trusted wrapper.
+- Regression tests cover takeover verification, recovery-hook routing, worktree lifecycle, and registry
+  isolation. Existing single-checkout mode remains the default.
+
 ## 0.39.5
 
 **Automatic scaffold self-heal.** The `/orbit` preamble now repairs safe project drift without

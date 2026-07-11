@@ -7,6 +7,7 @@ resolution, and the orbit-lock CLI lifecycle. The hook binary and scaffold wirin
 Run: python3 tests/test_writer_lock.py   (exit 0 = pass)
 """
 import importlib.util
+import json
 import os
 import subprocess
 import sys
@@ -154,6 +155,12 @@ def test_cli_lifecycle():
         ev = (t / ".orbit/locks/events.jsonl")
         ck(ev.exists() and "broke" in ev.read_text() and "took over" in ev.read_text(),
            "events.jsonl records the break with its reason")
+        r = _cli(t, "takeover", "--task", "handoff", "--reason", "approved handoff",
+                 env={"TERM_SESSION_ID": "C"})
+        ck(r.returncode == 0 and "TAKEOVER VERIFIED" in r.stdout,
+           f"takeover must acquire and verify in one operation → {r.returncode} {r.stdout!r}")
+        owner = json.loads((t / ".orbit/locks/active-writer.json").read_text()).get("owner_id")
+        ck(owner == "C", f"takeover must leave the new owner in the lock, got {owner!r}")
 
 
 def main():

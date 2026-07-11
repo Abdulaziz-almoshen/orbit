@@ -16,7 +16,7 @@ updates itself.
 
 <br/>
 
-![version](https://img.shields.io/badge/version-0.39.5-2b6cb0)
+![version](https://img.shields.io/badge/version-0.40.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![self-updating](https://img.shields.io/badge/self--updating-yes-22863a)
@@ -81,7 +81,8 @@ the exact same clone + `./setup`. More options (marketplace plugin, "let Claude 
 | `scripts/orbit-status --follow` | In a product repo (terminal) | Live who's-talking dashboard — the headless-runner equivalent of the pinned Claude Code checklist |
 | `scripts/orbit-dashboard` [`--port N`] | In a product repo | The same board as a **read-only local web app** (plan · agents · owner · gates · budget · confidence · writer-lock · activity). Secrets redacted; no mutating endpoint. `--once` prints the JSON snapshot |
 | `orbit-doctor` [`--fix`] | In a product repo | **Read-only** health check: scaffold drift (version · missing files/hooks · role/prose drift · preserved custom guard) **+** a safe-refresh plan for the managed hooks. `--fix` applies only the safe changes (add missing + upgrade *unmodified* hooks, backups kept) — **never** touches a customized hook |
-| `scripts/orbit-lock` `status`\|`break` | In a product repo | Inspect or recover the single-writer lock (enforcement is automatic via a hook). `status` = who owns the repo; `break --reason …` = clear a stale/abandoned lock (required reason, audited) |
+| `scripts/orbit-lock` `status`\|`break`\|`takeover` | In a product repo | Inspect or recover the single-writer lock. `takeover --reason …` atomically clears, acquires, and verifies ownership; `break` remains the clear-only recovery primitive. |
+| `scripts/orbit-worktree` `create`\|`status`\|`finish`\|`remove` | In a product repo | Create isolated worker branches, reserve a small task budget, and submit a focused completion packet to the coordinator merge queue. |
 | `scripts/orbit-memory` `review`\|`promote`\|`forget` | In a product repo | Curate the active-learning ledger. `review` = what's live/promotable/conflicted/durable; `promote <key>` = make a **user-stated** learning a durable cross-project rule (mechanically refused for observed/injected content — nothing auto-promotes); `forget <key>` = tombstone one |
 | `orbit-uninstall` [`--force`] | In a product repo | Remove Orbit's engine files + hooks from that repo (partial by design — see [Safety](#safety--what-binds-and-what-doesnt)) |
 | `/orbit-upgrade` | Anywhere | Upgrade the Orbit plugin itself (fetches latest, shows what changed) — see [Self-update](#self-update) |
@@ -427,7 +428,8 @@ guarantee and a suggestion:
 | Layer | Status | What it is |
 |---|---|---|
 | **Safety wall** (`PreToolUse` → `orbit-guard`, **trusted install**) | ✅ **binds** | Denies force-push, `push --mirror`, `rm -rf` of a root/home/system path, and disk wipes (`dd`/`mkfs` to a device); asks before a plain push, `reset --hard`, `clean -f`, `rm -rf` of a hidden/`.git`/`.orbit`/absolute path, and `curl \| sh` — *before* the tool runs, model has no say. Sees through `cd x && …`, `sudo`/`env X=1 …`, subshells `( )`, brace groups, `\`-newline continuations, `$( )`/backticks, and `sh -lc` (recurses). **Runs from the trusted install** (not the repo), so a repo **can't weaken its own wall** and guard fixes upgrade with the plugin. Add your repo's deploy/migration/secret-branch rules **declaratively** in `.orbit/security/rules.json` — rules can only *add* an `ask`/`deny`, **never** downgrade a built-in deny (an `allow` is ignored; a corrupt rules file falls back to the built-in wall). **Threat model:** stops obvious/accidental danger + common obfuscation and asks when un-inspectable; it does *not* claim to defeat deliberate self-obfuscation (a script file, `python -c`, runtime aliases). (123-case `tests/test_guard.py` + `tests/test_trusted_guard.py`; existing repos keep the legacy project-local `guard.py`, never clobbered.) |
-| **Single-writer lock** (`PreToolUse` → `orbit-lock-hook`) | ✅ **binds** | Many readers, one writer. Denies `Edit`/`Write`/`MultiEdit` and write-intent `Bash` (commits, `rm`, redirects, migrations…) when **another session** holds the repo — and *always* denies a foreign write to `.orbit/STATE.md` (the memory spine). One Claude Code session (its sub-agents share its `session_id`) is one writer; a second window or a headless `claude -p` loop is a foreign writer, serialized behind the lock. Auto-acquired on first write (atomic `O_EXCL` — no double-writer race), heartbeated, stale after ~30 min. **Fails open** on any error and honors `ORBIT_LOCK_DISABLE=1` — a lock bug never bricks the repo. Recover a stale lock explicitly + logged: `scripts/orbit-lock break --reason …`. (`tests/test_writer_lock*.py`.) |
+| **Single-writer lock** (`PreToolUse` → `orbit-lock-hook`) | ✅ **binds** | Many readers, one writer per checkout. Denies writes when another session owns the checkout, auto-acquires atomically, heartbeats, and fails open on infrastructure errors. `scripts/orbit-lock takeover --reason …` now performs an audited break + acquire + ownership verification in one mutex-protected operation. (`tests/test_writer_lock*.py`.) |
+| **Isolated worktrees** (`scripts/orbit-worktree`) | ✅ **binds** | Optional parallel mode: each worker gets its own branch, checkout, local lock, and metadata; the registry lives under Git's common directory so worker checkouts do not race on shared state. The coordinator remains responsible for merging. (`tests/test_worktree.py`.) |
 | **Iteration + runtime caps** (`ralph_loop.sh`) | ✅ **binds** | The runner stops the loop at the cap (max iterations, runtime, the STOP sentinel, and the gate-failure streak). |
 | **Token + cost budgets** | ✅ **binds on the runner** | `ralph_loop.sh` meters `claude -p --output-format json`; `loop.py` tracks + persists spend across `--resume`. `move_money` is `FORBIDDEN` (raises). |
 | **Executor model selection** (`ralph_loop.sh` → `model_policy.executor`) | ✅ **binds on the runner** | The headless runner passes the configured executor model to `claude -p` when set, so everyday cycles stay on the cheaper lane. |
@@ -501,7 +503,8 @@ orbit/                          ← this repo == the skill dir (clones to ~/.cla
 │   ├── orbit-resolve           # deterministic "where is Orbit + is it current?" → JSON (active/stale/dirty/behind)
 │   ├── orbit-verify            # verify the install against checksums.txt (tamper detection; unsigned dev channel until signed)
 │   ├── orbit-doctor            # read-only project health: scaffold drift + safe-refresh plan (--fix applies safe)
-│   ├── orbit-lock              # single-writer lock CLI (status/acquire/heartbeat/release/break)
+│   ├── orbit-lock              # lock CLI (status/acquire/heartbeat/release/break/takeover)
+│   ├── orbit-worktree          # isolated worker worktree lifecycle
 │   ├── orbit-lock-hook         # PreToolUse enforcement of the writer lock (trusted-install, fail-open)
 │   ├── orbit_lock_lib.py       # shared lock core (decision table, classifier, atomic O_EXCL acquire)
 │   ├── orbit-guard             # TRUSTED safety wall: built-in rules + .orbit/security/rules.json (un-weakenable)

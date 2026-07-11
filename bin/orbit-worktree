@@ -1,0 +1,199 @@
+#!/usr/bin/env python3
+"""Create and inspect isolated Orbit worker worktrees.
+
+Worktree mode is additive: the current checkout remains the coordinator/default mode, while each
+worker receives a branch, an independent `.orbit/locks` lease, and a small task metadata file. The
+registry lives in Git's common directory so separate worktrees do not race on a tracked state file.
+"""
+import argparse
+import fcntl
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from contextlib import contextmanager
+from pathlib import Path
+
+
+def git(cwd: Path, *args, check=True):
+    p = subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True)
+    if check and p.returncode:
+        raise SystemExit(p.stderr.strip() or f"git {' '.join(args)} failed")
+    return p.stdout.strip()
+
+
+def repo_root(target: Path) -> Path:
+    return Path(git(target.resolve(), "rev-parse", "--show-toplevel")).resolve()
+
+
+def control_dir(root: Path) -> Path:
+    common = Path(git(root, "rev-parse", "--git-common-dir"))
+    if not common.is_absolute():
+        common = (root / common).resolve()
+    ident = hashlib.sha256(str(common).encode()).hexdigest()[:16]
+    p = common / "orbit-control" / ident
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+@contextmanager
+def locked_registry(root: Path):
+    ctl = control_dir(root)
+    gate = ctl / "registry.mutex"
+    registry = ctl / "registry.json"
+    gate_handle = gate.open("a+")
+    fcntl.flock(gate_handle.fileno(), fcntl.LOCK_EX)
+    try:
+        try:
+            data = json.loads(registry.read_text())
+        except Exception:
+            data = {"schema": 1, "worktrees": {}}
+        yield ctl, data
+        registry.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+    finally:
+        fcntl.flock(gate_handle.fileno(), fcntl.LOCK_UN)
+        gate_handle.close()
+
+
+def slug(value: str) -> str:
+    out = re.sub(r"[^a-zA-Z0-9._-]+", "-", value.strip().lower()).strip("-.")
+    if not out:
+        raise SystemExit("task must contain at least one letter or number")
+    return out[:60]
+
+
+def cmd_create(args):
+    root = repo_root(Path(args.target))
+    task = slug(args.task)
+    branch = args.branch or f"orbit/{task}"
+    parent = Path(args.path).expanduser().resolve() if args.path else root.parent / f"{root.name}-orbit-{task}"
+    with locked_registry(root) as (_ctl, registry):
+        cfg = {}
+        try:
+            cfg = json.loads((root / ".orbit/loop.config.json").read_text())
+        except Exception:
+            pass
+        work_cfg = cfg.get("worktrees", {}) if isinstance(cfg, dict) else {}
+        max_workers = int(work_cfg.get("max_workers", 2) or 2)
+        active = [m for m in registry.get("worktrees", {}).values() if m.get("mode") == "worker"
+                  and m.get("status", "active") not in ("removed", "integrated", "abandoned")]
+        if len(active) >= max_workers:
+            raise SystemExit(f"worktree worker budget reached ({len(active)}/{max_workers}); finish or remove a worker first")
+        if branch in git(root, "branch", "--format=%(refname:short)").splitlines():
+            raise SystemExit(f"branch already exists: {branch}")
+        if parent.exists():
+            raise SystemExit(f"worktree path already exists: {parent}")
+        base = args.base or git(root, "symbolic-ref", "--quiet", "--short", "HEAD", check=False) or "HEAD"
+        parent.parent.mkdir(parents=True, exist_ok=True)
+        git(root, "worktree", "add", "-b", branch, str(parent), base)
+        metadata = {
+            "schema": 1, "project_root": str(root), "worktree": str(parent),
+            "branch": branch, "task_id": task, "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "coordinator": str(root), "mode": "worker", "status": "active",
+            "base": base, "budget": {"tokens": int(args.budget_tokens), "usd": float(args.budget_usd)}
+        }
+        if (parent / ".orbit").is_dir():
+            (parent / ".orbit/worktree.json").write_text(json.dumps(metadata, indent=2) + "\n")
+        registry["worktrees"][str(parent)] = metadata
+    print(json.dumps(metadata, indent=2))
+
+
+def _metadata_for(worktree: Path):
+    p = worktree / ".orbit/worktree.json"
+    try:
+        data = json.loads(p.read_text())
+    except Exception:
+        raise SystemExit(f"not an Orbit worker worktree: {worktree}")
+    if data.get("mode") != "worker" or not data.get("project_root"):
+        raise SystemExit(f"not an Orbit worker worktree: {worktree}")
+    return data
+
+
+def cmd_finish(args):
+    worker = Path(args.worktree).expanduser().resolve()
+    meta = _metadata_for(worker)
+    root = Path(meta["project_root"]).resolve()
+    changed = git(worker, "diff", "--name-only", meta.get("base", "HEAD"), check=False).splitlines()
+    packet = {
+        "schema": 1, "task_id": meta["task_id"], "status": args.status,
+        "branch": meta["branch"], "worktree": str(worker), "coordinator": str(root),
+        "summary": args.summary, "changed_files": changed, "tests": args.tests,
+        "budget": meta.get("budget", {}),
+        "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    }
+    with locked_registry(root) as (ctl, registry):
+        queue = ctl / "merge-queue"
+        queue.mkdir(parents=True, exist_ok=True)
+        tmp = queue / f".{meta['task_id']}.json.tmp"
+        out = queue / f"{meta['task_id']}.json"
+        tmp.write_text(json.dumps(packet, indent=2, sort_keys=True) + "\n")
+        os.replace(tmp, out)
+        entry = registry.setdefault("worktrees", {}).setdefault(str(worker), meta)
+        entry.update({"status": args.status, "packet": str(out)})
+    print(json.dumps(packet, indent=2))
+
+
+def cmd_status(args):
+    root = repo_root(Path(args.target))
+    rows = git(root, "worktree", "list", "--porcelain").split("\n\n")
+    with locked_registry(root) as (_ctl, registry):
+        for block in rows:
+            lines = block.splitlines()
+            if not lines:
+                continue
+            path = lines[0].removeprefix("worktree ")
+            branch = next((x.removeprefix("branch refs/heads/") for x in lines if x.startswith("branch ")), "")
+            meta = registry.get("worktrees", {}).get(path, {})
+            print(json.dumps({"worktree": path, "branch": branch, "task_id": meta.get("task_id", ""),
+                              "status": meta.get("status", "active"), "budget": meta.get("budget", {}),
+                              "mode": meta.get("mode", "coordinator" if path == str(root) else "unknown")},
+                             sort_keys=True))
+        queue = control_dir(root) / "merge-queue"
+        packets = sorted(queue.glob("*.json")) if queue.is_dir() else []
+        print(json.dumps({"merge_queue": len(packets), "control_plane": str(control_dir(root))}, sort_keys=True))
+
+
+def cmd_remove(args):
+    if not args.force:
+        raise SystemExit("remove requires --force; this deletes the worktree directory")
+    root = repo_root(Path(args.target))
+    target = Path(args.worktree).expanduser().resolve()
+    if target == root:
+        raise SystemExit("refusing to remove the coordinator checkout")
+    with locked_registry(root) as (_ctl, registry):
+        git(root, "worktree", "remove", "--force", str(target))
+        registry.get("worktrees", {}).pop(str(target), None)
+    print(f"worktree removed: {target}")
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="orbit-worktree")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    create = sub.add_parser("create", help="create an isolated worker branch and worktree")
+    create.add_argument("--target", default=".")
+    create.add_argument("--task", required=True)
+    create.add_argument("--branch", default="")
+    create.add_argument("--base", default="")
+    create.add_argument("--path", default="")
+    create.add_argument("--budget-tokens", default=12000, type=int)
+    create.add_argument("--budget-usd", default=0.20, type=float)
+    status = sub.add_parser("status", help="list coordinator and worker worktrees")
+    status.add_argument("--target", default=".")
+    remove = sub.add_parser("remove", help="remove a worker worktree")
+    remove.add_argument("worktree")
+    remove.add_argument("--target", default=".")
+    remove.add_argument("--force", action="store_true")
+    finish = sub.add_parser("finish", help="write a focused completion packet to the coordinator queue")
+    finish.add_argument("worktree")
+    finish.add_argument("--status", choices=("ready_for_review", "blocked", "failed"), default="ready_for_review")
+    finish.add_argument("--summary", default="")
+    finish.add_argument("--tests", action="append", default=[])
+    args = ap.parse_args()
+    {"create": cmd_create, "status": cmd_status, "remove": cmd_remove, "finish": cmd_finish}[args.cmd](args)
+
+
+if __name__ == "__main__":
+    main()

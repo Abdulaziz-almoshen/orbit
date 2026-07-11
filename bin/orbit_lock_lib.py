@@ -25,6 +25,7 @@ import json
 import os
 import re
 import shlex
+import fcntl
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -127,6 +128,33 @@ def remove_lock(target: Path) -> None:
         lock_path(target).unlink()
     except FileNotFoundError:
         pass
+
+
+def takeover(target: Path, identity: dict, task: str, reason: str, now: datetime,
+             allow_live: bool = True) -> dict:
+    """Atomically replace the current checkout lease and return the verified new lease.
+
+    This is the explicit recovery path. It serializes the read/break/acquire sequence with a
+    per-checkout mutex, so a successful break can never be followed by a different session winning
+    the new lease before the caller verifies ownership.
+    """
+    mutex = lock_path(target).with_name("active-writer.mutex")
+    mutex.parent.mkdir(parents=True, exist_ok=True)
+    with mutex.open("a+") as gate:
+        fcntl.flock(gate.fileno(), fcntl.LOCK_EX)
+        state, old = read_lock(target)
+        if state == "ok" and old.get("owner_id") == identity.get("owner_id"):
+            old["heartbeat_at"] = iso(now)
+            write_lock_atomic(target, old)
+            return old
+        if state == "ok" and not allow_live and not is_stale(old, now):
+            raise RuntimeError("a live writer still owns this checkout")
+        new = new_lock(target, identity, task, now)
+        write_lock_atomic(target, new)
+        verified_state, verified = read_lock(target)
+        if verified_state != "ok" or verified.get("owner_id") != identity.get("owner_id"):
+            raise RuntimeError("takeover could not verify ownership after acquisition")
+        return verified
 
 
 def is_stale(data: dict, now: datetime) -> bool:
@@ -271,7 +299,7 @@ def _touches_state(tool_name: str, tool_input: dict) -> bool:
 def _is_recovery_command(tool_name: str, tool_input: dict) -> bool:
     """Recognize only the sanctioned lock escape hatch.
 
-    Allow exactly `orbit-lock break --reason <text>`, optionally preceded by one `cd <dir> &&`.
+    Allow exactly `orbit-lock break|takeover --reason <text>`, optionally preceded by one `cd <dir> &&`.
     Reject chaining, redirects, substitutions, and every other subcommand.
     """
     if tool_name != "Bash":
@@ -295,7 +323,7 @@ def _is_recovery_command(tool_name: str, tool_input: dict) -> bool:
         return False
     if len(words) != 4 or Path(words[0]).name != "orbit-lock":
         return False
-    return words[1] == "break" and words[2] == "--reason" and bool(words[3].strip())
+    return words[1] in ("break", "takeover") and words[2] == "--reason" and bool(words[3].strip())
 
 
 # ─────────────────────────────── the decision ───────────────────────────────

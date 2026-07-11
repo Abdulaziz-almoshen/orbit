@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Project wrapper for the trusted Orbit worktree manager.
+set -u
+cd "${CLAUDE_PROJECT_DIR:-.}" 2>/dev/null || true
+for p in "${CLAUDE_PLUGIN_ROOT:-}/bin/orbit-worktree" \
+         "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/orbit/bin/orbit-worktree" \
+         "$HOME"/.claude/plugins/cache/*/orbit/*/bin/orbit-worktree \
+         "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/*/orbit/*/bin/orbit-worktree; do
+  [ -f "$p" ] && exec python3 "$p" "$@"
+done
+echo "orbit-worktree: trusted Orbit install not found" >&2
+exit 1
