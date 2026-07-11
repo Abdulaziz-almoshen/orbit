@@ -16,7 +16,7 @@ updates itself.
 
 <br/>
 
-![version](https://img.shields.io/badge/version-0.39.4-2b6cb0)
+![version](https://img.shields.io/badge/version-0.39.5-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![self-updating](https://img.shields.io/badge/self--updating-yes-22863a)
@@ -24,6 +24,14 @@ updates itself.
 ![domain-agnostic](https://img.shields.io/badge/domain-agnostic-805ad5)
 
 </div>
+
+### Automatic scaffold self-heal
+
+Every `/orbit` preamble performs a quiet, safe local refresh when it enters an Orbit-scaffolded
+project. It adds missing Orbit-owned files, carries forward managed checks only when their provenance
+proves they are unchanged, and keeps `setup.json` current. It does not touch project settings,
+customized files, or a repository under another Orbit writer lock, so deliberate hook removals remain
+removed. No separate doctor or refresh command is required for this baseline repair.
 
 ---
 

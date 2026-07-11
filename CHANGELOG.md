@@ -3,6 +3,17 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.39.5
+
+**Automatic scaffold self-heal.** The `/orbit` preamble now repairs safe project drift without
+requiring a separate doctor or refresh command.
+
+- Adds missing Orbit-owned engine/playbook/QA files without overwriting existing files.
+- Carries forward managed checks only when their provenance proves they are unchanged.
+- Restamps scaffold metadata automatically while preserving project-specific settings and docs.
+- Skips all writes under an active or malformed writer lock and preserves deliberately removed hooks.
+- Adds regression coverage for idempotency, lock safety, custom settings, and metadata repair.
+
 ## 0.39.4
 
 **Lock recovery deadlock fix.** The writer-lock hook now permits only the exact audited

@@ -25,6 +25,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import calendar
 import hashlib
 import json
 import re
@@ -602,6 +603,63 @@ def _apply_safe_refresh(target: Path) -> None:
           "  For missing playbooks/roles and the version stamp, run `/orbit` here (it merges, never clobbers).")
 
 
+def _active_writer_lock(target: Path) -> bool:
+    """Return True when a writer may still be using this project.
+
+    Automatic healing treats malformed locks as active and never breaks ownership implicitly.
+    """
+    p = target / ".orbit/locks/active-writer.json"
+    if not p.exists():
+        return False
+    try:
+        data = json.loads(p.read_text())
+        heartbeat = data.get("heartbeat_at") or data.get("started_at")
+        ttl = int(data.get("ttl_seconds") or 1800)
+        parsed = time.strptime(heartbeat, "%Y-%m-%dT%H:%M:%SZ")
+        age = time.time() - calendar.timegm(parsed)
+        return age < ttl
+    except Exception:
+        return True
+
+
+def _auto_heal(target: Path) -> str:
+    """Perform the safe, non-interactive subset of a full scaffold refresh.
+
+    This never edits settings, CLAUDE.md, roles, domain skills, or customized checks. It is safe to
+    run from the update preamble because it only adds Orbit-owned missing files and stamps metadata.
+    """
+    if not (target / ".orbit").is_dir():
+        return "not an Orbit repo"
+    if _active_writer_lock(target):
+        return "preserved (active writer lock)"
+
+    created, skipped, warnings = [], [], []
+    prev_version = _read_json(target / ".orbit/setup.json").get("orbit_version", "")
+    has_ui = (target / ".claude/agents/designer.md").exists()
+    for d in DIRS:
+        (target / d).mkdir(parents=True, exist_ok=True)
+    for src_rel, dst_rel, mode in FILE_PLAN:
+        _place(ASSETS / src_rel, target / dst_rel, created, skipped, mode)
+    playbooks = PLAYBOOKS_ALWAYS + (PLAYBOOKS_FRONTEND if has_ui else [])
+    for pb in playbooks:
+        _place(PLAYBOOKS / pb, target / ".orbit/skills" / pb, created, skipped)
+    if has_ui:
+        for src_rel, dst_rel in QA_FRONTEND + DESIGN_GATE_FRONTEND:
+            _place(ASSETS / src_rel, target / dst_rel, created, skipped, 0o755)
+
+    migrate_hooks(target, created, warnings)
+    _write_manifest(target)
+    _stamp_setup(target, prev_version)
+    parts = []
+    if created:
+        parts.append(f"repaired {len(created)} file(s)")
+    if prev_version and prev_version != _orbit_version():
+        parts.append(f"scaffold {prev_version}->{_orbit_version()}")
+    if warnings:
+        parts.append(f"preserved {len(warnings)} customized check(s)")
+    return ", ".join(parts) if parts else "already healthy"
+
+
 def install_hooks(target: Path, has_ui: bool = False) -> None:
     """Wire Orbit's always-on hooks into .claude/settings.json (default-on + announced):
 
@@ -737,6 +795,9 @@ def main():
     ap.add_argument("--apply-safe-refresh", action="store_true",
                     help="WRITE ONLY SAFE FILES: add missing managed hooks + upgrade unmodified ones "
                          "(backups kept); never touches a customized hook. Then exit.")
+    ap.add_argument("--auto-heal", action="store_true",
+                    help="NON-INTERACTIVE safe refresh: add missing Orbit-owned files, refresh proven "
+                         "unchanged checks, and stamp metadata; never edits settings or custom files")
     args = ap.parse_args()
     target = args.target.resolve()
 
@@ -748,6 +809,9 @@ def main():
         return
     if args.apply_safe_refresh:                              # writes ONLY the safe (unmodified/missing) hooks
         _apply_safe_refresh(target)
+        return
+    if args.auto_heal:
+        print(f"Orbit auto-heal · plugin v{_orbit_version()} · {_auto_heal(target)}")
         return
 
     if not target.is_dir():

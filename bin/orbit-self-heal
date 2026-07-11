@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Quiet, non-interactive project refresh used by orbit-preamble.
+set -u
+TARGET="${1:-$PWD}"
+SELF="$(cd "$(dirname "$0")" 2>/dev/null && pwd -P)"
+ROOT="$(cd "$SELF/.." 2>/dev/null && pwd -P)"
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/scripts/scaffold.py" ]; then
+  ROOT="$CLAUDE_PLUGIN_ROOT"
+fi
+[ -f "$ROOT/scripts/scaffold.py" ] || exit 0
+python3 "$ROOT/scripts/scaffold.py" --auto-heal --target "$TARGET" 2>/dev/null || true

@@ -58,6 +58,12 @@ a `curl` to raw GitHub), is throttled to **once / 24h**, and **never blocks** â€
 snoozed just yields the version line. Be honest in your one-liner: a fallback line means "running
 v{x}", not a guaranteed fresh check. This preamble is the only "phone-home"; the rest is local.
 
+The literal preamble also performs a quiet, safe scaffold self-heal whenever the current directory
+has `.orbit/`: missing Orbit-owned files are added, proven-unchanged managed checks are carried
+forward, and `setup.json` is restamped. It never edits settings, roles, CLAUDE.md, domain skills,
+customized checks, or a project with an active writer lock. Deliberate hook removals therefore remain
+removed. The output reports `already healthy`, `repaired N file(s)`, or `preserved (active writer lock)`.
+
 ## The one idea everything serves
 
 > "You're not supposed to prompt Claude. You're supposed to build a system that prompts

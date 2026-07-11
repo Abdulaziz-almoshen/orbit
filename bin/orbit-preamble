@@ -2,7 +2,7 @@
 #
 # orbit-preamble — the skill's STEP 0 in one command.
 #
-# Runs the (throttled, non-blocking) update check and prints exactly one line for the model
+# Runs the (throttled, non-blocking) update check and a safe local project-heal pass, then prints one line
 # to act on. Lives next to VERSION + orbit-update-check, so it needs no path guessing — the
 # SKILL.md preamble just finds THIS script and runs it (falling back to an inline block only
 # if it's missing). Always exits 0; offline / throttled / snoozed just yields the version line.
@@ -22,4 +22,13 @@ if [ -x "$SELF/orbit-update-check" ]; then
   LINE="$("$SELF/orbit-update-check" 2>/dev/null || true)"
 fi
 
-echo "${LINE:-orbit v$VER (up to date / not re-checked within 24h)}"
+HEAL=""
+if [ -d "$PWD/.orbit" ] && [ -x "$SELF/orbit-self-heal" ]; then
+  HEAL="$($SELF/orbit-self-heal "$PWD" 2>/dev/null || true)"
+fi
+BASE="${LINE:-orbit v$VER (up to date / not re-checked within 24h)}"
+if [ -n "$HEAL" ]; then
+  echo "$BASE · $HEAL"
+else
+  echo "$BASE"
+fi
