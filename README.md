@@ -1,6 +1,10 @@
+<p align="center">
+  <img src="assets/orbit-readme-header.png" alt="Orbit — self-prompting agentic workflows" width="100%">
+</p>
+
 <div align="center">
 
-# 🛰️ Orbit
+# Orbit
 
 ### Stop prompting your agent. Build a system that prompts itself.
 
