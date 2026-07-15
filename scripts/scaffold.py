@@ -72,6 +72,9 @@ _LEGACY_OLD = {
         "93fb9084f4037b2db8a47653529b4ae64629889f5679f1f6d68af162d576457c",  # 0.42.0
         "4ed87c61f0aba95ecf39ce4ee9dd36afb6aa3d50cb4c82b6ed408851f549f9e3",  # 3344f4a scene
     },
+    "scripts/orbit-statusline": {
+        "7f4b512f83674863fef70d465ee6a483d78191e21382ef6f34a5c5236b914c49",  # <=0.44.0 one-line reporter
+    },
 }
 
 

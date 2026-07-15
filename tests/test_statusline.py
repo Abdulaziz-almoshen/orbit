@@ -30,6 +30,10 @@ def render(claude, run):
 
 def main():
     fails = []
+    scaffold_source = open(SCAFFOLD).read()
+    if ('"scripts/orbit-statusline"' not in scaffold_source or
+            "7f4b512f83674863fef70d465ee6a483d78191e21382ef6f34a5c5236b914c49" not in scaffold_source):
+        fails.append("existing <=0.44 projects cannot safely migrate the shipped one-line reporter")
     full = {"context_window": {"used_percentage": 38, "total_input_tokens": 10000,
                                "current_usage": {"cache_read_input_tokens": 6100}},
             "cost": {"total_cost_usd": 0.42}, "model": {"display_name": "Opus"}}
