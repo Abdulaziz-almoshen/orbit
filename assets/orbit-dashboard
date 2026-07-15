@@ -399,6 +399,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self._send(405, "read-only dashboard", "text/plain")
 
 
+class OrbitTCPServer(socketserver.TCPServer):
+    allow_reuse_address = True
+
+
 def main():
     ap = argparse.ArgumentParser(description="Read-only Orbit web board over .orbit/")
     ap.add_argument("--port", type=int, default=0, help="port (0 = auto-pick)")
@@ -410,7 +414,7 @@ def main():
     if args.once:
         print(json.dumps(snapshot(), indent=2))
         return
-    with socketserver.TCPServer(("127.0.0.1", args.port), Handler) as httpd:
+    with OrbitTCPServer(("127.0.0.1", args.port), Handler) as httpd:
         port = httpd.server_address[1]
         print(f"🛰  Orbit board → http://127.0.0.1:{port}   (Ctrl-C to stop; read-only)", flush=True)
         try:
