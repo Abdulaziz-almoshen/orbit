@@ -213,6 +213,7 @@ FILE_PLAN = [
     ("orbit-lock",       "scripts/orbit-lock",        0o755),   # thin wrapper → trusted bin/orbit-lock
     ("orbit-worktree",   "scripts/orbit-worktree",    0o755),   # isolated worker worktree manager
     ("orbit-independent-qa", "scripts/orbit-independent-qa", 0o755),  # trusted second-provider gate
+    ("orbit-qa-hook",   "scripts/orbit-qa-hook",      0o755),   # opt-in native Git post-commit QA trigger
     ("orbit-memory",     "scripts/orbit-memory",      0o755),   # review/promote/forget the learning ledger
     ("orbit-context",    "scripts/orbit-context",     0o755),   # context budget doctor + safe compactor
     ("orbit-status",     "scripts/orbit-status",      0o755),
@@ -466,6 +467,9 @@ def _merge_loop_config_defaults(target: Path, created: list, warnings: list) -> 
                 current[key] = defaults[key]
                 changed.append(key)
         qa = current.get("independent_qa", {})
+        if isinstance(qa, dict) and "auto_review" not in qa:
+            qa["auto_review"] = json.loads(json.dumps(defaults["independent_qa"]["auto_review"]))
+            changed.append("independent_qa.auto_review")
         provider = qa.get("provider", {}) if isinstance(qa, dict) else {}
         shipped_codex_argv = defaults["independent_qa"]["provider"]["adapters"]["codex"]["argv"]
         if (isinstance(provider, dict) and provider.get("name") == "codex"

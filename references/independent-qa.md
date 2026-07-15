@@ -42,3 +42,19 @@ a project mirror, stale commit verdict, or newer file modification time never dr
 Project-specific checks belong in rubric files listed by the request—for example GTM lead coverage,
 Arabic UI content quality, or prompt/evidence standards. Orbit owns the lifecycle and binding; the
 product repository owns its domain oracle.
+# Automatic commit trigger and push gate
+
+Project owners who have already enabled independent QA and approved committed-snapshot export may opt
+into automatic review:
+
+```json
+"auto_review": {
+  "enabled": true,
+  "trigger": "post_commit",
+  "request": ".orbit/review-requests/M1.json"
+}
+```
+
+Then run `scripts/orbit-qa-hook install`. Orbit installs a trusted asynchronous `post-commit` launcher
+and an exact-commit `pre-push` gate in Git's control directory. It refuses to replace foreign hooks.
+Run `scripts/orbit-qa-hook uninstall` to remove only Orbit-managed Git hooks.

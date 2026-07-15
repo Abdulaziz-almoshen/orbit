@@ -3,6 +3,23 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.43.0
+
+**Automatic, observable, exact-commit QA.** An opted-in project can now make independent QA a real
+delivery stage instead of a manual command and a static dashboard label.
+
+- A trusted native Git post-commit hook immediately queues the exact new commit and launches the
+  configured reviewer set asynchronously. It remains inert until the project enables auto-review and
+  explicitly approves committed-snapshot export.
+- Dual Codex + Claude runs publish per-provider queued/reviewing/pass/fail states and an append-only
+  event stream in Git's out-of-worktree control plane.
+- The dashboard combines the exact-commit pipeline with a live handoff scene; reviewer characters
+  animate only while the corresponding provider is genuinely running.
+- A managed pre-push hook rejects stale, missing, or failed exact-commit verdicts. Orbit refuses to
+  overwrite existing user Git hooks and provides an idempotent uninstall path.
+- Fresh scaffolds remain disabled by default. Existing projects receive additive `auto_review`
+  configuration and the trusted `scripts/orbit-qa-hook` wrapper without losing project choices.
+
 ## 0.42.1
 
 **Project-consented QA and an exact-commit pipeline tracer.** This patch restores the promised

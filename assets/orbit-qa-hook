@@ -1,0 +1,10 @@
+#!/bin/sh
+# Project wrapper for Orbit's trusted post-commit independent-QA trigger.
+for p in "${CLAUDE_PLUGIN_ROOT:-}/bin/orbit-qa-hook" \
+         "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/orbit/bin/orbit-qa-hook" \
+         "$HOME"/.claude/plugins/cache/*/orbit/*/bin/orbit-qa-hook \
+         "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/*/orbit/*/bin/orbit-qa-hook; do
+  [ -x "$p" ] && exec "$p" "$@"
+done
+echo "orbit-qa-hook: trusted Orbit install not found" >&2
+exit 2

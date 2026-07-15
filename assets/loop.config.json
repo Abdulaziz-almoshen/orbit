@@ -108,6 +108,11 @@
   "independent_qa": {
     "enabled": false,
     "stage": "after_internal_gates_before_done",
+    "auto_review": {
+      "enabled": false,
+      "trigger": "post_commit",
+      "request": ""
+    },
     "min_score": 8.5,
     "max_rounds": 3,
     "timeout_seconds": 900,

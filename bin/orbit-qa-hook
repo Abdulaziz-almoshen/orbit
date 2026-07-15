@@ -1,0 +1,236 @@
+#!/usr/bin/env python3
+"""Install and run Orbit's opt-in, asynchronous post-commit QA trigger.
+
+The Git hook contains no project code and invokes this trusted Orbit installation by
+absolute path.  It is inert unless the project independently enables QA, approves
+committed-snapshot export, enables auto_review, and identifies an armed manifest.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shlex
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+MARKER = "# orbit-managed-independent-qa-post-commit v1"
+PUSH_MARKER = "# orbit-managed-independent-qa-pre-push v1"
+
+
+class HookError(RuntimeError):
+    pass
+
+
+def _git(repo: Path, *args: str) -> str:
+    proc = subprocess.run(["git", "-C", str(repo), *args], text=True, capture_output=True)
+    if proc.returncode:
+        raise HookError(proc.stderr.strip() or f"git {' '.join(args)} failed")
+    return proc.stdout.strip()
+
+
+def _load(path: Path) -> dict:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise HookError(f"cannot read {path}: {exc}") from exc
+    if not isinstance(value, dict):
+        raise HookError(f"expected JSON object: {path}")
+    return value
+
+
+def _control_root(repo: Path) -> Path:
+    common = Path(_git(repo, "rev-parse", "--git-common-dir"))
+    if not common.is_absolute():
+        common = (repo / common).resolve()
+    return common / "orbit-independent-qa"
+
+
+def _write_state(repo: Path, state: dict) -> None:
+    root = _control_root(repo)
+    root.mkdir(parents=True, exist_ok=True)
+    value = {"schema_version": 1, **state,
+             "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    tmp = root / "current.json.tmp"
+    tmp.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    os.replace(tmp, root / "current.json")
+    with (root / "events.jsonl").open("a", encoding="utf-8") as out:
+        out.write(json.dumps(value, ensure_ascii=False) + "\n")
+
+
+def _request_for(repo: Path, qa: dict) -> Path:
+    auto = qa.get("auto_review") if isinstance(qa.get("auto_review"), dict) else {}
+    configured = str(auto.get("request") or "").strip()
+    if configured:
+        request = Path(configured)
+        return request if request.is_absolute() else repo / request
+    root = repo / ".orbit" / "review-requests"
+    candidates = []
+    for path in sorted(root.glob("*.json")) if root.is_dir() else []:
+        if path.name == "TEMPLATE.json":
+            continue
+        try:
+            armed = _load(path).get("armed", {})
+            if isinstance(armed, dict) and armed.get("approved") is True:
+                candidates.append(path)
+        except HookError:
+            continue
+    if len(candidates) != 1:
+        raise HookError("auto-review needs independent_qa.auto_review.request when the project does not have exactly one armed manifest")
+    return candidates[0]
+
+
+def _install_one(hook: Path, marker: str, content: str) -> Path:
+    hook.parent.mkdir(parents=True, exist_ok=True)
+    if hook.exists():
+        old = hook.read_text(errors="replace")
+        if marker not in old:
+            raise HookError(f"refusing to overwrite existing non-Orbit hook: {hook}")
+        if old == content:
+            return hook
+    tmp = hook.with_suffix(".tmp")
+    tmp.write_text(content, encoding="utf-8")
+    tmp.chmod(0o755)
+    os.replace(tmp, hook)
+    return hook
+
+
+def install(repo: Path) -> list[Path]:
+    repo = Path(_git(repo, "rev-parse", "--show-toplevel"))
+    common = Path(_git(repo, "rev-parse", "--git-common-dir"))
+    if not common.is_absolute():
+        common = (repo / common).resolve()
+    trusted = Path(__file__).resolve()
+    post_content = ("#!/bin/sh\n" + MARKER + "\n" +
+               f"{shlex.quote(str(trusted))} trigger {shlex.quote(str(repo))} HEAD >/dev/null 2>&1 || :\n")
+    push_content = ("#!/bin/sh\n" + PUSH_MARKER + "\n" +
+                    f"exec {shlex.quote(str(trusted))} pre-push {shlex.quote(str(repo))}\n")
+    return [_install_one(common / "hooks" / "post-commit", MARKER, post_content),
+            _install_one(common / "hooks" / "pre-push", PUSH_MARKER, push_content)]
+
+
+def uninstall(repo: Path) -> bool:
+    common = Path(_git(repo, "rev-parse", "--git-common-dir"))
+    if not common.is_absolute():
+        common = (repo / common).resolve()
+    removed = False
+    for name, marker in (("post-commit", MARKER), ("pre-push", PUSH_MARKER)):
+        hook = common / "hooks" / name
+        if hook.is_file() and marker in hook.read_text(errors="replace"):
+            hook.unlink(); removed = True
+    return removed
+
+
+def gate(repo: Path, ref: str) -> int:
+    repo = Path(_git(repo, "rev-parse", "--show-toplevel"))
+    cfg = _load(repo / ".orbit" / "loop.config.json")
+    qa = cfg.get("independent_qa") if isinstance(cfg.get("independent_qa"), dict) else {}
+    auto = qa.get("auto_review") if isinstance(qa.get("auto_review"), dict) else {}
+    if qa.get("enabled") is not True or auto.get("enabled") is not True:
+        return 0
+    request = _request_for(repo, qa)
+    request_rel = request.resolve().relative_to(repo.resolve()).as_posix()
+    runner = Path(__file__).with_name("orbit-independent-qa")
+    proc = subprocess.run([str(runner), "gate", "--repo", str(repo), "--request", request_rel,
+                           "--commit", ref], cwd=repo)
+    return proc.returncode
+
+
+def pre_push(repo: Path) -> int:
+    refs = []
+    for line in sys.stdin:
+        fields = line.split()
+        if len(fields) >= 2 and set(fields[1]) != {"0"}:
+            refs.append(fields[1])
+    refs = refs or ["HEAD"]
+    for ref in refs:
+        rc = gate(repo, ref)
+        if rc:
+            print(f"Orbit blocked push: independent QA has not passed exact commit {ref[:12]}.", file=sys.stderr)
+            return rc
+    return 0
+
+
+def trigger(repo: Path, ref: str) -> dict:
+    repo = Path(_git(repo, "rev-parse", "--show-toplevel"))
+    cfg = _load(repo / ".orbit" / "loop.config.json")
+    qa = cfg.get("independent_qa") if isinstance(cfg.get("independent_qa"), dict) else {}
+    auto = qa.get("auto_review") if isinstance(qa.get("auto_review"), dict) else {}
+    export = qa.get("external_export") if isinstance(qa.get("external_export"), dict) else {}
+    if qa.get("enabled") is not True or auto.get("enabled") is not True:
+        return {"started": False, "status": "disabled"}
+    if export.get("approved") is not True or export.get("scope") != "committed_snapshot_only":
+        return {"started": False, "status": "awaiting_project_approval"}
+    commit = _git(repo, "rev-parse", "--verify", f"{ref}^{{commit}}")
+    request = _request_for(repo, qa)
+    try:
+        request_rel = request.resolve().relative_to(repo.resolve()).as_posix()
+    except ValueError as exc:
+        raise HookError("auto-review request must live inside the repository") from exc
+    provider_cfg = qa.get("provider") if isinstance(qa.get("provider"), dict) else {}
+    mode = provider_cfg.get("mode") or provider_cfg.get("name") or "claude"
+    names = ["codex", "claude"] if mode == "both" else [str(mode)]
+    root = _control_root(repo)
+    current_path = root / "current.json"
+    if current_path.is_file():
+        try:
+            current = _load(current_path)
+            if current.get("target_commit") == commit and current.get("status") in {"queued", "reviewing", "pass"}:
+                return {"started": False, "status": current.get("status"), "commit": commit}
+        except HookError:
+            pass
+    _write_state(repo, {"stage": "independent_qa", "status": "queued", "target_commit": commit,
+                        "request_path": request_rel, "provider": mode,
+                        "providers": {name: {"status": "queued"} for name in names},
+                        "reason": "post-commit review queued"})
+    logs = root / "logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    log_path = logs / f"{commit}.log"
+    runner = Path(__file__).with_name("orbit-independent-qa")
+    child_env = dict(os.environ)
+    # Git exports repository-local variables to hooks.  A detached child must not inherit
+    # GIT_INDEX_FILE=.git/index (the temporary worktree's .git is a file, not a directory).
+    for key in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_PREFIX", "GIT_COMMON_DIR",
+                "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES"):
+        child_env.pop(key, None)
+    with log_path.open("ab", buffering=0) as log:
+        proc = subprocess.Popen([str(runner), "review", "--repo", str(repo), "--request", request_rel,
+                                 "--commit", commit], cwd=repo, stdin=subprocess.DEVNULL,
+                                stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+                                env=child_env)
+    return {"started": True, "status": "queued", "commit": commit, "pid": proc.pid,
+            "log": str(log_path), "request": request_rel}
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Orbit post-commit independent-QA trigger")
+    parser.add_argument("command", choices=("install", "uninstall", "trigger", "gate", "pre-push", "status"))
+    parser.add_argument("repo", nargs="?", type=Path, default=Path.cwd())
+    parser.add_argument("ref", nargs="?", default="HEAD")
+    args = parser.parse_args()
+    try:
+        if args.command == "install":
+            print(json.dumps({"installed": True, "hooks": [str(x) for x in install(args.repo)]}, indent=2)); return 0
+        if args.command == "uninstall":
+            print(json.dumps({"removed": uninstall(args.repo)}, indent=2)); return 0
+        if args.command == "trigger":
+            print(json.dumps(trigger(args.repo, args.ref), indent=2)); return 0
+        if args.command == "gate":
+            return gate(args.repo, args.ref)
+        if args.command == "pre-push":
+            return pre_push(args.repo)
+        path = _control_root(args.repo) / "current.json"
+        print(path.read_text() if path.is_file() else json.dumps({"status": "never_started"}, indent=2)); return 0
+    except HookError as exc:
+        try:
+            _write_state(args.repo, {"stage": "independent_qa", "status": "error", "reason": str(exc)})
+        except Exception:
+            pass
+        print(f"orbit-qa-hook: {exc}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

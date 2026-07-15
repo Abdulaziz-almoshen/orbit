@@ -128,12 +128,13 @@ def _qa_state():
         status = "awaiting_deploy_approval" if deploy == "human" else (
             "deploy_forbidden" if deploy == "FORBIDDEN" else "ready_to_deploy")
     dirty = _meaningful_worktree_dirty()
+    provider_states = control.get("providers") if exact and isinstance(control.get("providers"), dict) else {}
     return {"enabled": enabled, "export_approved": approved, "provider": provider,
             "status": status, "verdict": verdict, "score": score, "head": head,
             "target_commit": control.get("target_commit"), "request_id": control.get("request_id"),
             "round": control.get("round"), "reason": control.get("reason", ""),
             "updated_at": control.get("updated_at"), "exact_commit": exact, "dirty": dirty,
-            "deployment_gate": deploy}
+            "deployment_gate": deploy, "providers": provider_states}
 
 
 def snapshot() -> dict:
@@ -198,14 +199,32 @@ ul{margin:0;padding:0;list-style:none}li{padding:5px 0;border-top:1px solid var(
 .stage:after{content:'›';position:absolute;right:-9px;top:22px;color:var(--dim);z-index:1}
 .stage:last-child:after{display:none}.stage-name{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--dim)}
 .stage-state{font-size:12px;font-weight:650;margin-top:7px}.stage.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.stage.active{animation:qapulse 1.7s ease-in-out infinite}@keyframes qapulse{50%{box-shadow:0 0 0 3px rgba(88,166,255,.2)}}
 .stage.active .stage-state{color:var(--accent)}.stage.done .stage-state{color:var(--ok)}
 .stage.failed{border-color:var(--bad)}.stage.failed .stage-state{color:var(--bad)}
 .stage.blocked{border-color:var(--warn)}.stage.blocked .stage-state{color:var(--warn)}
+.qa-scene{display:grid;grid-template-columns:130px 1fr 260px;align-items:center;gap:14px;margin-top:14px;padding:12px;border:1px solid #252c35;border-radius:9px;background:#10151c;overflow:hidden}
+.actor{text-align:center;color:var(--dim);font-size:11px}.actor b{display:block;color:var(--fg);font-size:12px;margin-top:5px}.face{width:46px;height:48px;margin:auto;border-radius:48% 48% 43% 43%;position:relative;background:#d97757;opacity:.58;transition:.25s}
+.face:before{content:'';position:absolute;left:11px;top:16px;width:5px;height:5px;border-radius:50%;background:#0e1116;box-shadow:18px 0 #0e1116}.face:after{content:'';position:absolute;left:14px;top:29px;width:18px;height:7px;border-bottom:2px solid #0e1116;border-radius:0 0 12px 12px}
+.reviewers{display:flex;justify-content:flex-end;gap:18px}.reviewer .face{background:#10a37f}.reviewer.claude .face{background:#d97757}
+.actor.active .face{opacity:1;animation:qabob .9s ease-in-out infinite,qaglow 1.6s ease-in-out infinite}.actor.pass .face{opacity:1;box-shadow:0 0 0 2px var(--ok)}.actor.failed .face,.actor.blocked .face,.actor.error .face{opacity:1;box-shadow:0 0 0 2px var(--bad)}
+@keyframes qabob{50%{transform:translateY(-5px) rotate(-3deg)}}@keyframes qaglow{50%{filter:drop-shadow(0 0 8px var(--accent))}}
+.handoff{height:42px;position:relative;border-bottom:1px dashed #36404c}.parcel{position:absolute;left:4px;bottom:6px;font-size:22px;transition:left .7s ease}.qa-scene.reviewing .parcel{animation:qahandoff 2.4s ease-in-out infinite}.qa-scene.pass .parcel{left:calc(100% - 30px)}.qa-scene.failed .parcel{left:8px}
+@keyframes qahandoff{0%{left:4px;transform:rotate(0)}55%{left:calc(100% - 30px);transform:rotate(8deg)}100%{left:calc(100% - 30px);transform:rotate(0)}}
+.handoff-label{text-align:center;color:var(--dim);font-size:11px;padding-top:4px}
 @media(max-width:800px){.pipe{grid-template-columns:repeat(2,1fr)}.stage:after{display:none}.qa-hd{display:block}.qa-meta{text-align:left;margin-top:6px}}
 </style></head><body>
 <header><span class=dot id=live></span><h1>🛰 Orbit board</h1><span class=muted id=gen></span></header>
 <section id=qa class=qa><div class=qa-in>
   <div class=qa-hd><div><div class=qa-title>Delivery pipeline</div><div class=qa-current id=qaCurrent>Loading…</div></div><div class=qa-meta id=qaMeta></div></div>
+  <div class=qa-scene id=qaScene>
+    <div class="actor builder" id=qaBuilder><div class=face></div><b>Builder · Claude</b><span id=builderState>committed</span></div>
+    <div><div class=handoff><span class=parcel id=qaParcel>📦</span></div><div class=handoff-label id=handoffLabel>exact committed snapshot</div></div>
+    <div class=reviewers>
+      <div class="actor reviewer codex" id=qaCodex><div class=face></div><b>QA · Codex</b><span id=codexState>waiting</span></div>
+      <div class="actor reviewer claude" id=qaClaude><div class=face></div><b>QA · Claude</b><span id=claudeState>waiting</span></div>
+    </div>
+  </div>
   <div class=pipe id=qaPipe></div>
 </div></section>
 <div class=wrap id=app></div>
@@ -272,6 +291,15 @@ function updateQA(qa){
  const bits=[];if(qa.head)bits.push('HEAD '+qa.head.slice(0,8));if(qa.request_id)bits.push(qa.request_id);
  if(qa.round!=null)bits.push('round '+qa.round);bits.push(provider);if(qa.score!=null)bits.push(qa.score+'/10');
  meta.textContent=bits.join(' · ');
+ const scene=document.getElementById('qaScene'),builder=document.getElementById('qaBuilder');
+ const stateClass=qa.status==='reviewing'?'reviewing':qa.verdict==='PASS'?'pass':qa.status==='changes_required'||qa.status==='blocked'||qa.status==='error'?'failed':'queued';
+ scene.className='qa-scene '+stateClass;builder.className='actor builder '+(qa.dirty?'active':qa.verdict==='PASS'?'pass':'');
+ document.getElementById('builderState').textContent=qa.dirty?'working':qa.head?('commit '+qa.head.slice(0,8)):'waiting';
+ const pstates=qa.providers||{};
+ for(const [name,id] of [['codex','qaCodex'],['claude','qaClaude']]){const el=document.getElementById(id),p=pstates[name]||{};
+   const active=p.status==='reviewing',cls=active?'active':p.status==='pass'?'pass':p.status==='changes_required'?'failed':p.status==='blocked'?'blocked':p.status==='error'?'error':'';
+   el.className='actor reviewer '+name+' '+cls;document.getElementById(name+'State').textContent=p.status||((qa.provider==='both'||qa.provider===name)?'queued':'not selected')}
+ document.getElementById('handoffLabel').textContent=qa.status==='reviewing'?'reviewing exact commit':qa.verdict==='PASS'?'both gates passed':qa.status==='changes_required'?'returning findings to builder':'exact committed snapshot';
  const qstate=qa.status==='reviewing'?['active','reviewing']:qa.status==='changes_required'?['failed','failed']:
    qa.status==='blocked'||qa.status==='error'?['blocked',qa.status]:qa.verdict==='PASS'?['done','passed']:
    qa.enabled&&qa.export_approved?['active','queued']:['blocked',qa.enabled?'approval required':'off'];

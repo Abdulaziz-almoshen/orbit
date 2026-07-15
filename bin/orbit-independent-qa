@@ -192,12 +192,24 @@ def _write_pipeline_state(repo: Path, state: dict) -> Path:
     tmp = path.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     os.replace(tmp, path)
+    with (root / "events.jsonl").open("a", encoding="utf-8") as out:
+        out.write(json.dumps(value, ensure_ascii=False) + "\n")
     return path
 
 
 def _publish_report_state(repo: Path, report: dict, gate: dict, authoritative: Path) -> None:
     result = report.get("result", {})
     pipeline_status = "blocked" if result.get("verdict") == "BLOCKED" else gate.get("status", "changes_required")
+    provider_results = report.get("provider_results", {})
+    providers = {}
+    if isinstance(provider_results, dict):
+        for name, one in provider_results.items():
+            if not isinstance(one, dict):
+                continue
+            verdict = one.get("verdict")
+            providers[name] = {"status": "pass" if verdict == "PASS" else (
+                "blocked" if verdict == "BLOCKED" else "changes_required"),
+                "verdict": verdict, "score": one.get("score"), "summary": one.get("summary", "")}
     _write_pipeline_state(repo, {
         "stage": "independent_qa",
         "status": pipeline_status,
@@ -209,6 +221,7 @@ def _publish_report_state(repo: Path, report: dict, gate: dict, authoritative: P
         "provider": report.get("provider"),
         "verdict": result.get("verdict"),
         "score": result.get("score"),
+        "providers": providers,
         "reason": gate.get("reason", ""),
         "authoritative_record": str(authoritative),
         "completed_at": report.get("generated_at"),
@@ -390,11 +403,14 @@ def run_review(repo: Path, request_path: Path, ref: str) -> dict:
     round_no = len(rounds) + 1
     provider_name = "+".join(x.get("name") or qa.get("provider", {}).get("name") or "command"
                              for x in providers)
+    provider_states = {x.get("name") or qa.get("provider", {}).get("name") or "command":
+                       {"status": "queued"} for x in providers}
     _write_pipeline_state(repo, {
         "stage": "independent_qa", "status": "reviewing",
         "request_id": request["id"], "request_sha256": request_hash,
         "target_commit": commit, "baseline_commit": baseline, "round": round_no,
         "provider": provider_name,
+        "providers": provider_states,
         "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     })
     review_dir.mkdir(parents=True, exist_ok=True)
@@ -412,6 +428,16 @@ def run_review(repo: Path, request_path: Path, ref: str) -> dict:
                       "request": str(worktree / request_rel), "schema_json": schema_json}
             provider_results = []
             for spec in providers:
+                one_name = spec.get("name") or qa.get("provider", {}).get("name") or "command"
+                provider_states[one_name] = {"status": "reviewing"}
+                _write_pipeline_state(repo, {
+                    "stage": "independent_qa", "status": "reviewing",
+                    "request_id": request["id"], "request_sha256": request_hash,
+                    "target_commit": commit, "baseline_commit": baseline, "round": round_no,
+                    "provider": provider_name, "providers": provider_states,
+                    "reason": f"{one_name} is reviewing the exact committed snapshot",
+                    "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                })
                 raw_output.unlink(missing_ok=True)
                 command = [part.format(**values) for part in spec["argv"]]
                 proc = subprocess.run(command, cwd=worktree,
@@ -419,11 +445,27 @@ def run_review(repo: Path, request_path: Path, ref: str) -> dict:
                                       text=True, capture_output=True,
                                       timeout=int(qa.get("timeout_seconds", 900)))
                 if proc.returncode:
-                    raise QAError(f"review provider {spec.get('name')} failed ({proc.returncode}): "
-                                  f"{proc.stderr[-2000:]}")
+                    provider_states[one_name] = {"status": "error", "reason": proc.stderr[-1000:]}
+                    _write_pipeline_state(repo, {
+                        "stage": "independent_qa", "status": "error", "request_id": request["id"],
+                        "target_commit": commit, "round": round_no, "provider": provider_name,
+                        "providers": provider_states,
+                        "reason": f"{one_name} failed ({proc.returncode}): {proc.stderr[-1000:]}",
+                    })
+                    raise QAError(f"review provider {one_name} failed ({proc.returncode}): {proc.stderr[-2000:]}")
                 one = _decode_provider_output(spec, proc, raw_output)
                 validate_result(one, request)
-                provider_results.append((spec.get("name", "command"), one))
+                provider_states[one_name] = {"status": "pass" if one["verdict"] == "PASS" else (
+                    "blocked" if one["verdict"] == "BLOCKED" else "changes_required"),
+                    "verdict": one["verdict"], "score": one["score"], "summary": one["summary"]}
+                _write_pipeline_state(repo, {
+                    "stage": "independent_qa", "status": "reviewing",
+                    "request_id": request["id"], "request_sha256": request_hash,
+                    "target_commit": commit, "baseline_commit": baseline, "round": round_no,
+                    "provider": provider_name, "providers": provider_states,
+                    "reason": f"{one_name} finished; waiting for remaining reviewers",
+                })
+                provider_results.append((one_name, one))
             result = _aggregate_results(provider_results, request)
             validate_result(result, request)
         finally:

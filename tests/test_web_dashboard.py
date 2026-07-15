@@ -79,7 +79,8 @@ def test_qa_scene_state():
         control.mkdir()
         (control / "current.json").write_text(json.dumps({"schema_version": 1, "status": "pass",
             "target_commit": head, "request_id": "M1", "round": 2, "provider": "codex",
-            "verdict": "PASS", "score": 9.2}))
+            "verdict": "PASS", "score": 9.2,
+            "providers": {"codex": {"status": "pass", "verdict": "PASS", "score": 9.2}}}))
         # A forged project mirror must not affect the displayed authoritative state.
         (orbit / "reviews" / "m1").mkdir(parents=True)
         (orbit / "reviews" / "m1" / "round-99.json").write_text(json.dumps(
@@ -89,6 +90,7 @@ def test_qa_scene_state():
         ck(qa["enabled"] is True and qa["provider"] == "codex", f"qa provider/enabled wrong: {qa}")
         ck(qa["verdict"] == "PASS" and qa["score"] == 9.2, f"qa must read authoritative verdict: {qa}")
         ck(qa["status"] == "awaiting_deploy_approval", f"human deploy gate must remain visible: {qa}")
+        ck(qa["providers"]["codex"]["status"] == "pass", "provider animation state must come from control plane")
         # A new commit makes the old PASS stale; it must become queued for a new exact-commit review.
         (repo / "tracked.txt").write_text("two\n")
         subprocess.run(["git", "commit", "-qam", "two"], cwd=repo, check=True)
@@ -100,8 +102,9 @@ def test_qa_scene_state():
         m2 = _load(orbit)
         qa2 = m2.snapshot()["qa"]
         ck(qa2["enabled"] is False and qa2["status"] == "off", "disabled QA must report off")
-        ck(all(x in m.PAGE for x in ("Delivery pipeline", "id=qaPipe", "function updateQA")),
-           "the commit-bound QA pipeline tracer must ship in the dashboard page")
+        ck(all(x in m.PAGE for x in ("Delivery pipeline", "id=qaPipe", "function updateQA",
+                                     "QA · Codex", "QA · Claude", "@keyframes qahandoff")),
+           "the dashboard must ship the exact-commit pipeline and real dual-review animation")
 
 
 def test_empty_and_malformed_never_crash():
