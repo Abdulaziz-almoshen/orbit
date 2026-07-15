@@ -159,7 +159,7 @@ def snapshot() -> dict:
                 decisions.append(d)
     snap = {
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "project": {"name": ORBIT.parent.name,
+        "project": {"name": ORBIT.parent.resolve().name,
                     "product": setup.get("product") if isinstance(setup, dict) else ""},
         "run": run,
         "tasks": tasks if isinstance(tasks, list) else [],

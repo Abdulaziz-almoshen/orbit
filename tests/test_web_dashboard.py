@@ -153,6 +153,8 @@ def test_readonly_http_surface():
                    "GET /pet must serve the live reporter-pet narration states")
                 data = json.loads(urllib.request.urlopen(base + "/data", timeout=3).read())
                 ck(data["run"].get("phase") == "test", "GET /data must serve the snapshot")
+                ck(data.get("project", {}).get("name") == Path(d).name,
+                   f"relative ORBIT_DIR must still resolve the project name: {data.get('project')}")
                 try:
                     urllib.request.urlopen(urllib.request.Request(base + "/data", data=b"x"), timeout=3)
                     fails.append("a POST must be rejected — the dashboard is read-only")
