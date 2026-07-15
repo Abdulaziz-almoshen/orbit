@@ -3,6 +3,22 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.44.0
+
+**The board has a voice.** Orbit now ships an always-on-top macOS reporter pet backed by the same
+redacted, read-only state as the dashboard.
+
+- The pet narrates the highest-priority real state: a question requiring the user, active build and
+  task completion, Codex/Claude QA, repair, exact commit, deployment approval, and Reporter closeout.
+- A compact `/pet` dashboard view polls only the existing local `/data` endpoint; it never reads source
+  files, secrets, prompts, or unredacted provider output.
+- The native `NSPanel` shell floats across macOS spaces, is draggable, uses a non-persistent web view,
+  and offers optional spoken updates without making sound by default.
+- `scripts/orbit-pet start|stop|status` is scaffolded into projects. The Swift shell compiles into a
+  content-addressed local cache on first start and is never bundled with project code.
+- Regression coverage verifies narration inputs, read-only HTTP behavior, native floating-window
+  properties, safe stopped status, and scaffold provisioning.
+
 ## 0.43.0
 
 **Automatic, observable, exact-commit QA.** An opted-in project can now make independent QA a real

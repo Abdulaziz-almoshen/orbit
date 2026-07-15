@@ -218,6 +218,7 @@ FILE_PLAN = [
     ("orbit-context",    "scripts/orbit-context",     0o755),   # context budget doctor + safe compactor
     ("orbit-status",     "scripts/orbit-status",      0o755),
     ("orbit-dashboard",  "scripts/orbit-dashboard",   0o755),   # read-only local web board over .orbit/
+    ("orbit-pet",        "scripts/orbit-pet",         0o755),   # macOS always-on-top board reporter
     ("orbit-statusline.py", "scripts/orbit-statusline", 0o755),  # the one-line Claude Code status line
 
     ("security/rules.json", ".orbit/security/rules.json", None),  # declarative repo rules for the trusted guard

@@ -12,7 +12,7 @@ Orbit turns a product repository into a durable, observable agentic loop: it rem
 plans the next move, delegates focused tasks, checks the result, repairs failures, and stops at
 hard safety and budget boundaries.
 
-![version](https://img.shields.io/badge/version-0.43.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.44.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![observable](https://img.shields.io/badge/observable-live%20dashboard-e8590c)
@@ -91,6 +91,7 @@ and skips projects under an active writer lock.
 | `/orbit:orbit-run <task>` | Force a task through the governed loop. |
 | `scripts/orbit-status --follow` | Follow agents, checklist, gates, budget, and confidence. |
 | `scripts/orbit-dashboard --once` | Print the redacted status snapshot; `--port N` serves a read-only board. |
+| `scripts/orbit-pet start` | Show the always-on-top macOS pet that narrates tasks, questions, QA, commits, and deployment. |
 | `scripts/orbit-qa-hook install` | Opt in to automatic post-commit QA and the exact-commit pre-push gate after project approval. |
 | `orbit-doctor` | Inspect scaffold drift; `--fix` applies only safe managed-hook refreshes. |
 | `scripts/orbit-lock status` | Inspect the current checkout lease. |

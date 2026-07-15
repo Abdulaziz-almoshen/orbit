@@ -1,0 +1,10 @@
+#!/bin/sh
+# Project wrapper for Orbit's trusted floating reporter pet.
+for p in "${CLAUDE_PLUGIN_ROOT:-}/bin/orbit-pet" \
+         "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/orbit/bin/orbit-pet" \
+         "$HOME"/.claude/plugins/cache/*/orbit/*/bin/orbit-pet \
+         "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/*/orbit/*/bin/orbit-pet; do
+  [ -x "$p" ] && exec "$p" "$@"
+done
+echo "orbit-pet: trusted Orbit install not found" >&2
+exit 2

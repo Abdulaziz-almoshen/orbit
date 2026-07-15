@@ -139,6 +139,10 @@ def test_readonly_http_surface():
             if base:
                 html = urllib.request.urlopen(base + "/", timeout=3).read().decode()
                 ck("Orbit board" in html, "GET / must serve the board HTML")
+                pet = urllib.request.urlopen(base + "/pet", timeout=3).read().decode()
+                ck(all(x in pet for x in ("Orbit reporter", "I have a question for you",
+                                           "Codex", "Deployment decision", "Reporter is closing out")),
+                   "GET /pet must serve the live reporter-pet narration states")
                 data = json.loads(urllib.request.urlopen(base + "/data", timeout=3).read())
                 ck(data["run"].get("phase") == "test", "GET /data must serve the snapshot")
                 try:

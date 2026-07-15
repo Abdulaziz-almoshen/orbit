@@ -318,6 +318,57 @@ async function tick(){try{const r=await fetch('data');const s=await r.json();ren
 tick();setInterval(tick,2000);
 </script></body></html>"""
 
+PET_PAGE = """<!doctype html><html lang=en><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1"><title>Orbit reporter pet</title>
+<style>
+:root{color-scheme:dark;--bg:#0e1116;--card:#161b22;--line:#30363d;--fg:#e6edf3;--dim:#8b949e;--blue:#58a6ff;--green:#3fb950;--amber:#d29922;--red:#f85149}
+*{box-sizing:border-box}html,body{margin:0;background:transparent;color:var(--fg);font:13px/1.4 ui-sans-serif,system-ui,-apple-system,sans-serif;overflow:hidden}
+.shell{height:210px;display:grid;grid-template-columns:110px 1fr;align-items:end;padding:10px;gap:8px;-webkit-user-select:none}
+.pet{height:116px;position:relative;filter:drop-shadow(0 10px 16px rgba(0,0,0,.45));animation:float 3s ease-in-out infinite}
+.body{position:absolute;left:15px;bottom:5px;width:78px;height:88px;border-radius:44% 44% 40% 40%/48% 48% 38% 38%;background:linear-gradient(145deg,#d97757,#a84f39);border:2px solid rgba(255,255,255,.12)}
+.ear{position:absolute;top:-8px;width:25px;height:28px;background:#b95d43;border-radius:7px 19px 5px 18px}.ear.l{left:4px;transform:rotate(-18deg)}.ear.r{right:4px;transform:scaleX(-1) rotate(-18deg)}
+.eye{position:absolute;top:31px;width:8px;height:9px;border-radius:50%;background:#111}.eye.l{left:21px}.eye.r{right:21px}.mouth{position:absolute;left:31px;top:53px;width:16px;height:8px;border-bottom:3px solid #20100c;border-radius:0 0 12px 12px}
+.badge{position:absolute;right:-5px;top:4px;width:18px;height:18px;border-radius:50%;background:var(--blue);border:3px solid var(--bg)}
+.pet[data-mood=question] .badge{background:var(--amber);animation:ping 1.1s infinite}.pet[data-mood=qa] .badge{background:#10a37f;animation:ping 1.1s infinite}.pet[data-mood=done] .badge{background:var(--green)}.pet[data-mood=blocked] .badge{background:var(--red)}
+.pet[data-mood=thinking] .eye{animation:blink 2.4s infinite}.pet[data-mood=qa] .body{animation:scan 1.4s ease-in-out infinite}
+.label{text-align:center;position:absolute;bottom:-8px;width:100%;font-size:10px;color:var(--dim);letter-spacing:.04em;text-transform:uppercase}
+.bubble{align-self:start;margin-top:8px;background:rgba(22,27,34,.96);border:1px solid var(--line);border-radius:15px 15px 15px 5px;min-height:126px;padding:14px 15px;box-shadow:0 14px 32px rgba(0,0,0,.38);position:relative}
+.eyebrow{font-size:10px;color:var(--blue);font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:7px}.say{font-size:14px;font-weight:650;line-height:1.45;max-height:66px;overflow:hidden}.meta{font:10px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--dim);margin-top:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.voice{position:absolute;right:8px;top:7px;border:0;background:transparent;color:var(--dim);font-size:14px;cursor:pointer}.voice.on{color:var(--green)}
+@keyframes float{50%{transform:translateY(-5px)}}@keyframes ping{50%{transform:scale(.72);opacity:.55}}@keyframes blink{48%,52%{height:2px;top:35px}}@keyframes scan{50%{filter:drop-shadow(0 0 8px #10a37f)}}
+</style></head><body><main class=shell>
+<div class=pet id=pet data-mood=thinking><div class=body><i class="ear l"></i><i class="ear r"></i><i class="eye l"></i><i class="eye r"></i><i class=mouth></i><i class=badge></i></div><div class=label>Orbit reporter</div></div>
+<section class=bubble><button class=voice id=voice title="Toggle spoken updates">🔇</button><div class=eyebrow id=eyebrow>Watching the board</div><div class=say id=say>Connecting to Orbit…</div><div class=meta id=meta></div></section>
+</main><script>
+let lastKey='',voiceOn=false;
+const clean=s=>String(s||'').replace(/\\s+/g,' ').trim();
+const short=(s,n=118)=>{s=clean(s);return s.length>n?s.slice(0,n-1)+'…':s};
+function taskName(t){return short(t?.subject||t?.title||t?.text||t?.name||'the current task',88)}
+function report(s){const run=s.run||{},qa=s.qa||{},agents=s.agents||{},tasks=Array.isArray(s.tasks)?s.tasks:[],activity=Array.isArray(s.activity)?s.activity:[];
+ const head=(qa.head||'').slice(0,8),providers=qa.providers||{};
+ const reviewing=Object.entries(providers).find(([,p])=>p&&p.status==='reviewing');
+ const human=agents.human||{},question=clean(run.blocked_question);
+ const reporter=agents.reporter||{};
+ const activeTask=tasks.find(t=>['active','in_progress','doing'].includes(String(t.status||'').toLowerCase()));
+ const activeAgent=Object.values(agents).find(a=>a&&a.status==='active'&&a.display&&!['You','Orchestrator'].includes(a.display));
+ const recentDone=[...activity].reverse().find(e=>e&&e.status==='done'&&e.role!=='orchestrator'&&e.role!=='subagent');
+ if(question&&(human.status==='blocked'||/question|permission|input|choose|approve/i.test(question)))return {mood:'question',eye:'Your answer is needed',say:'I have a question for you: '+short(question,105),meta:'The workflow is paused until you answer.'};
+ if(reviewing){const who=reviewing[0]==='codex'?'Codex':'Claude';return {mood:'qa',eye:who+' QA is working',say:who+' is reviewing the exact commit now.',meta:(head?'commit '+head+' · ':'')+'independent QA in progress'};}
+ if(qa.status==='changes_required')return {mood:'blocked',eye:'QA returned findings',say:'QA sent the commit back. The builder needs to repair it before we can continue.',meta:(head?'commit '+head+' · ':'')+(qa.score!=null?qa.score+'/10':'changes required')};
+ if(qa.status==='blocked'||qa.status==='error')return {mood:'blocked',eye:'QA needs attention',say:'The QA stage is blocked. Open the board to see the reason and next action.',meta:short(qa.reason||'QA runner blocked',90)};
+ if(qa.status==='awaiting_deploy_approval')return {mood:'question',eye:'Deployment decision',say:'QA passed. The release is waiting for your deployment approval.',meta:(head?'commit '+head+' · ':'')+(qa.score!=null?qa.score+'/10 · ':'')+'human gate'};
+ if(qa.verdict==='PASS')return {mood:'done',eye:'Independent QA passed',say:'Codex and Claude approved this exact commit. The reporter is preparing the handoff.',meta:(head?'commit '+head+' · ':'')+(qa.score!=null?qa.score+'/10':'passed')};
+ if(reporter.status==='active')return {mood:'thinking',eye:'Reporter is closing out',say:'The build and checks are complete. I am preparing the result, proof, and remaining risks.',meta:head?'commit '+head:'final report'};
+ if(activeTask||activeAgent)return {mood:'thinking',eye:'Code is building',say:(activeAgent?.display||'Claude')+' is working on '+taskName(activeTask)+'.',meta:'I will tell you when this task finishes.'};
+ if(recentDone)return {mood:'done',eye:'Task finished',say:(recentDone.role||'The team')+' finished: '+short(recentDone.msg||recentDone.phase||'task complete',92),meta:head?'latest commit '+head:'checking the next task'};
+ if(qa.status==='awaiting_review')return {mood:'thinking',eye:'Commit ready for QA',say:'The build is committed. Independent QA has not started yet.',meta:head?'commit '+head:'waiting for a commit'};
+ return {mood:'thinking',eye:'Watching the board',say:'I am tracking the task board, QA, commits, questions, and deployment.',meta:head?'HEAD '+head:'waiting for activity'};}
+function speak(text){if(!voiceOn||!('speechSynthesis'in window))return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.rate=1.02;u.volume=.7;speechSynthesis.speak(u)}
+async function tick(){try{const r=await fetch('/data',{cache:'no-store'}),s=await r.json(),x=report(s),key=[x.mood,x.eye,x.say,x.meta].join('|');if(key!==lastKey){lastKey=key;pet.dataset.mood=x.mood;eyebrow.textContent=x.eye;say.textContent=x.say;meta.textContent=x.meta;speak(x.say)}}catch(e){pet.dataset.mood='blocked';eyebrow.textContent='Board connection lost';say.textContent='I cannot reach Orbit right now.';meta.textContent='Restart scripts/orbit-dashboard'}}
+voice.onclick=()=>{voiceOn=!voiceOn;voice.textContent=voiceOn?'🔊':'🔇';voice.classList.toggle('on',voiceOn);if(voiceOn)speak(say.textContent)};
+tick();setInterval(tick,2000);
+</script></body></html>"""
+
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a):
@@ -333,6 +384,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path.rstrip("/") in ("", "/index.html") or self.path == "/":
             self._send(200, PAGE, "text/html; charset=utf-8")
+        elif self.path.rstrip("/") == "/pet":
+            self._send(200, PET_PAGE, "text/html; charset=utf-8")
         elif self.path.rstrip("/").endswith("data"):
             try:
                 self._send(200, json.dumps(snapshot()), "application/json")

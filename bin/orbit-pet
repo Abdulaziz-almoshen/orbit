@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+"""Build and control Orbit's macOS always-on-top reporter pet."""
+from __future__ import annotations
+import argparse, hashlib, json, os, signal, subprocess, sys, urllib.request
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+SOURCE = ROOT / "assets" / "orbit-pet.swift"
+HOME = Path(os.environ.get("ORBIT_HOME", str(Path.home() / ".orbit")))
+PID = HOME / "pet.pid"
+STATE = HOME / "pet.json"
+
+
+def live_pid():
+    try:
+        pid = int(PID.read_text().strip())
+        os.kill(pid, 0)
+        return pid
+    except Exception:
+        return None
+
+
+def binary():
+    digest = hashlib.sha256(SOURCE.read_bytes()).hexdigest()[:12]
+    cache = HOME / "cache"; cache.mkdir(parents=True, exist_ok=True)
+    out = cache / f"orbit-pet-{digest}"
+    if not out.exists():
+        subprocess.run(["swiftc", str(SOURCE), "-o", str(out), "-framework", "Cocoa",
+                        "-framework", "WebKit"], check=True)
+    return out
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Orbit floating reporter pet (macOS)")
+    ap.add_argument("command", choices=("start", "stop", "status"), nargs="?", default="start")
+    ap.add_argument("--url", default="http://127.0.0.1:8765/pet")
+    args = ap.parse_args(); HOME.mkdir(parents=True, exist_ok=True)
+    pid = live_pid()
+    if args.command == "status":
+        state = {}
+        try:
+            state = json.loads(STATE.read_text())
+        except Exception:
+            pass
+        print(json.dumps({"running": bool(pid), "pid": pid,
+                          "url": state.get("url", args.url)}, indent=2)); return 0
+    if args.command == "stop":
+        if pid:
+            os.kill(pid, signal.SIGTERM)
+        PID.unlink(missing_ok=True)
+        STATE.unlink(missing_ok=True)
+        print("Orbit reporter pet stopped." if pid else "Orbit reporter pet was not running."); return 0
+    if sys.platform != "darwin":
+        raise SystemExit("orbit-pet currently requires macOS")
+    if pid:
+        print(f"Orbit reporter pet already running (pid {pid})."); return 0
+    try:
+        urllib.request.urlopen(args.url, timeout=2).read(256)
+    except Exception as exc:
+        raise SystemExit(f"Orbit dashboard pet view is unavailable at {args.url}: {exc}")
+    log = (HOME / "pet.log").open("ab", buffering=0)
+    proc = subprocess.Popen([str(binary()), args.url], stdin=subprocess.DEVNULL,
+                            stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+    PID.write_text(str(proc.pid) + "\n")
+    STATE.write_text(json.dumps({"pid": proc.pid, "url": args.url}) + "\n")
+    print(f"Orbit reporter pet started (pid {proc.pid}) · {args.url}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
