@@ -51,6 +51,7 @@ MANAGED_CHECKS = {
     ".orbit/checks/learn.py":           ("checks/learn.py",           b"active-learning"),
     ".orbit/checks/orbit-stop-check.py":("checks/orbit-stop-check.py", b"observability backstop"),
     "scripts/orbit-dashboard":          ("orbit-dashboard",            b"orbit-dashboard"),
+    "scripts/orbit-statusline":         ("orbit-statusline.py",        b"orbit-statusline"),
 }
 # Known-old shipped hashes for repos scaffolded BEFORE the manifest existed (no manifest to compare).
 _LEGACY_OLD = {
