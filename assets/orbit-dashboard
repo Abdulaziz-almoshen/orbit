@@ -214,7 +214,10 @@ def _reporter_state(snap):
         title = "Your answer is needed"
         summary = ("Question: " + question) if attention.get("question_available") else (
             f"{model} is waiting, but the notification did not include the question.")
-        next_action = str(attention.get("answer_in") or "Open the originating session and answer there.")
+        where = str(attention.get("answer_in") or "").strip()
+        next_action = (where if re.match(r"^(answer|open|choose|approve|review)\b", where, re.I)
+                       else f"Answer in {where}." if where
+                       else "Open the originating session and answer there.")
     elif qa.get("status") == "changes_required":
         state, urgency, title = "blocked", "high", "QA returned findings"
         summary = "The exact commit was rejected and must be repaired before the pipeline continues."

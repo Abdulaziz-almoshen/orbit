@@ -69,6 +69,8 @@ def test_snapshot_shape_and_redaction():
            f"question must become the reporter's top actionable situation: {reporter}")
         ck(reporter["session_id"] == "S1" and reporter["primary_action"]["kind"] == "focus_session",
            f"question action must target its originating session: {reporter}")
+        ck(reporter["next_action"] == "Answer in Claude terminal.",
+           f"reporter must turn a location into a concrete instruction: {reporter}")
         ck("session=S1" in reporter["primary_action"]["url"],
            f"focus action must carry the exact session id: {reporter['primary_action']}")
 
