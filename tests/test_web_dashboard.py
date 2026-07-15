@@ -58,6 +58,32 @@ def test_snapshot_shape_and_redaction():
         ck(snap["tasks"][0]["subject"] == "do X", "checklist must come through")
 
 
+def test_qa_scene_state():
+    """The independent-QA review-handoff scene is driven by real state: provider + latest verdict/score,
+    read from the newest .orbit/reviews/**/round-*.json envelope. Degrades to disabled cleanly."""
+    with tempfile.TemporaryDirectory() as d:
+        orbit = Path(d) / ".orbit"
+        (orbit / "reviews" / "m1").mkdir(parents=True)
+        (orbit / "loop.config.json").write_text(json.dumps(
+            {"independent_qa": {"enabled": True, "provider": {"mode": "codex"}},
+             "paths": {"independent_reviews": ".orbit/reviews"}}))
+        (orbit / "reviews" / "m1" / "round-1.json").write_text(json.dumps({"result": {"verdict": "CHANGES_REQUIRED", "score": 6}}))
+        time.sleep(0.02)
+        (orbit / "reviews" / "m1" / "round-2.json").write_text(json.dumps({"result": {"verdict": "PASS", "score": 9.2}}))
+        m = _load(orbit)
+        qa = m.snapshot()["qa"]
+        ck(qa["enabled"] is True and qa["provider"] == "codex", f"qa provider/enabled wrong: {qa}")
+        ck(qa["verdict"] == "PASS" and qa["score"] == 9.2, f"qa must read the NEWEST round verdict: {qa}")
+        # disabled → no verdict, never raises
+        (orbit / "loop.config.json").write_text(json.dumps({"independent_qa": {"enabled": False}}))
+        m2 = _load(orbit)
+        qa2 = m2.snapshot()["qa"]
+        ck(qa2["enabled"] is False, "disabled QA must report enabled False")
+        # the scene markup + its updater ship in the page
+        ck(all(x in m.PAGE for x in ("id=qa", "qcommit", "id=rname", "function updateQA")),
+           "the QA review-handoff scene + updater must be in the dashboard page")
+
+
 def test_empty_and_malformed_never_crash():
     with tempfile.TemporaryDirectory() as d:
         orbit = Path(d) / ".orbit"
@@ -105,7 +131,7 @@ def test_readonly_http_surface():
 
 
 def main():
-    for fn in (test_snapshot_shape_and_redaction, test_empty_and_malformed_never_crash, test_readonly_http_surface):
+    for fn in (test_snapshot_shape_and_redaction, test_qa_scene_state, test_empty_and_malformed_never_crash, test_readonly_http_surface):
         try:
             fn()
         except Exception as e:
