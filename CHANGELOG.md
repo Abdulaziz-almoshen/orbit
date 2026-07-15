@@ -3,6 +3,22 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.46.0
+
+**Orbit Reporter is now an actionable situation manager, not a passive speech bubble.**
+
+- A single server-side situation model prioritizes questions, QA failures, active review, deployment
+  approval, active work, long-running work, stalled work, and completion. The pet no longer guesses
+  independently from raw events.
+- The floating panel identifies the project, Claude model, originating session, current task, next
+  task, progress, exact commit, elapsed time, and quiet time, then states the concrete next action.
+- **Focus session** activates the originating terminal application using bounded terminal telemetry;
+  **Open board** opens the full local delivery board. The native shell handles both actions directly.
+- Critical transitions proactively bring the Reporter forward. Work becomes “taking time” after ten
+  minutes and “may need attention” after three quiet minutes, without claiming a failure it cannot prove.
+- Session telemetry now records terminal program, terminal session id, and known bundle identifier;
+  it still stores no prompt or transcript content.
+
 ## 0.45.0
 
 **The reporter now answers “which project, which Claude, what question, and where do I answer?”**

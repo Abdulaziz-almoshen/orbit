@@ -64,6 +64,33 @@ def test_snapshot_shape_and_redaction():
            f"project identity missing: {snap.get('project')}")
         ck(snap["attention"]["message"] == "Choose A or B" and snap["session"]["model"] == "Opus",
            "reporter must surface exact question + matching Claude session/model")
+        reporter = snap["reporter"]
+        ck(reporter["state"] == "needs_action" and reporter["urgency"] == "critical",
+           f"question must become the reporter's top actionable situation: {reporter}")
+        ck(reporter["session_id"] == "S1" and reporter["primary_action"]["kind"] == "focus_session",
+           f"question action must target its originating session: {reporter}")
+        ck("session=S1" in reporter["primary_action"]["url"],
+           f"focus action must carry the exact session id: {reporter['primary_action']}")
+
+
+def test_reporter_progress_and_stall():
+    with tempfile.TemporaryDirectory() as d:
+        orbit = Path(d) / ".orbit"; orbit.mkdir()
+        old = "2020-01-01T00:00:00Z"
+        (orbit / "run.json").write_text(json.dumps({"phase": "act", "active_task": "P5 — staging",
+            "tasks_done": 1, "tasks_total": 3, "last_ts": old}))
+        (orbit / "tasks.json").write_text(json.dumps([
+            {"subject": "P1", "status": "completed"}, {"subject": "P5 — staging", "status": "active"},
+            {"subject": "P6 — production", "status": "pending"}]))
+        (orbit / "agents.json").write_text(json.dumps({"builder": {"display": "Claude Builder",
+            "status": "active", "started_at": old}}))
+        m = _load(orbit); reporter = m.snapshot()["reporter"]
+        ck(reporter["state"] == "stalled" and reporter["urgency"] == "high",
+           f"quiet active work must proactively surface as stalled: {reporter}")
+        ck(reporter["current_task"] == "P5 — staging" and reporter["next_task"] == "P6 — production",
+           f"reporter must name current and next work: {reporter}")
+        ck(reporter["tasks_done"] == 1 and reporter["tasks_total"] == 3 and
+           reporter["progress_percent"] == 33, f"reporter progress is wrong: {reporter}")
 
 
 def test_qa_scene_state():
@@ -148,9 +175,9 @@ def test_readonly_http_surface():
                 html = urllib.request.urlopen(base + "/", timeout=3).read().decode()
                 ck("Orbit board" in html, "GET / must serve the board HTML")
                 pet = urllib.request.urlopen(base + "/pet", timeout=3).read().decode()
-                ck(all(x in pet for x in ("Orbit reporter", "question_available", "originating session",
-                                           "Codex", "Deployment decision", "Reporter is closing out")),
-                   "GET /pet must serve the live reporter-pet narration states")
+                ck(all(x in pet for x in ("Orbit reporter", "Open board", "primary_action",
+                                           "secondary_action", "progress_percent", "messageHandlers?.orbit")),
+                   "GET /pet must serve the actionable live situation panel")
                 data = json.loads(urllib.request.urlopen(base + "/data", timeout=3).read())
                 ck(data["run"].get("phase") == "test", "GET /data must serve the snapshot")
                 ck(data.get("project", {}).get("name") == Path(d).name,
@@ -168,7 +195,8 @@ def test_readonly_http_surface():
 
 
 def main():
-    for fn in (test_snapshot_shape_and_redaction, test_qa_scene_state, test_empty_and_malformed_never_crash, test_readonly_http_surface):
+    for fn in (test_snapshot_shape_and_redaction, test_reporter_progress_and_stall, test_qa_scene_state,
+               test_empty_and_malformed_never_crash, test_readonly_http_surface):
         try:
             fn()
         except Exception as e:

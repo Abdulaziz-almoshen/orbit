@@ -70,6 +70,8 @@ def main():
         payload = {**full, "cwd": d, "session_id": "session-qa-123",
                    "model": {"display_name": "Opus 4.8"}}
         qa_render = subprocess.run([sys.executable, SL], input=json.dumps(payload),
+                                   env={**os.environ, "TERM_PROGRAM": "iTerm.app",
+                                        "TERM_SESSION_ID": "term-window-42"},
                                    capture_output=True, text=True, timeout=10)
         for needle in ("Builder", "Codex: reviewing", "Claude QA: queued"):
             if needle not in qa_render.stdout:
@@ -79,6 +81,10 @@ def main():
         sessions = json.load(open(os.path.join(orbit, "sessions.json")))
         if sessions.get("session-qa-123", {}).get("model") != "Opus 4.8":
             fails.append(f"statusline did not record session/model identity: {sessions}")
+        identity = sessions.get("session-qa-123", {})
+        if (identity.get("terminal_program"), identity.get("terminal_session"),
+                identity.get("terminal_bundle")) != ("iTerm.app", "term-window-42", "com.googlecode.iterm2"):
+            fails.append(f"statusline did not record actionable terminal identity: {identity}")
 
     # missing Claude fields → those segments drop, orbit segments still render, no crash
     partial, rc = render({}, run)

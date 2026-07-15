@@ -92,8 +92,15 @@ def _record_session(orbit: Path, claude: dict) -> None:
     path = orbit / "sessions.json"
     sessions = _read_json(path, {})
     model = _get(claude, "model", "display_name") or _get(claude, "model", "id") or "Claude Code"
+    terminal_program = str(os.environ.get("TERM_PROGRAM") or "")
+    terminal_session = str(os.environ.get("TERM_SESSION_ID") or os.environ.get("ITERM_SESSION_ID") or "")
+    terminal_bundles = {"Apple_Terminal": "com.apple.Terminal", "iTerm.app": "com.googlecode.iterm2",
+                        "vscode": "com.microsoft.VSCode", "WarpTerminal": "dev.warp.Warp-Stable",
+                        "ghostty": "com.mitchellh.ghostty", "WezTerm": "com.github.wez.wezterm"}
     sessions[sid] = {"session_id": sid, "agent": "Claude Code", "model": str(model),
                      "cwd": str(_get(claude, "workspace", "project_dir") or claude.get("cwd") or ""),
+                     "terminal_program": terminal_program, "terminal_session": terminal_session,
+                     "terminal_bundle": terminal_bundles.get(terminal_program, ""),
                      "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
     ordered = sorted(sessions.items(), key=lambda x: x[1].get("updated_at", ""), reverse=True)[:12]
     tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")

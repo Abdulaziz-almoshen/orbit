@@ -23,6 +23,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from urllib.parse import urlencode
 
 ORBIT = Path(os.environ.get("ORBIT_DIR", ".orbit"))
 
@@ -137,6 +138,131 @@ def _qa_state():
             "deployment_gate": deploy, "providers": provider_states}
 
 
+def _duration(seconds):
+    if seconds is None:
+        return ""
+    if seconds < 60:
+        return f"{seconds}s"
+    if seconds < 3600:
+        return f"{seconds // 60}m"
+    return f"{seconds // 3600}h {seconds % 3600 // 60}m"
+
+
+def _task_title(task, fallback="the current task"):
+    if not isinstance(task, dict):
+        return fallback
+    return str(task.get("subject") or task.get("title") or task.get("text") or
+               task.get("name") or task.get("id") or fallback).strip()
+
+
+def _reporter_state(snap):
+    """Turn raw Orbit telemetry into one prioritized, actionable situation.
+
+    The pet and any future reporter surfaces consume this same model, so urgency, progress, and the
+    promised action cannot drift between clients. Actions are local custom URLs handled by the native
+    shell; the dashboard remains read-only.
+    """
+    run = snap.get("run") if isinstance(snap.get("run"), dict) else {}
+    qa = snap.get("qa") if isinstance(snap.get("qa"), dict) else {}
+    tasks = snap.get("tasks") if isinstance(snap.get("tasks"), list) else []
+    agents = snap.get("agents") if isinstance(snap.get("agents"), dict) else {}
+    attention = snap.get("attention") if isinstance(snap.get("attention"), dict) else {}
+    session = snap.get("session") if isinstance(snap.get("session"), dict) else {}
+    project = snap.get("project") if isinstance(snap.get("project"), dict) else {}
+    project_name = str(project.get("name") or project.get("product") or "Project")
+    sid = str(session.get("session_id") or attention.get("session_id") or "")
+    model = str(session.get("model") or session.get("agent") or attention.get("source") or "Claude Code")
+    active_states = {"active", "in_progress", "in-progress", "doing", "working"}
+    done_states = {"done", "completed", "complete", "passed"}
+    active_task = next((t for t in tasks if isinstance(t, dict) and
+                        str(t.get("status", "")).lower() in active_states), None)
+    pending = [t for t in tasks if isinstance(t, dict) and
+               str(t.get("status", "")).lower() not in active_states | done_states]
+    completed = sum(1 for t in tasks if isinstance(t, dict) and
+                    str(t.get("status", "")).lower() in done_states)
+    total = len(tasks) or int(run.get("tasks_total") or 0)
+    done = completed if tasks else int(run.get("tasks_done") or 0)
+    current = str(run.get("active_task") or _task_title(active_task, ""))
+    next_task = _task_title(pending[0], "") if pending else ""
+    active_agent = next((a for a in agents.values() if isinstance(a, dict) and
+                         a.get("status") == "active" and
+                         (a.get("display") or "") not in ("You", "Orchestrator")), None)
+    actor = str((active_agent or {}).get("display") or run.get("active_role") or model)
+    started = (active_agent or {}).get("started_at") or run.get("started_at")
+    elapsed = _age(started)
+    quiet = _age(run.get("last_ts"))
+    head = str(qa.get("head") or "")
+    providers = qa.get("providers") if isinstance(qa.get("providers"), dict) else {}
+    reviewing = next((name for name, state in providers.items()
+                      if isinstance(state, dict) and state.get("status") == "reviewing"), "")
+
+    query = urlencode({"session": sid, "project": str(ORBIT.parent.resolve()),
+                       "terminal_program": session.get("terminal_program") or "",
+                       "terminal_session": session.get("terminal_session") or "",
+                       "terminal_bundle": session.get("terminal_bundle") or ""})
+    focus = {"kind": "focus_session", "label": "Focus session",
+             "url": "orbit-action://focus-session?" + query}
+    board = {"kind": "open_board", "label": "Open board", "url": "orbit-action://open-board"}
+    state, urgency = "idle", "normal"
+    title, summary, next_action = "Watching Orbit", "No active work is reported yet.", "Waiting for activity."
+
+    question = str(run.get("blocked_question") or attention.get("message") or "").strip()
+    needs_input = bool(question and (run.get("blocked_question") or attention.get("question_available") or
+                                     re.search(r"question|permission|input|choose|approve", question, re.I)))
+    if needs_input:
+        state, urgency = "needs_action", "critical"
+        title = "Your answer is needed"
+        summary = ("Question: " + question) if attention.get("question_available") else (
+            f"{model} is waiting, but the notification did not include the question.")
+        next_action = str(attention.get("answer_in") or "Open the originating session and answer there.")
+    elif qa.get("status") == "changes_required":
+        state, urgency, title = "blocked", "high", "QA returned findings"
+        summary = "The exact commit was rejected and must be repaired before the pipeline continues."
+        next_action = str(qa.get("reason") or "Open the board for the findings and repair status.")
+    elif qa.get("status") in ("blocked", "error"):
+        state, urgency, title = "blocked", "high", "QA is blocked"
+        summary = str(qa.get("reason") or "The independent reviewer cannot continue.")
+        next_action = "Open the board to inspect the gate and owner."
+    elif reviewing:
+        who = "Codex" if reviewing == "codex" else "Claude QA" if reviewing == "claude" else reviewing.title()
+        state, title = "qa", f"{who} is reviewing"
+        summary = f"Independent QA is checking exact commit {head[:8] or 'pending'}."
+        next_action = "The builder waits for PASS or repair findings."
+    elif qa.get("status") == "awaiting_deploy_approval":
+        state, urgency, title = "needs_action", "critical", "Deployment needs approval"
+        summary = f"Independent QA passed commit {head[:8] or 'the current commit'}."
+        next_action = "Open the board and make the deployment decision."
+    elif current or active_task or active_agent:
+        state, title = "working", f"{actor} is working"
+        summary = current or _task_title(active_task)
+        next_action = (f"Next: {next_task}" if next_task else "I will report the next state change.")
+        if quiet is not None and quiet >= 180:
+            state, urgency, title = "stalled", "high", "Work may need attention"
+            next_action = f"No new Orbit signal for {_duration(quiet)}. Focus the session to inspect it."
+        elif elapsed is not None and elapsed >= 600:
+            state, urgency, title = "slow", "medium", "This task is taking time"
+            next_action = f"Running for {_duration(elapsed)}; last signal {_duration(quiet) or 'just now'} ago."
+    elif qa.get("status") == "awaiting_review":
+        state, title = "qa_ready", "Commit is ready for QA"
+        summary = f"Commit {head[:8] or 'HEAD'} is queued for independent review."
+        next_action = "Waiting for the configured QA provider to start."
+    elif total and done >= total:
+        state, title = "done", "All reported tasks are complete"
+        summary = f"{done} of {total} tasks finished."
+        next_action = "Open the board for QA, commit, and deployment status."
+
+    return {"schema_version": 1, "state": state, "urgency": urgency, "title": title,
+            "summary": summary, "next_action": next_action, "project": project_name,
+            "actor": actor, "model": model, "session_id": sid, "current_task": current,
+            "next_task": next_task, "tasks_done": done, "tasks_total": total,
+            "progress_percent": round(100 * done / total) if total else 0,
+            "elapsed_seconds": elapsed, "elapsed": _duration(elapsed),
+            "quiet_seconds": quiet, "quiet": _duration(quiet), "qa_status": qa.get("status"),
+            "commit": head[:8], "primary_action": focus if sid else board,
+            "secondary_action": board if sid else None,
+            "event_key": "|".join(str(x) for x in (state, question, current, qa.get("status"), head, done, total))}
+
+
 def snapshot() -> dict:
     """The whole board as one redacted, JSON-safe object. Every field degrades to empty, never raises."""
     run = _json("run.json", {}) or {}
@@ -177,6 +303,7 @@ def snapshot() -> dict:
         "confidence": run.get("confidence") if isinstance(run, dict) else None,
         "qa": _qa_state(),
     }
+    snap["reporter"] = _reporter_state(snap)
     return _redact(snap)
 
 
@@ -334,54 +461,39 @@ PET_PAGE = """<!doctype html><html lang=en><head><meta charset=utf-8>
 <style>
 :root{color-scheme:dark;--bg:#0e1116;--card:#161b22;--line:#30363d;--fg:#e6edf3;--dim:#8b949e;--blue:#58a6ff;--green:#3fb950;--amber:#d29922;--red:#f85149}
 *{box-sizing:border-box}html,body{margin:0;background:transparent;color:var(--fg);font:13px/1.4 ui-sans-serif,system-ui,-apple-system,sans-serif;overflow:hidden}
-.shell{height:210px;display:grid;grid-template-columns:110px 1fr;align-items:end;padding:10px;gap:8px;-webkit-user-select:none}
+.shell{height:310px;display:grid;grid-template-columns:112px 1fr;align-items:end;padding:10px;gap:8px;-webkit-user-select:none}
 .pet{height:116px;position:relative;filter:drop-shadow(0 10px 16px rgba(0,0,0,.45));animation:float 3s ease-in-out infinite}
 .body{position:absolute;left:15px;bottom:5px;width:78px;height:88px;border-radius:44% 44% 40% 40%/48% 48% 38% 38%;background:linear-gradient(145deg,#d97757,#a84f39);border:2px solid rgba(255,255,255,.12)}
 .ear{position:absolute;top:-8px;width:25px;height:28px;background:#b95d43;border-radius:7px 19px 5px 18px}.ear.l{left:4px;transform:rotate(-18deg)}.ear.r{right:4px;transform:scaleX(-1) rotate(-18deg)}
 .eye{position:absolute;top:31px;width:8px;height:9px;border-radius:50%;background:#111}.eye.l{left:21px}.eye.r{right:21px}.mouth{position:absolute;left:31px;top:53px;width:16px;height:8px;border-bottom:3px solid #20100c;border-radius:0 0 12px 12px}
 .badge{position:absolute;right:-5px;top:4px;width:18px;height:18px;border-radius:50%;background:var(--blue);border:3px solid var(--bg)}
-.pet[data-mood=question] .badge{background:var(--amber);animation:ping 1.1s infinite}.pet[data-mood=qa] .badge{background:#10a37f;animation:ping 1.1s infinite}.pet[data-mood=done] .badge{background:var(--green)}.pet[data-mood=blocked] .badge{background:var(--red)}
-.pet[data-mood=thinking] .eye{animation:blink 2.4s infinite}.pet[data-mood=qa] .body{animation:scan 1.4s ease-in-out infinite}
+.pet[data-mood=needs_action] .badge,.pet[data-mood=slow] .badge{background:var(--amber);animation:ping 1.1s infinite}.pet[data-mood=qa] .badge{background:#10a37f;animation:ping 1.1s infinite}.pet[data-mood=done] .badge{background:var(--green)}.pet[data-mood=blocked] .badge,.pet[data-mood=stalled] .badge{background:var(--red);animation:ping .85s infinite}
+.pet[data-mood=working] .eye,.pet[data-mood=qa_ready] .eye{animation:blink 2.4s infinite}.pet[data-mood=qa] .body{animation:scan 1.4s ease-in-out infinite}
 .label{text-align:center;position:absolute;bottom:-8px;width:100%;font-size:10px;color:var(--dim);letter-spacing:.04em;text-transform:uppercase}
-.bubble{align-self:start;margin-top:8px;background:rgba(22,27,34,.96);border:1px solid var(--line);border-radius:15px 15px 15px 5px;min-height:126px;padding:14px 15px;box-shadow:0 14px 32px rgba(0,0,0,.38);position:relative}
-.eyebrow{font-size:10px;color:var(--blue);font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:7px}.say{font-size:14px;font-weight:650;line-height:1.45;max-height:66px;overflow:hidden}.meta{font:10px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--dim);margin-top:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bubble{align-self:start;margin-top:6px;background:rgba(22,27,34,.97);border:1px solid var(--line);border-radius:15px 15px 15px 5px;min-height:282px;padding:13px 14px;box-shadow:0 14px 32px rgba(0,0,0,.42);position:relative}
+.top{display:flex;align-items:center;gap:7px;padding-right:24px}.state{width:7px;height:7px;border-radius:50%;background:var(--blue)}.eyebrow{font-size:10px;color:var(--blue);font-weight:750;letter-spacing:.07em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.title{font-size:16px;font-weight:720;line-height:1.25;margin-top:9px}.say{font-size:12px;line-height:1.45;color:#c9d1d9;margin-top:5px;max-height:38px;overflow:hidden}.next{font-size:11px;color:var(--dim);margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chips{display:flex;gap:5px;margin-top:9px;overflow:hidden}.chip{font:10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;color:#b8c1ca;border:1px solid var(--line);border-radius:999px;padding:3px 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bar{height:5px;background:#262d36;border-radius:8px;overflow:hidden;margin-top:10px}.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--blue),#8b5cf6);transition:width .5s ease}.taskline{display:grid;grid-template-columns:42px 1fr;gap:6px;font-size:10px;margin-top:8px}.taskline b{color:var(--dim);text-transform:uppercase;letter-spacing:.04em}.taskline span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.actions{display:flex;gap:7px;margin-top:11px}.action{appearance:none;border:1px solid var(--line);border-radius:8px;background:#202731;color:var(--fg);padding:7px 10px;font:600 11px ui-sans-serif,system-ui;cursor:pointer}.action.primary{background:var(--blue);border-color:var(--blue);color:#07111d}.action:hover{filter:brightness(1.12)}
 .voice{position:absolute;right:8px;top:7px;border:0;background:transparent;color:var(--dim);font-size:14px;cursor:pointer}.voice.on{color:var(--green)}
 @keyframes float{50%{transform:translateY(-5px)}}@keyframes ping{50%{transform:scale(.72);opacity:.55}}@keyframes blink{48%,52%{height:2px;top:35px}}@keyframes scan{50%{filter:drop-shadow(0 0 8px #10a37f)}}
 </style></head><body><main class=shell>
-<div class=pet id=pet data-mood=thinking><div class=body><i class="ear l"></i><i class="ear r"></i><i class="eye l"></i><i class="eye r"></i><i class=mouth></i><i class=badge></i></div><div class=label>Orbit reporter</div></div>
-<section class=bubble><button class=voice id=voice title="Toggle spoken updates">🔇</button><div class=eyebrow id=eyebrow>Watching the board</div><div class=say id=say>Connecting to Orbit…</div><div class=meta id=meta></div></section>
+<div class=pet id=pet data-mood=working><div class=body><i class="ear l"></i><i class="ear r"></i><i class="eye l"></i><i class="eye r"></i><i class=mouth></i><i class=badge></i></div><div class=label>Orbit reporter</div></div>
+<section class=bubble><button class=voice id=voice title="Toggle spoken updates">🔇</button>
+ <div class=top><i class=state id=stateDot></i><div class=eyebrow id=eyebrow>Connecting · Orbit</div></div>
+ <div class=title id=title>Reading the delivery state…</div><div class=say id=say></div><div class=next id=next></div>
+ <div class=chips><span class=chip id=actor>session</span><span class=chip id=progress>0/0 tasks</span><span class=chip id=timing>just now</span><span class=chip id=commit hidden></span></div>
+ <div class=bar><i id=bar></i></div><div class=taskline><b>Now</b><span id=current>Waiting for activity</span><b>Next</b><span id=nextTask>—</span></div>
+ <div class=actions><button class="action primary" id=primary>Open board</button><button class=action id=secondary hidden>Open board</button></div>
+</section>
 </main><script>
 let lastKey='',voiceOn=false;
 const clean=s=>String(s||'').replace(/\\s+/g,' ').trim();
-const short=(s,n=118)=>{s=clean(s);return s.length>n?s.slice(0,n-1)+'…':s};
-function taskName(t){return short(t?.subject||t?.title||t?.text||t?.name||'the current task',88)}
-function report(s){const run=s.run||{},qa=s.qa||{},agents=s.agents||{},tasks=Array.isArray(s.tasks)?s.tasks:[],activity=Array.isArray(s.activity)?s.activity:[];
- const head=(qa.head||'').slice(0,8),providers=qa.providers||{};
- const reviewing=Object.entries(providers).find(([,p])=>p&&p.status==='reviewing');
- const human=agents.human||{},question=clean(run.blocked_question),project=s.project||{},attention=s.attention||{},session=s.session||{};
- const projectName=clean(project.name||project.product||'this project'),sid=clean(session.session_id||attention.session_id).slice(0,8);
- const owner=clean(session.model||session.agent||attention.source||'Claude Code');
- const reporter=agents.reporter||{};
- const activeTask=tasks.find(t=>['active','in_progress','doing'].includes(String(t.status||'').toLowerCase()));
- const activeAgent=Object.values(agents).find(a=>a&&a.status==='active'&&a.display&&!['You','Orchestrator'].includes(a.display));
- const recentDone=[...activity].reverse().find(e=>e&&e.status==='done'&&e.role!=='orchestrator'&&e.role!=='subagent');
- if(question&&(human.status==='blocked'||/question|permission|input|choose|approve/i.test(question))){
-   const exact=attention.question_available&&clean(attention.message),where='Answer in '+clean(attention.answer_in||'the originating Claude Code terminal')+'.';
-   return {mood:'question',eye:projectName+' · your answer is needed',
-     say:exact?'Question: '+short(attention.message,105):owner+' needs your answer, but its notification did not include the question. Open the originating session to see it.',
-     meta:owner+(sid?' · session '+sid:'')+' · '+where};}
- if(reviewing){const who=reviewing[0]==='codex'?'Codex':'Claude';return {mood:'qa',eye:who+' QA is working',say:who+' is reviewing the exact commit now.',meta:(head?'commit '+head+' · ':'')+'independent QA in progress'};}
- if(qa.status==='changes_required')return {mood:'blocked',eye:'QA returned findings',say:'QA sent the commit back. The builder needs to repair it before we can continue.',meta:(head?'commit '+head+' · ':'')+(qa.score!=null?qa.score+'/10':'changes required')};
- if(qa.status==='blocked'||qa.status==='error')return {mood:'blocked',eye:'QA needs attention',say:'The QA stage is blocked. Open the board to see the reason and next action.',meta:short(qa.reason||'QA runner blocked',90)};
- if(qa.status==='awaiting_deploy_approval')return {mood:'question',eye:'Deployment decision',say:'QA passed. The release is waiting for your deployment approval.',meta:(head?'commit '+head+' · ':'')+(qa.score!=null?qa.score+'/10 · ':'')+'human gate'};
- if(qa.verdict==='PASS')return {mood:'done',eye:'Independent QA passed',say:'Independent QA approved this exact commit. The reporter is preparing the handoff.',meta:(head?'commit '+head+' · ':'')+(qa.score!=null?qa.score+'/10':'passed')};
- if(reporter.status==='active')return {mood:'thinking',eye:'Reporter is closing out',say:'The build and checks are complete. I am preparing the result, proof, and remaining risks.',meta:head?'commit '+head:'final report'};
- if(activeTask||activeAgent)return {mood:'thinking',eye:'Code is building',say:(activeAgent?.display||'Claude')+' is working on '+taskName(activeTask)+'.',meta:'I will tell you when this task finishes.'};
- if(recentDone)return {mood:'done',eye:'Task finished',say:(recentDone.role||'The team')+' finished: '+short(recentDone.msg||recentDone.phase||'task complete',92),meta:head?'latest commit '+head:'checking the next task'};
- if(qa.status==='awaiting_review')return {mood:'thinking',eye:'Commit ready for QA',say:'The build is committed. Independent QA has not started yet.',meta:head?'commit '+head:'waiting for a commit'};
- return {mood:'thinking',eye:'Watching the board',say:'I am tracking the task board, QA, commits, questions, and deployment.',meta:head?'HEAD '+head:'waiting for activity'};}
 function speak(text){if(!voiceOn||!('speechSynthesis'in window))return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.rate=1.02;u.volume=.7;speechSynthesis.speak(u)}
-async function tick(){try{const r=await fetch('/data',{cache:'no-store'}),s=await r.json(),x=report(s),key=[x.mood,x.eye,x.say,x.meta].join('|');if(key!==lastKey){lastKey=key;pet.dataset.mood=x.mood;eyebrow.textContent=x.eye;say.textContent=x.say;meta.textContent=x.meta;speak(x.say)}}catch(e){pet.dataset.mood='blocked';eyebrow.textContent='Board connection lost';say.textContent='I cannot reach Orbit right now.';meta.textContent='Restart scripts/orbit-dashboard'}}
+const color={needs_action:'var(--amber)',blocked:'var(--red)',stalled:'var(--red)',qa:'var(--green)',done:'var(--green)',slow:'var(--amber)'};
+function bind(button,action){button.hidden=!action;if(!action)return;button.textContent=action.label;button.onclick=()=>{location.href=action.url}}
+function notifyNative(x){try{window.webkit?.messageHandlers?.orbit?.postMessage({type:'transition',urgency:x.urgency,state:x.state,title:x.title})}catch(e){}}
+function render(x){pet.dataset.mood=x.state||'working';stateDot.style.background=color[x.state]||'var(--blue)';eyebrow.textContent=(x.project||'Orbit')+' · '+clean(x.model||x.actor||'live');title.textContent=x.title||'Watching Orbit';say.textContent=x.summary||'';next.textContent=x.next_action||'';
+ actor.textContent=(x.actor||x.model||'session')+(x.session_id?' · '+x.session_id.slice(0,8):'');progress.textContent=(x.tasks_done||0)+'/'+(x.tasks_total||0)+' tasks';timing.textContent=x.elapsed?'elapsed '+x.elapsed:x.quiet?'quiet '+x.quiet:'live';commit.hidden=!x.commit;commit.textContent=x.commit?'commit '+x.commit:'';bar.style.width=Math.max(0,Math.min(100,x.progress_percent||0))+'%';current.textContent=x.current_task||x.summary||'Waiting for activity';nextTask.textContent=x.next_task||x.next_action||'—';bind(primary,x.primary_action);bind(secondary,x.secondary_action)}
+async function tick(){try{const r=await fetch('/data',{cache:'no-store'}),s=await r.json(),x=s.reporter||{};render(x);if(x.event_key&&x.event_key!==lastKey){const initial=!lastKey;lastKey=x.event_key;speak(x.title+'. '+x.summary);if(!initial&&['critical','high'].includes(x.urgency))notifyNative(x)}}catch(e){pet.dataset.mood='blocked';eyebrow.textContent='Orbit · disconnected';title.textContent='Board connection lost';say.textContent='I cannot reach the local Orbit board.';next.textContent='Restart scripts/orbit-dashboard.'}}
 voice.onclick=()=>{voiceOn=!voiceOn;voice.textContent=voiceOn?'🔊':'🔇';voice.classList.toggle('on',voiceOn);if(voiceOn)speak(say.textContent)};
 tick();setInterval(tick,2000);
 </script></body></html>"""
