@@ -22,6 +22,7 @@ import json
 import os
 import re
 import sys
+import time
 from pathlib import Path
 
 # OSC (ESC] … BEL/ST), PM/APC/DCS (ESC ^/_/P … ST), CSI (ESC[ …), and C0 controls / DEL / 8-bit CSI.
@@ -112,13 +113,34 @@ def _map(event, data):
     if event == "Stop":
         return {"role": "orchestrator", "phase": "report", "status": "done", "msg": "run complete"}
     if event == "Notification":
-        note = _redact(data.get("message") or data.get("msg") or "notification")
+        note = _redact(data.get("message") or data.get("msg") or "notification", 240)
         low = note.lower()
         blocked = any(k in low for k in ("waiting", "need", "input", "permission", "approve"))
         return {"role": "human", "phase": "decide", "status": "blocked" if blocked else "info",
                 "msg": note}
     # TaskCreated / TaskCompleted are handled separately (they mirror the native checklist).
     return None
+
+
+def _attention(orbit_dir: Path, data: dict) -> None:
+    """Persist the bounded notification context needed to tell the user where to answer.
+
+    Claude Code notifications sometimes contain the actual question and sometimes only the generic
+    sentence "Claude is waiting for your input". `question_available` prevents reporters from
+    presenting the generic sentence as if it were the question.
+    """
+    message = _redact(data.get("message") or data.get("msg") or "", 300)
+    title = _redact(data.get("title") or "", 120)
+    kind = _redact(data.get("notification_type") or "notification", 40)
+    generic = re.search(r"(?i)^(claude\s+(?:code\s+)?(?:is\s+)?(?:waiting|needs?)|permission needed|input needed)", message)
+    value = {"schema": 1, "source": "Claude Code", "session_id": _redact(data.get("session_id"), 80),
+             "notification_type": kind, "title": title, "message": message,
+             "question_available": bool(message and not generic),
+             "answer_in": "originating Claude Code terminal",
+             "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    tmp = orbit_dir / ".attention.json.tmp"
+    tmp.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n")
+    os.replace(tmp, orbit_dir / "attention.json")
 
 
 def _mirror_task(activity, event, data):
@@ -165,6 +187,14 @@ def main():
         return
 
     try:
+        if event == "Notification":
+            note = str(data.get("message") or data.get("msg") or "").lower()
+            kind = str(data.get("notification_type") or "")
+            if kind in ("permission_prompt", "elicitation_dialog", "idle_prompt") or any(
+                    k in note for k in ("waiting", "need", "input", "permission", "approve")):
+                _attention(orbit_dir, data)
+        elif event == "Stop":
+            (orbit_dir / "attention.json").unlink(missing_ok=True)
         if event in ("TaskCreated", "TaskCompleted"):
             _mirror_task(activity, event, data)
             return

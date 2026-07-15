@@ -99,7 +99,9 @@ def main():
               "tool_input": {"file_path": "README.md"}, "cwd": d}, d)   # must be skipped
         fire({"hook_event_name": "PostToolUseFailure", "tool_name": "Bash", "cwd": d}, d)
         fire({"hook_event_name": "Notification",
-              "message": "Claude is \x1b[31mwaiting\x1b[0m for your input", "cwd": d}, d)
+              "message": "Claude is \x1b[31mwaiting\x1b[0m for your input",
+              "title": "Input needed", "notification_type": "elicitation_dialog",
+              "session_id": "session-abc123", "cwd": d}, d)
 
         events = [json.loads(l) for l in open(act).read().splitlines()]
         roles_status = [(e["role"], e["status"], e["msg"]) for e in events]
@@ -131,6 +133,9 @@ def main():
         run = json.loads(open(os.path.join(d, ".orbit", "run.json")).read())
         if not run.get("blocked_question"):
             fails.append("run.json blocked_question not set by the notification")
+        attention = json.loads(open(os.path.join(d, ".orbit", "attention.json")).read())
+        if attention.get("session_id") != "session-abc123" or attention.get("question_available") is not False:
+            fails.append(f"generic notification must preserve session without pretending it is the question: {attention}")
 
     # --- fail-open: unknown event, un-scaffolded repo, garbage input ------------------
     with tempfile.TemporaryDirectory() as d:

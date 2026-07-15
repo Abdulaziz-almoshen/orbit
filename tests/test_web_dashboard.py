@@ -47,6 +47,10 @@ def test_snapshot_shape_and_redaction():
         (orbit / "run.json").write_text(json.dumps({"phase": "build", "active_role": "backend",
                                                     "cycle": 2, "tokens": 1234, "confidence": 75}))
         (orbit / "tasks.json").write_text(json.dumps([{"subject": "do X", "status": "completed"}]))
+        (orbit / "setup.json").write_text(json.dumps({"product": "Test product"}))
+        (orbit / "attention.json").write_text(json.dumps({"session_id": "S1", "source": "Claude Code",
+            "message": "Choose A or B", "question_available": True, "answer_in": "Claude terminal"}))
+        (orbit / "sessions.json").write_text(json.dumps({"S1": {"session_id": "S1", "model": "Opus"}}))
         (orbit / "activity.jsonl").write_text(
             json.dumps({"who": "backend", "status": "done", "msg": "token=sk-ABCDEF1234567890 ok"}) + "\n"
             + "this is not json{\n")   # malformed line must be skipped, not crash
@@ -56,6 +60,10 @@ def test_snapshot_shape_and_redaction():
         ck(len(snap["activity"]) == 1, f"malformed activity line must be skipped (got {len(snap['activity'])})")
         ck("sk-ABCDEF" not in json.dumps(snap), "a secret-looking token must be redacted from the snapshot")
         ck(snap["tasks"][0]["subject"] == "do X", "checklist must come through")
+        ck(snap["project"]["name"] == Path(d).name and snap["project"]["product"] == "Test product",
+           f"project identity missing: {snap.get('project')}")
+        ck(snap["attention"]["message"] == "Choose A or B" and snap["session"]["model"] == "Opus",
+           "reporter must surface exact question + matching Claude session/model")
 
 
 def test_qa_scene_state():
@@ -140,7 +148,7 @@ def test_readonly_http_surface():
                 html = urllib.request.urlopen(base + "/", timeout=3).read().decode()
                 ck("Orbit board" in html, "GET / must serve the board HTML")
                 pet = urllib.request.urlopen(base + "/pet", timeout=3).read().decode()
-                ck(all(x in pet for x in ("Orbit reporter", "I have a question for you",
+                ck(all(x in pet for x in ("Orbit reporter", "question_available", "originating session",
                                            "Codex", "Deployment decision", "Reporter is closing out")),
                    "GET /pet must serve the live reporter-pet narration states")
                 data = json.loads(urllib.request.urlopen(base + "/data", timeout=3).read())

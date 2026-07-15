@@ -1,23 +1,50 @@
 #!/usr/bin/env python3
 """Build and control Orbit's macOS always-on-top reporter pet."""
 from __future__ import annotations
-import argparse, hashlib, json, os, signal, subprocess, sys, urllib.request
+import argparse, hashlib, json, os, signal, subprocess, sys, time, urllib.request
 from pathlib import Path
+from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "assets" / "orbit-pet.swift"
 HOME = Path(os.environ.get("ORBIT_HOME", str(Path.home() / ".orbit")))
 PID = HOME / "pet.pid"
 STATE = HOME / "pet.json"
+DASH_PID = HOME / "dashboard.pid"
 
 
-def live_pid():
+def live_pid(path=PID):
     try:
-        pid = int(PID.read_text().strip())
+        pid = int(path.read_text().strip())
         os.kill(pid, 0)
         return pid
     except Exception:
         return None
+
+
+def ensure_dashboard(url: str, project: Path):
+    """Start the project's read-only board when the reporter URL is not already available."""
+    try:
+        urllib.request.urlopen(url, timeout=1).read(256)
+        return live_pid(DASH_PID)
+    except Exception:
+        pass
+    dashboard = project / "scripts" / "orbit-dashboard"
+    parsed = urlparse(url)
+    if parsed.hostname not in ("127.0.0.1", "localhost") or not parsed.port or not dashboard.is_file():
+        raise SystemExit(f"Orbit dashboard pet view is unavailable at {url}; run scripts/orbit-dashboard first")
+    log = (HOME / "dashboard.log").open("ab", buffering=0)
+    proc = subprocess.Popen([str(dashboard), "--port", str(parsed.port)], cwd=project,
+                            stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+                            start_new_session=True)
+    DASH_PID.write_text(str(proc.pid) + "\n")
+    for _ in range(30):
+        try:
+            urllib.request.urlopen(url, timeout=.3).read(256)
+            return proc.pid
+        except Exception:
+            time.sleep(.1)
+    raise SystemExit(f"Orbit dashboard did not become ready at {url}; see {HOME / 'dashboard.log'}")
 
 
 def binary():
@@ -34,6 +61,7 @@ def main():
     ap = argparse.ArgumentParser(description="Orbit floating reporter pet (macOS)")
     ap.add_argument("command", choices=("start", "stop", "status"), nargs="?", default="start")
     ap.add_argument("--url", default="http://127.0.0.1:8765/pet")
+    ap.add_argument("--project", type=Path, default=Path.cwd())
     args = ap.parse_args(); HOME.mkdir(parents=True, exist_ok=True)
     pid = live_pid()
     if args.command == "status":
@@ -43,27 +71,33 @@ def main():
         except Exception:
             pass
         print(json.dumps({"running": bool(pid), "pid": pid,
-                          "url": state.get("url", args.url)}, indent=2)); return 0
+                          "url": state.get("url", args.url),
+                          "project": state.get("project", str(args.project.resolve())),
+                          "dashboard_running": bool(live_pid(DASH_PID)),
+                          "dashboard_pid": live_pid(DASH_PID)}, indent=2)); return 0
     if args.command == "stop":
         if pid:
             os.kill(pid, signal.SIGTERM)
+        dash_pid = live_pid(DASH_PID)
+        if dash_pid:
+            os.kill(dash_pid, signal.SIGTERM)
         PID.unlink(missing_ok=True)
+        DASH_PID.unlink(missing_ok=True)
         STATE.unlink(missing_ok=True)
         print("Orbit reporter pet stopped." if pid else "Orbit reporter pet was not running."); return 0
     if sys.platform != "darwin":
         raise SystemExit("orbit-pet currently requires macOS")
     if pid:
         print(f"Orbit reporter pet already running (pid {pid})."); return 0
-    try:
-        urllib.request.urlopen(args.url, timeout=2).read(256)
-    except Exception as exc:
-        raise SystemExit(f"Orbit dashboard pet view is unavailable at {args.url}: {exc}")
+    project = args.project.resolve()
+    dashboard_pid = ensure_dashboard(args.url, project)
     log = (HOME / "pet.log").open("ab", buffering=0)
     proc = subprocess.Popen([str(binary()), args.url], stdin=subprocess.DEVNULL,
                             stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
     PID.write_text(str(proc.pid) + "\n")
-    STATE.write_text(json.dumps({"pid": proc.pid, "url": args.url}) + "\n")
-    print(f"Orbit reporter pet started (pid {proc.pid}) · {args.url}")
+    STATE.write_text(json.dumps({"pid": proc.pid, "url": args.url, "project": str(project),
+                                 "dashboard_pid": dashboard_pid}) + "\n")
+    print(f"Orbit reporter pet started (pid {proc.pid}) · {project.name} · {args.url}")
     return 0
 
 

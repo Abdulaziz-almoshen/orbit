@@ -19,6 +19,7 @@ Orbit wires this only if you don't already have a status line (never overwrites 
 """
 import json
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -70,6 +71,96 @@ def _dur(secs):
     if secs is None:
         return ""
     return f"{secs}s" if secs < 60 else f"{secs // 60}m{secs % 60}s" if secs < 3600 else f"{secs // 3600}h"
+
+
+def _read_json(path, default):
+    try:
+        value = json.loads(path.read_text())
+        return value if isinstance(value, type(default)) else default
+    except Exception:
+        return default
+
+
+def _record_session(orbit: Path, claude: dict) -> None:
+    """Remember which Claude/model owns a session so external reporters can identify it.
+
+    This is bounded, project-local telemetry. It never stores prompts or transcript contents.
+    """
+    sid = str(claude.get("session_id") or "").strip()
+    if not orbit or not sid:
+        return
+    path = orbit / "sessions.json"
+    sessions = _read_json(path, {})
+    model = _get(claude, "model", "display_name") or _get(claude, "model", "id") or "Claude Code"
+    sessions[sid] = {"session_id": sid, "agent": "Claude Code", "model": str(model),
+                     "cwd": str(_get(claude, "workspace", "project_dir") or claude.get("cwd") or ""),
+                     "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    ordered = sorted(sessions.items(), key=lambda x: x[1].get("updated_at", ""), reverse=True)[:12]
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    tmp.write_text(json.dumps(dict(ordered), indent=2) + "\n")
+    os.replace(tmp, path)
+
+
+def _git(root: Path, *args) -> str:
+    try:
+        p = subprocess.run(["git", "-C", str(root), *args], text=True, capture_output=True, timeout=.5)
+        return p.stdout.strip() if p.returncode == 0 else ""
+    except Exception:
+        return ""
+
+
+def _qa_state(orbit: Path) -> dict:
+    """Small exact-commit QA view for the terminal reporter; authoritative state stays in Git."""
+    if not orbit:
+        return {}
+    cfg = _read_json(orbit / "loop.config.json", {})
+    qa = cfg.get("independent_qa") if isinstance(cfg.get("independent_qa"), dict) else {}
+    if qa.get("enabled") is not True:
+        return {}
+    pcfg = qa.get("provider") if isinstance(qa.get("provider"), dict) else {}
+    mode = str(pcfg.get("mode") or pcfg.get("name") or "claude")
+    head = _git(orbit.parent, "rev-parse", "HEAD")
+    common = _git(orbit.parent, "rev-parse", "--git-common-dir")
+    control = {}
+    try:
+        cp = Path(common)
+        if common and not cp.is_absolute():
+            cp = (orbit.parent / cp).resolve()
+        control = _read_json(cp / "orbit-independent-qa" / "current.json", {}) if common else {}
+    except Exception:
+        control = {}
+    exact = bool(head and control.get("target_commit") == head)
+    if not exact:
+        names = ["codex", "claude"] if mode == "both" else [mode]
+        return {"status": "awaiting_review", "provider": mode, "head": head,
+                "providers": {name: {"status": "queued"} for name in names}}
+    return {"status": control.get("status") or "awaiting_review", "provider": mode, "head": head,
+            "providers": control.get("providers") if isinstance(control.get("providers"), dict) else {},
+            "reason": control.get("reason", ""), "verdict": control.get("verdict")}
+
+
+def build_qa_line(qa: dict) -> str:
+    """A compact two-character QA scene for Claude Code's supported multi-line status area."""
+    if not qa or qa.get("status") in (None, "off", "awaiting_project_approval"):
+        return ""
+    providers = qa.get("providers") if isinstance(qa.get("providers"), dict) else {}
+    names = ["codex", "claude"] if qa.get("provider") == "both" else list(providers)
+    if not names:
+        names = [str(qa.get("provider") or "reviewer")]
+    labels = {"queued": "queued", "reviewing": "reviewing", "pass": "PASS ✓",
+              "changes_required": "changes requested 💬", "blocked": "blocked", "error": "error"}
+    actors = []
+    for name in names:
+        state = providers.get(name) if isinstance(providers.get(name), dict) else {}
+        status = str(state.get("status") or "queued")
+        who = "Codex" if name == "codex" else "Claude QA" if name == "claude" else name.title()
+        icon = "🟢" if name == "codex" else "🟠"
+        summary = str(state.get("summary") or "").replace("\n", " ").strip()
+        tail = (" — " + summary[:42] + ("…" if len(summary) > 42 else "")) if summary else ""
+        actors.append(f"{icon} {who}: {labels.get(status, status)}{tail}")
+    moving = any((providers.get(n) or {}).get("status") == "reviewing" for n in names)
+    handoff = "──📦──▶" if int(time.time()) % 2 == 0 else "──💬──◀" if moving else "──📦──▶"
+    return "   🟠 Builder " + handoff + "  " + "  ⚔  ".join(actors)
 
 
 def build_line(claude: dict, run: dict, agents: dict = None, lock_seg: str = "") -> str:
@@ -152,6 +243,10 @@ def main():
             agents = {}
     except Exception:
         agents = {}
+    try:
+        _record_session(orbit, claude)
+    except Exception:
+        pass
     lock_seg = ""
     try:                                                    # 🔒 only when ANOTHER session holds the lock
         lk = json.loads((orbit / "locks" / "active-writer.json").read_text()) if orbit else {}
@@ -163,6 +258,9 @@ def main():
         lock_seg = ""
     try:
         print(build_line(claude, run, agents, lock_seg))
+        qa_line = build_qa_line(_qa_state(orbit))
+        if qa_line:
+            print(qa_line)
     except Exception:
         print("")                                           # never crash the status line
 

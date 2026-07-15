@@ -246,7 +246,7 @@ team** to both `.claude/agents/*.md` (adapters) and `.orbit/roles/*.md` (specs):
 ```bash
 # resolve Orbit's root whether it's a marketplace plugin or a skills-dir clone:
 ORBIT="${CLAUDE_PLUGIN_ROOT:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/orbit}"
-python3 "$ORBIT/scripts/scaffold.py" --target . --surfaces <detected> [--install-hooks]
+python3 "$ORBIT/scripts/scaffold.py" --target . --surfaces <detected> [--install-hooks] [--enable-reporter]
 ```
 
 - **`--surfaces`** is the key flag — pass the surfaces **you detected in Phase 0** (comma-separated:
@@ -258,6 +258,13 @@ python3 "$ORBIT/scripts/scaffold.py" --target . --surfaces <detected> [--install
   surfaces detected → a single generic `builder`. (Empty `--surfaces` is allowed; `--frontend` still
   works as an alias for `--surfaces web`.)
 - Add **`--install-hooks`** to wire the safety hooks now (or leave it for Phase 6a).
+- On macOS, add **`--enable-reporter`** when the user opts into the floating reporter. This also
+  wires the observability hooks and Claude Code's multi-line status line, starts the read-only local
+  board, and launches the pet. A marketplace plugin install cannot itself launch a persistent GUI
+  process or set the main status line; the first trusted-project `/orbit` setup is the activation
+  boundary. If the user already asked for the reporter, treat that as the opt-in. Otherwise ask one
+  combined setup question only on first scaffold: “Enable Orbit’s terminal + floating reporter?”
+  Recommend yes; do not re-ask on refresh when the choice is already evident.
 - It **never overwrites customized files** — existing project values are preserved and reported, so a
   re-run is safe. It may add new config keys and replace a byte-identical known-old Orbit engine/check,
   always with a backup. A repo scaffolded before 0.23.0 has a `guard.py`

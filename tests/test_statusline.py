@@ -46,6 +46,36 @@ def main():
     if "needs input" not in bl:
         fails.append(f"blocked run should show 'needs input': {bl!r}")
 
+    # Multi-line QA scene belongs directly below Claude Code's activity panel and names real providers.
+    with tempfile.TemporaryDirectory() as d:
+        orbit = os.path.join(d, ".orbit"); os.makedirs(orbit)
+        subprocess.run(["git", "init", "-q"], cwd=d, check=True)
+        subprocess.run(["git", "config", "user.email", "orbit@example.test"], cwd=d, check=True)
+        subprocess.run(["git", "config", "user.name", "Orbit"], cwd=d, check=True)
+        open(os.path.join(d, "x"), "w").write("x\n")
+        subprocess.run(["git", "add", "x"], cwd=d, check=True)
+        subprocess.run(["git", "commit", "-qm", "x"], cwd=d, check=True)
+        head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=d, text=True).strip()
+        json.dump(run, open(os.path.join(orbit, "run.json"), "w"))
+        json.dump({"independent_qa": {"enabled": True, "provider": {"mode": "both"}}},
+                  open(os.path.join(orbit, "loop.config.json"), "w"))
+        control = os.path.join(d, ".git", "orbit-independent-qa"); os.makedirs(control)
+        json.dump({"schema_version": 1, "status": "reviewing", "target_commit": head,
+                   "providers": {"codex": {"status": "reviewing"}, "claude": {"status": "queued"}}},
+                  open(os.path.join(control, "current.json"), "w"))
+        payload = {**full, "cwd": d, "session_id": "session-qa-123",
+                   "model": {"display_name": "Opus 4.8"}}
+        qa_render = subprocess.run([sys.executable, SL], input=json.dumps(payload),
+                                   capture_output=True, text=True, timeout=10)
+        for needle in ("Builder", "Codex: reviewing", "Claude QA: queued"):
+            if needle not in qa_render.stdout:
+                fails.append(f"terminal QA scene missing '{needle}': {qa_render.stdout!r}")
+        if "📦" not in qa_render.stdout and "💬" not in qa_render.stdout:
+            fails.append(f"terminal QA scene missing animated handoff/comment marker: {qa_render.stdout!r}")
+        sessions = json.load(open(os.path.join(orbit, "sessions.json")))
+        if sessions.get("session-qa-123", {}).get("model") != "Opus 4.8":
+            fails.append(f"statusline did not record session/model identity: {sessions}")
+
     # missing Claude fields → those segments drop, orbit segments still render, no crash
     partial, rc = render({}, run)
     if rc != 0 or "build" not in partial or "ctx" in partial or "$" in partial:

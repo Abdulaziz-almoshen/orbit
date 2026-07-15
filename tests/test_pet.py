@@ -16,7 +16,8 @@ def main():
     fails = []
     dashboard = (ROOT / "assets/orbit-dashboard").read_text()
     for required in ("PET_PAGE", "fetch('/data'", "blocked_question", "awaiting_deploy_approval",
-                     "providers", "Reporter is closing out", "activeTask", "recentDone"):
+                     "providers", "Reporter is closing out", "activeTask", "recentDone",
+                     "question_available", "projectName", "session_id", "originating session"):
         if required not in dashboard:
             fails.append(f"pet narration is missing state input: {required}")
     swift = (ROOT / "assets/orbit-pet.swift").read_text()
@@ -37,6 +38,10 @@ def main():
         wrapper = target / "scripts/orbit-pet"
         if not wrapper.is_file() or not os.access(wrapper, os.X_OK):
             fails.append("scaffold did not install executable scripts/orbit-pet")
+        help_out = subprocess.run([sys.executable, str(ROOT / "scripts/scaffold.py"), "--help"],
+                                  text=True, capture_output=True, check=True).stdout
+        if "--enable-reporter" not in help_out:
+            fails.append("scaffold is missing the one-time reporter activation option")
     if fails:
         print(f"FAIL: pet ({len(fails)})")
         for fail in fails: print("  -", fail)

@@ -3,6 +3,22 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.45.0
+
+**The reporter now answers “which project, which Claude, what question, and where do I answer?”**
+
+- Attention telemetry records the originating Claude Code session, notification kind, bounded title
+  and message, and whether the host actually supplied the question. Generic “waiting for input” text
+  is never misrepresented as the question.
+- The redacted dashboard snapshot joins project identity, the matching session/model, writer lock,
+  and attention record. The pet names the project and session and tells the user where to answer.
+- Claude Code's official multi-line status-line surface now shows the live QA handoff directly below
+  the activity panel: Builder, Codex, and Claude QA characters reflect real queued/reviewing/comment/
+  PASS states from the exact-commit Git control plane.
+- `scaffold.py --enable-reporter` is the one-time trusted-project activation for hooks, terminal
+  reporting, the local read-only board, and the macOS pet. `orbit-pet start` starts its board when
+  needed, so users no longer have to coordinate two processes manually.
+
 ## 0.44.0
 
 **The board has a voice.** Orbit now ships an always-on-top macOS reporter pet backed by the same

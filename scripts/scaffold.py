@@ -31,6 +31,8 @@ import json
 import os
 import re
 import shutil
+import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -899,6 +901,8 @@ def main():
                     help="back-compat alias: implies a web surface (Designer + design playbooks)")
     ap.add_argument("--install-hooks", action="store_true",
                     help="also wire the always-on safety hook into .claude/settings.json")
+    ap.add_argument("--enable-reporter", action="store_true",
+                    help="wire observability/status-line hooks and start the macOS floating reporter")
     ap.add_argument("--check-drift", action="store_true",
                     help="READ-ONLY: report how stale this project's scaffold is vs the current plugin, then exit")
     ap.add_argument("--plan-refresh", action="store_true",
@@ -1040,7 +1044,7 @@ def main():
         "  * the engineers are already named per detected surface; add a specialist only if needed.\n"
         "  * wire loop.py dispatch() to your orchestrator; tune loop.config.json thresholds."
     )
-    if args.install_hooks:
+    if args.install_hooks or args.enable_reporter:
         print()
         install_hooks(target, has_ui)
     else:
@@ -1051,6 +1055,14 @@ def main():
             "rules.json; .orbit/checks/guard.py is the built-in ruleset reference (editing it does\n"
             "nothing once the trusted runner is wired)."
         )
+    if args.enable_reporter:
+        if sys.platform == "darwin":
+            reporter = target / "scripts" / "orbit-pet"
+            proc = subprocess.run([str(reporter), "start", "--project", str(target)], cwd=target,
+                                  text=True, capture_output=True)
+            print("\n" + (proc.stdout.strip() or proc.stderr.strip() or "Orbit reporter did not start."))
+        else:
+            print("\nOrbit terminal reporter enabled; the floating pet currently requires macOS.")
     print(
         "\nTo undo everything later: run `orbit-uninstall` from this repo — or its full path\n"
         "`~/.claude/skills/orbit/bin/orbit-uninstall` if it isn't on your PATH — (lists, asks, then\n"

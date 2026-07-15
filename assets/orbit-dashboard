@@ -144,6 +144,12 @@ def snapshot() -> dict:
     agents = _json("agents.json", {}) or {}
     agents = agents if isinstance(agents, dict) else {}
     lock = _json("locks/active-writer.json", None)
+    setup = _json("setup.json", {}) or {}
+    attention = _json("attention.json", None)
+    sessions = _json("sessions.json", {}) or {}
+    wanted_session = ((attention or {}).get("session_id") if isinstance(attention, dict) else None) or (
+        lock.get("session_id") if isinstance(lock, dict) else None)
+    session = sessions.get(wanted_session) if wanted_session and isinstance(sessions, dict) else None
     decisions = []
     dfile = ORBIT / "decisions"
     if dfile.is_dir():
@@ -153,6 +159,8 @@ def snapshot() -> dict:
                 decisions.append(d)
     snap = {
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "project": {"name": ORBIT.parent.name,
+                    "product": setup.get("product") if isinstance(setup, dict) else ""},
         "run": run,
         "tasks": tasks if isinstance(tasks, list) else [],
         "agents": agents,
@@ -160,6 +168,9 @@ def snapshot() -> dict:
                           if isinstance(v, dict) and v.get("status") == "active"],
         "activity": _jsonl("activity.jsonl", 120),
         "writer_lock": lock if isinstance(lock, dict) else None,
+        "attention": attention if isinstance(attention, dict) else None,
+        "session": session if isinstance(session, dict) else ({"session_id": wanted_session,
+                    "agent": "Claude Code", "model": "model not reported"} if wanted_session else None),
         "lock_stale": bool(lock and isinstance(lock, dict)
                            and (_age(lock.get("heartbeat_at")) or 0) > int(lock.get("ttl_seconds") or 1800)),
         "decisions": decisions,
@@ -347,12 +358,18 @@ function taskName(t){return short(t?.subject||t?.title||t?.text||t?.name||'the c
 function report(s){const run=s.run||{},qa=s.qa||{},agents=s.agents||{},tasks=Array.isArray(s.tasks)?s.tasks:[],activity=Array.isArray(s.activity)?s.activity:[];
  const head=(qa.head||'').slice(0,8),providers=qa.providers||{};
  const reviewing=Object.entries(providers).find(([,p])=>p&&p.status==='reviewing');
- const human=agents.human||{},question=clean(run.blocked_question);
+ const human=agents.human||{},question=clean(run.blocked_question),project=s.project||{},attention=s.attention||{},session=s.session||{};
+ const projectName=clean(project.name||project.product||'this project'),sid=clean(session.session_id||attention.session_id).slice(0,8);
+ const owner=clean(session.model||session.agent||attention.source||'Claude Code');
  const reporter=agents.reporter||{};
  const activeTask=tasks.find(t=>['active','in_progress','doing'].includes(String(t.status||'').toLowerCase()));
  const activeAgent=Object.values(agents).find(a=>a&&a.status==='active'&&a.display&&!['You','Orchestrator'].includes(a.display));
  const recentDone=[...activity].reverse().find(e=>e&&e.status==='done'&&e.role!=='orchestrator'&&e.role!=='subagent');
- if(question&&(human.status==='blocked'||/question|permission|input|choose|approve/i.test(question)))return {mood:'question',eye:'Your answer is needed',say:'I have a question for you: '+short(question,105),meta:'The workflow is paused until you answer.'};
+ if(question&&(human.status==='blocked'||/question|permission|input|choose|approve/i.test(question))){
+   const exact=attention.question_available&&clean(attention.message),where='Answer in '+clean(attention.answer_in||'the originating Claude Code terminal')+'.';
+   return {mood:'question',eye:projectName+' · your answer is needed',
+     say:exact?'Question: '+short(attention.message,105):owner+' needs your answer, but its notification did not include the question. Open the originating session to see it.',
+     meta:owner+(sid?' · session '+sid:'')+' · '+where};}
  if(reviewing){const who=reviewing[0]==='codex'?'Codex':'Claude';return {mood:'qa',eye:who+' QA is working',say:who+' is reviewing the exact commit now.',meta:(head?'commit '+head+' · ':'')+'independent QA in progress'};}
  if(qa.status==='changes_required')return {mood:'blocked',eye:'QA returned findings',say:'QA sent the commit back. The builder needs to repair it before we can continue.',meta:(head?'commit '+head+' · ':'')+(qa.score!=null?qa.score+'/10':'changes required')};
  if(qa.status==='blocked'||qa.status==='error')return {mood:'blocked',eye:'QA needs attention',say:'The QA stage is blocked. Open the board to see the reason and next action.',meta:short(qa.reason||'QA runner blocked',90)};
