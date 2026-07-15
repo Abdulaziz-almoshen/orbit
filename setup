@@ -14,6 +14,14 @@
 #
 set -euo pipefail
 
+QA_PROVIDER=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --qa-provider) QA_PROVIDER="${2:-}"; shift 2 ;;
+    *) echo "Unknown setup option: $1" >&2; exit 2 ;;
+  esac
+done
+
 HERE="$(cd "$(dirname "$0")" && pwd -P)"
 SKILLS_DIR="$(dirname "$HERE")"          # parent of the orbit dir = ~/.claude/skills
 
@@ -65,3 +73,25 @@ else
 fi
 printf '   Commit: %s\n' "$SHA"
 printf '   Update: /orbit-upgrade (fetch + reset to latest).  Uninstall: %s\n' "$UNINSTALL"
+
+# One-time QA reviewer choice. Non-interactive installs default to isolated Claude QA; Codex is
+# never selected merely because it exists, and every project can override the preference later.
+QA_PREF="$_OH/qa.json"
+if [ ! -f "$QA_PREF" ]; then
+  CODEX_OK=0; command -v codex >/dev/null 2>&1 && codex exec --help >/dev/null 2>&1 && CODEX_OK=1
+  if [ -z "$QA_PROVIDER" ] && [ -t 0 ]; then
+    if [ "$CODEX_OK" = 1 ]; then
+      printf '\nIndependent QA reviewer (Codex detected):\n'
+      printf '  1) Codex — independent provider (recommended)\n  2) Claude — isolated internal reviewer\n  3) Both\n  4) Configure later\nChoice [1]: '
+      read -r _qa; case "${_qa:-1}" in 1) QA_PROVIDER=codex;; 2) QA_PROVIDER=claude;; 3) QA_PROVIDER=both;; *) QA_PROVIDER=later;; esac
+    else
+      printf '\nCodex was not detected. Orbit can use isolated Claude QA.\nEnable Claude QA? [Y/n] '
+      read -r _qa; case "${_qa:-y}" in n|N) QA_PROVIDER=later;; *) QA_PROVIDER=claude;; esac
+    fi
+  fi
+  QA_PROVIDER="${QA_PROVIDER:-claude}"
+  python3 "$HERE/bin/orbit-qa-configure" choose --provider "$QA_PROVIDER" --home "$_OH"
+  printf '   QA preference: %s (project export consent remains auditable in loop.config.json)\n' "$QA_PROVIDER"
+else
+  printf '   QA preference already configured → %s\n' "$QA_PREF"
+fi

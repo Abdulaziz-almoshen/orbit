@@ -338,6 +338,10 @@ and commit the acceptance manifest before implementation; after internal gates p
 reviewer evaluates the exact candidate commit. A request edit or code change invalidates the approval
 and routes back through review. Private-code export is disabled until the project explicitly approves
 `committed_snapshot_only`. Follow `references/independent-qa.md`; keep product rubrics in the project.
+On first install Orbit asks for **Codex**, isolated **Claude**, **both**, or later. If Codex is not
+detected, Claude QA remains available. Never silently downgrade a selected reviewer at runtime: block
+and request human approval for any fallback. Arabic/RTL surfaces are auto-detected and activate the
+project's Arabic-content rubric for whichever reviewer is selected.
 
 ### Phase 6 — Tools and hooks
 

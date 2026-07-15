@@ -3,6 +3,17 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.42.0
+
+**QA for every Orbit user.** Installation now detects reviewer capabilities and offers independent
+Codex QA, isolated Claude QA, both, or later.
+
+- Claude and Codex implement the same commit-bound schema, P0-P3 report, repair loop, and release gate.
+- Dual mode requires both reviewers to pass and conservatively aggregates the lower score/worst criterion.
+- Runtime never silently falls back when a selected provider is missing; a human must approve a change.
+- The install-time preference migrates into each project once without overwriting later project choices.
+- Arabic/RTL surfaces are auto-detected and activate project Arabic-content review for either provider.
+
 ## 0.41.0
 
 **Independent, commit-bound QA.** Orbit now supports an opt-in second-provider stage after its internal

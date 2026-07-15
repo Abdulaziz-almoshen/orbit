@@ -28,6 +28,7 @@ import argparse
 import calendar
 import hashlib
 import json
+import os
 import re
 import shutil
 import time
@@ -459,6 +460,16 @@ def _merge_loop_config_defaults(target: Path, created: list, warnings: list) -> 
             if key not in current:
                 current[key] = defaults[key]
                 changed.append(key)
+        qa = current.get("independent_qa", {})
+        provider = qa.get("provider", {}) if isinstance(qa, dict) else {}
+        shipped_codex_argv = defaults["independent_qa"]["provider"]["adapters"]["codex"]["argv"]
+        if (isinstance(provider, dict) and provider.get("name") == "codex"
+                and provider.get("argv") == shipped_codex_argv):
+            replacement = json.loads(json.dumps(defaults["independent_qa"]["provider"]))
+            replacement["mode"] = "codex"
+            qa["provider"] = replacement
+            qa.setdefault("arabic_content_qa", defaults["independent_qa"]["arabic_content_qa"])
+            changed.append("independent_qa.provider(v0.41→v0.42)")
         paths = current.setdefault("paths", {})
         for key in ("independent_reviews", "independent_qa_runner"):
             if key not in paths:
@@ -469,6 +480,53 @@ def _merge_loop_config_defaults(target: Path, created: list, warnings: list) -> 
             created.append(f".orbit/loop.config.json  (added defaults: {', '.join(changed)}; existing values preserved)")
     except Exception as exc:
         warnings.append(f"Could not add independent-QA defaults to .orbit/loop.config.json: {exc}")
+
+
+def _detect_arabic_surface(target: Path) -> bool:
+    """Bounded signal for Arabic/RTL content; a project can override the resulting config."""
+    candidates = [target / "CLAUDE.md", target / "docs/ARABIC_CONTENT_GUIDE.md"]
+    candidates += list(target.glob("**/ar.json"))[:20] + list(target.glob("**/ar/*.json"))[:20]
+    for path in candidates:
+        try:
+            if path.is_file() and re.search(r"[\u0600-\u06ff]", path.read_text(errors="ignore")[:200000]):
+                return True
+        except Exception:
+            pass
+    return False
+
+
+def _apply_qa_preference(target: Path, created: list, warnings: list) -> None:
+    """Apply the install-time reviewer choice once; never overwrite a project's later choice."""
+    setup_path = target / ".orbit/setup.json"
+    setup = _read_json(setup_path)
+    if setup.get("qa_preference_applied"):
+        return
+    pref_root = Path(os.environ.get("ORBIT_HOME", str(Path.home() / ".orbit")))
+    pref = _read_json(pref_root / "qa.json")
+    if not pref.get("configured"):
+        return
+    config_path = target / ".orbit/loop.config.json"
+    try:
+        config = json.loads(config_path.read_text())
+        qa = config.setdefault("independent_qa", {})
+        selected = pref.get("provider", "claude")
+        qa["enabled"] = bool(pref.get("enabled") and selected != "later")
+        qa.setdefault("provider", {})["mode"] = "claude" if selected == "later" else selected
+        qa["provider"]["fallback_requires_human_approval"] = True
+        consent = qa.setdefault("external_export", {})
+        consent.update({"approved": bool(pref.get("approved") and qa["enabled"]),
+                        "approved_by": "Orbit install-time QA choice",
+                        "approved_at": pref.get("approved_at", ""),
+                        "scope": "committed_snapshot_only"})
+        arabic = qa.setdefault("arabic_content_qa", {"mode": "auto_detect"})
+        arabic["detected"] = _detect_arabic_surface(target)
+        config_path.write_text(json.dumps(config, indent=2) + "\n")
+        setup["qa_preference_applied"] = {"provider": selected, "at": pref.get("approved_at", "")}
+        setup_path.parent.mkdir(parents=True, exist_ok=True)
+        setup_path.write_text(json.dumps(setup, indent=2, sort_keys=True) + "\n")
+        created.append(f".orbit/loop.config.json  (QA provider={selected}; Arabic detected={arabic['detected']})")
+    except Exception as exc:
+        warnings.append(f"Could not apply Orbit QA preference: {exc}")
 
 
 def scaffold_drift(target: Path) -> dict:
@@ -677,6 +735,7 @@ def _auto_heal(target: Path) -> str:
     for src_rel, dst_rel, mode in FILE_PLAN:
         _place(ASSETS / src_rel, target / dst_rel, created, skipped, mode)
     _merge_loop_config_defaults(target, created, warnings)
+    _apply_qa_preference(target, created, warnings)
     playbooks = PLAYBOOKS_ALWAYS + (PLAYBOOKS_FRONTEND if has_ui else [])
     for pb in playbooks:
         _place(PLAYBOOKS / pb, target / ".orbit/skills" / pb, created, skipped)
@@ -876,6 +935,7 @@ def main():
     for src_rel, dst_rel, mode in FILE_PLAN:
         _place(ASSETS / src_rel, target / dst_rel, created, skipped, mode)
     _merge_loop_config_defaults(target, created, warnings)
+    _apply_qa_preference(target, created, warnings)
 
     # 2. working-state file (from the reference template)
     _place(REFERENCES / "state-template.md", target / ".orbit/STATE.md", created, skipped)

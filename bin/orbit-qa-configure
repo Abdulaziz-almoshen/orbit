@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+"""Detect and select Orbit's default independent-QA provider."""
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import time
+from pathlib import Path
+
+
+def detect(name):
+    binary = shutil.which(name)
+    if not binary:
+        return {"installed": False, "runnable": False, "path": None}
+    args = [binary, "exec", "--help"] if name == "codex" else [binary, "--help"]
+    result = subprocess.run(args, text=True, capture_output=True, timeout=10)
+    return {"installed": True, "runnable": result.returncode == 0, "path": binary}
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Configure Orbit's independent QA provider")
+    parser.add_argument("command", choices=("detect", "choose", "show"))
+    parser.add_argument("--provider", choices=("codex", "claude", "both", "later"))
+    parser.add_argument("--home", type=Path)
+    args = parser.parse_args()
+    root = args.home or Path(os.environ.get("ORBIT_HOME", str(Path.home() / ".orbit")))
+    path = root / "qa.json"
+    capabilities = {"codex": detect("codex"), "claude": detect("claude")}
+    if args.command == "detect":
+        print(json.dumps(capabilities, indent=2)); return 0
+    if args.command == "show":
+        print(path.read_text() if path.exists() else json.dumps({"configured": False}, indent=2)); return 0
+    provider = args.provider
+    if not provider:
+        parser.error("choose requires --provider")
+    if provider in {"codex", "both"} and not capabilities["codex"]["runnable"]:
+        raise SystemExit("Codex is not runnable; choose claude or later (no silent fallback).")
+    if provider in {"claude", "both"} and not capabilities["claude"]["runnable"]:
+        raise SystemExit("Claude is not runnable; choose codex or later.")
+    root.mkdir(parents=True, exist_ok=True)
+    enabled = provider != "later"
+    data = {"schema_version": 1, "configured": True, "enabled": enabled,
+            "provider": provider, "approved": enabled,
+            "approved_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "capabilities": capabilities,
+            "fallback_requires_human_approval": True,
+            "arabic_content_qa": "auto_detect"}
+    path.write_text(json.dumps(data, indent=2) + "\n")
+    print(json.dumps(data, indent=2)); return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

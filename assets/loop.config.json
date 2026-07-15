@@ -118,9 +118,19 @@
       "scope": "committed_snapshot_only"
     },
     "provider": {
-      "name": "codex",
-      "argv": ["codex", "exec", "--ephemeral", "--sandbox", "read-only", "--output-schema", "{schema}", "-o", "{output}", "-"]
-    }
+      "mode": "claude",
+      "fallback_requires_human_approval": true,
+      "adapters": {
+        "codex": {
+          "argv": ["codex", "exec", "--ephemeral", "--sandbox", "read-only", "--output-schema", "{schema}", "-o", "{output}", "-"]
+        },
+        "claude": {
+          "output": "stdout_json",
+          "argv": ["claude", "-p", "--model", "opus", "--no-session-persistence", "--safe-mode", "--permission-mode", "dontAsk", "--tools", "Read,Grep,Glob,Bash", "--json-schema", "{schema_json}", "--output-format", "json"]
+        }
+      }
+    },
+    "arabic_content_qa": { "mode": "auto_detect", "detected": false }
   },
 
   "_model_policy_help": "Two-lane model switching. The everyday executor runs the loop cheaply; the Advisor is an on-demand Opus judgment call, not a default worker. Claude Code subagents use aliases ('sonnet'/'opus') so the host resolves to the current account model family; display names preserve the intended product language.",

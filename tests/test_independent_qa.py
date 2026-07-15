@@ -30,6 +30,26 @@ def commit(repo, message):
 
 def main():
     fails = []
+    # Provider modes share one schema/gate; dual review takes the conservative result.
+    request_stub = {"acceptance_criteria": [{"id": "AC-1"}]}
+    passed = {"schema_version": 1, "verdict": "PASS", "score": 9, "summary": "ok",
+              "findings": [], "criteria": [{"id": "AC-1", "verdict": "PASS", "evidence": "yes"}],
+              "recommendations": []}
+    concern = {"schema_version": 1, "verdict": "CHANGES_REQUIRED", "score": 7, "summary": "fix",
+               "findings": [{"id": "F1", "severity": "P2", "title": "issue", "body": "fix it",
+                             "criterion_ids": ["AC-1"]}],
+               "criteria": [{"id": "AC-1", "verdict": "CONCERNS", "evidence": "gap"}],
+               "recommendations": ["repair"]}
+    combined = qa._aggregate_results([("codex", passed), ("claude", concern)], request_stub)
+    if combined["verdict"] != "CHANGES_REQUIRED" or combined["score"] != 7:
+        fails.append(f"dual review did not preserve the stricter verdict: {combined}")
+    try:
+        qa._provider_specs({"provider": {"mode": "codex", "adapters": {"codex": {"argv": ["missing-orbit-reviewer"]}}}})
+        fails.append("missing selected provider silently passed/fell back")
+    except qa.QAError as exc:
+        if "will not silently fall back" not in str(exc):
+            fails.append(f"wrong missing-provider failure: {exc}")
+
     # A fresh scaffold installs the stage; a reinstall additively migrates old config.
     with tempfile.TemporaryDirectory() as d:
         target = Path(d)
@@ -55,6 +75,40 @@ def main():
         if ("independent_qa" not in migrated or migrated.get("custom_project_value") != "preserve-me"
                 or "independent_qa_runner" not in migrated.get("paths", {})):
             fails.append("reinstall did not add QA defaults while preserving project config")
+
+        # Stock v0.41 Codex adapter upgrades to the selectable map; custom commands stay untouched.
+        legacy = json.loads((ROOT / "assets/loop.config.json").read_text())
+        codex_argv = legacy["independent_qa"]["provider"]["adapters"]["codex"]["argv"]
+        legacy["independent_qa"]["provider"] = {"name": "codex", "argv": codex_argv}
+        cfg_path.write_text(json.dumps(legacy))
+        subprocess.run([sys.executable, str(ROOT / "scripts/scaffold.py"), "--target", str(target)],
+                       text=True, capture_output=True, check=True)
+        upgraded = json.loads(cfg_path.read_text())["independent_qa"]["provider"]
+        if upgraded.get("mode") != "codex" or "claude" not in upgraded.get("adapters", {}):
+            fails.append(f"stock v0.41 provider was not safely migrated: {upgraded}")
+
+    # Install-time preference applies once and Arabic is auto-detected without clobbering later choices.
+    with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as oh:
+        target = Path(d)
+        Path(oh, "qa.json").write_text(json.dumps({"configured": True, "enabled": True,
+            "provider": "both", "approved": True, "approved_at": "2026-07-15T00:00:00Z"}))
+        (target / "CLAUDE.md").write_text("واجهة عربية")
+        env = {**os.environ, "ORBIT_HOME": oh}
+        subprocess.run([sys.executable, str(ROOT / "scripts/scaffold.py"), "--target", str(target)],
+                       env=env, text=True, capture_output=True, check=True)
+        cfg = json.loads((target / ".orbit/loop.config.json").read_text())["independent_qa"]
+        if not cfg.get("enabled") or cfg.get("provider", {}).get("mode") != "both":
+            fails.append(f"install QA preference was not applied: {cfg}")
+        if not cfg.get("arabic_content_qa", {}).get("detected"):
+            fails.append("Arabic surface was not auto-detected")
+        cfg["provider"]["mode"] = "claude"
+        full = json.loads((target / ".orbit/loop.config.json").read_text()); full["independent_qa"] = cfg
+        (target / ".orbit/loop.config.json").write_text(json.dumps(full))
+        subprocess.run([sys.executable, str(ROOT / "scripts/scaffold.py"), "--target", str(target)],
+                       env=env, text=True, capture_output=True, check=True)
+        after = json.loads((target / ".orbit/loop.config.json").read_text())["independent_qa"]
+        if after["provider"]["mode"] != "claude":
+            fails.append("re-scaffold overwrote the project's later QA-provider choice")
 
     with tempfile.TemporaryDirectory() as d:
         repo = Path(d) / "repo"
@@ -134,7 +188,7 @@ def main():
         for failure in fails:
             print("  -", failure)
         return 1
-    print("PASS: independent-qa (consent wall + committed snapshot + hash/commit binding + stale rejection)")
+    print("PASS: independent-qa (provider selection + no silent fallback + dual gate + Arabic detection + commit binding)")
     return 0
 
 
