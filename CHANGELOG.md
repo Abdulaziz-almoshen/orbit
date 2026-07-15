@@ -3,6 +3,20 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.42.1
+
+**Project-consented QA and an exact-commit pipeline tracer.** This patch restores the promised
+disabled-by-default invariant and makes the dashboard's QA state operationally trustworthy.
+
+- An install-level provider preference may preselect Codex/Claude, but never enables a project's QA
+  gate or approves private-code export; project consent remains explicit and auditable.
+- The independent runner publishes reviewing/pass/repair/error state into Git's authoritative control
+  plane, bound to the request hash and exact target commit.
+- The dashboard reads only that control state, rejects stale verdicts after a new commit, supports
+  legacy provider configuration, and preserves human/forbidden deployment policy after QA passes.
+- A clear Build → Verify → Commit → Independent QA → Repair → Deploy tracer replaces the ambiguous
+  character scene. Existing unmodified project dashboards migrate safely with a backup.
+
 ## 0.42.0
 
 **QA for every Orbit user.** Installation now detects reviewer capabilities and offers independent
@@ -11,7 +25,7 @@ Codex QA, isolated Claude QA, both, or later.
 - Claude and Codex implement the same commit-bound schema, P0-P3 report, repair loop, and release gate.
 - Dual mode requires both reviewers to pass and conservatively aggregates the lower score/worst criterion.
 - Runtime never silently falls back when a selected provider is missing; a human must approve a change.
-- The install-time preference migrates into each project once without overwriting later project choices.
+- The install-time preference preselects a provider without granting project-level review/export consent.
 - Arabic/RTL surfaces are auto-detected and activate project Arabic-content review for either provider.
 
 ## 0.41.0

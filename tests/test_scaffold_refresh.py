@@ -74,8 +74,8 @@ def test_plan_refresh_is_read_only():
             fails.append(f"[plan-read-only] non-zero exit: {r.stderr[-200:]}")
         if _tree_fingerprint(t) != before:
             fails.append("[plan-read-only] --plan-refresh mutated the project (must be read-only)")
-        if "already current: 5" not in r.stdout:
-            fails.append(f"[plan-read-only] fresh scaffold should show 5 current managed files; got:\n{r.stdout}")
+        if "already current: 6" not in r.stdout:
+            fails.append(f"[plan-read-only] fresh scaffold should show 6 current managed files; got:\n{r.stdout}")
 
 
 def test_plan_refresh_classifies_and_shows_diff():

@@ -48,6 +48,7 @@ MANAGED_CHECKS = {
     ".orbit/checks/route.py":           ("checks/route.py",           b"UserPromptSubmit hook"),
     ".orbit/checks/learn.py":           ("checks/learn.py",           b"active-learning"),
     ".orbit/checks/orbit-stop-check.py":("checks/orbit-stop-check.py", b"observability backstop"),
+    "scripts/orbit-dashboard":          ("orbit-dashboard",            b"orbit-dashboard"),
 }
 # Known-old shipped hashes for repos scaffolded BEFORE the manifest existed (no manifest to compare).
 _LEGACY_OLD = {
@@ -63,6 +64,10 @@ _LEGACY_OLD = {
         "3cdb8b75d49da422b8b09504e3f612f6e6b3d539d41ee35923aa98ef1c21c77b",
         "39040718046c1e57aede2eab41291c874da37392507693205f80ec880cae1584",
         "92c14909470a56f2405900cdc1a1e1a414bd96326682eecacb60f088ddca16fd",
+    },
+    "scripts/orbit-dashboard": {
+        "93fb9084f4037b2db8a47653529b4ae64629889f5679f1f6d68af162d576457c",  # 0.42.0
+        "4ed87c61f0aba95ecf39ce4ee9dd36afb6aa3d50cb4c82b6ed408851f549f9e3",  # 3344f4a scene
     },
 }
 
@@ -496,7 +501,12 @@ def _detect_arabic_surface(target: Path) -> bool:
 
 
 def _apply_qa_preference(target: Path, created: list, warnings: list) -> None:
-    """Apply the install-time reviewer choice once; never overwrite a project's later choice."""
+    """Preselect the install-time reviewer once, without granting project export consent.
+
+    Provider availability/preference is a user-level convenience. Enabling review and exporting a
+    private committed snapshot are project-level decisions, so a fresh scaffold must retain the
+    shipped disabled/unapproved values. Never overwrite a project's later choice.
+    """
     setup_path = target / ".orbit/setup.json"
     setup = _read_json(setup_path)
     if setup.get("qa_preference_applied"):
@@ -510,21 +520,22 @@ def _apply_qa_preference(target: Path, created: list, warnings: list) -> None:
         config = json.loads(config_path.read_text())
         qa = config.setdefault("independent_qa", {})
         selected = pref.get("provider", "claude")
-        qa["enabled"] = bool(pref.get("enabled") and selected != "later")
         qa.setdefault("provider", {})["mode"] = "claude" if selected == "later" else selected
         qa["provider"]["fallback_requires_human_approval"] = True
+        qa.setdefault("enabled", False)
         consent = qa.setdefault("external_export", {})
-        consent.update({"approved": bool(pref.get("approved") and qa["enabled"]),
-                        "approved_by": "Orbit install-time QA choice",
-                        "approved_at": pref.get("approved_at", ""),
-                        "scope": "committed_snapshot_only"})
+        consent.setdefault("approved", False)
+        consent.setdefault("approved_by", "")
+        consent.setdefault("approved_at", "")
+        consent.setdefault("scope", "committed_snapshot_only")
         arabic = qa.setdefault("arabic_content_qa", {"mode": "auto_detect"})
         arabic["detected"] = _detect_arabic_surface(target)
         config_path.write_text(json.dumps(config, indent=2) + "\n")
         setup["qa_preference_applied"] = {"provider": selected, "at": pref.get("approved_at", "")}
         setup_path.parent.mkdir(parents=True, exist_ok=True)
         setup_path.write_text(json.dumps(setup, indent=2, sort_keys=True) + "\n")
-        created.append(f".orbit/loop.config.json  (QA provider={selected}; Arabic detected={arabic['detected']})")
+        created.append(f".orbit/loop.config.json  (QA provider preference={selected}; project QA remains opt-in; "
+                       f"Arabic detected={arabic['detected']})")
     except Exception as exc:
         warnings.append(f"Could not apply Orbit QA preference: {exc}")
 
@@ -609,8 +620,8 @@ def _print_drift(target: Path) -> None:
 
 
 def refresh_plan(target: Path) -> list:
-    """READ-ONLY: what a SAFE refresh would do to the managed check hooks (guard, route, stop-check,
-    learn), per file. Never writes. Each entry is {rel, state} with state ∈
+    """READ-ONLY: what a SAFE refresh would do to managed Orbit files (checks plus dashboard),
+    per file. Never writes. Each entry is {rel, state} with state ∈
     add | upgrade | customized | current | foreign — the exact classification --apply-safe-refresh acts
     on (it applies add + upgrade, leaves customized/foreign/current alone)."""
     manifest = _read_json(target / MANIFEST_REL)
@@ -648,7 +659,7 @@ def _print_refresh_plan(target: Path) -> None:
     plan = refresh_plan(target)
     by = {s: [p["rel"] for p in plan if p["state"] == s]
           for s in ("add", "upgrade", "customized", "current", "foreign")}
-    print(f"Orbit safe-refresh plan (READ-ONLY) — managed safety/router hooks · plugin v{_orbit_version()}")
+    print(f"Orbit safe-refresh plan (READ-ONLY) — managed checks/tools · plugin v{_orbit_version()}")
     if by["upgrade"]:
         print(f"  ⬆ would auto-upgrade (unmodified since placed → current; backup kept): {len(by['upgrade'])}")
         for rel in by["upgrade"]:
@@ -688,12 +699,12 @@ def _apply_safe_refresh(target: Path) -> None:
             created.append(f"{rel}  (added — was missing)")
     migrate_hooks(target, created, warnings)                        # upgrade unmodified, warn on customized
     _write_manifest(target)                                         # record what we now have as 'ours'
-    print(f"Orbit safe-refresh applied — managed safety/router hooks · plugin v{_orbit_version()}")
+    print(f"Orbit safe-refresh applied — managed checks/tools · plugin v{_orbit_version()}")
     for c in created or ["(nothing to add or upgrade — all managed hooks are current or customized)"]:
         print("  +", c)
     for w in warnings:
         print("  ! ", w)
-    print("\n  Scope: this refreshes ONLY the managed hooks (guard · route · orbit-stop-check · learn).\n"
+    print("\n  Scope: this refreshes ONLY managed checks and the read-only dashboard.\n"
           "  For missing playbooks/roles and the version stamp, run `/orbit` here (it merges, never clobbers).")
 
 

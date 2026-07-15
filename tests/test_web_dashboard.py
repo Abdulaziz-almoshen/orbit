@@ -59,29 +59,49 @@ def test_snapshot_shape_and_redaction():
 
 
 def test_qa_scene_state():
-    """The independent-QA review-handoff scene is driven by real state: provider + latest verdict/score,
-    read from the newest .orbit/reviews/**/round-*.json envelope. Degrades to disabled cleanly."""
+    """The QA tracer uses exact-HEAD authoritative Git control state, never project mirrors."""
     with tempfile.TemporaryDirectory() as d:
-        orbit = Path(d) / ".orbit"
-        (orbit / "reviews" / "m1").mkdir(parents=True)
+        repo = Path(d)
+        orbit = repo / ".orbit"
+        orbit.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+        subprocess.run(["git", "config", "user.email", "orbit@example.test"], cwd=repo, check=True)
+        subprocess.run(["git", "config", "user.name", "Orbit"], cwd=repo, check=True)
+        (repo / "tracked.txt").write_text("one\n")
+        subprocess.run(["git", "add", "tracked.txt"], cwd=repo, check=True)
+        subprocess.run(["git", "commit", "-qm", "one"], cwd=repo, check=True)
+        head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip()
         (orbit / "loop.config.json").write_text(json.dumps(
-            {"independent_qa": {"enabled": True, "provider": {"mode": "codex"}},
-             "paths": {"independent_reviews": ".orbit/reviews"}}))
-        (orbit / "reviews" / "m1" / "round-1.json").write_text(json.dumps({"result": {"verdict": "CHANGES_REQUIRED", "score": 6}}))
-        time.sleep(0.02)
-        (orbit / "reviews" / "m1" / "round-2.json").write_text(json.dumps({"result": {"verdict": "PASS", "score": 9.2}}))
+            {"independent_qa": {"enabled": True, "external_export": {"approved": True},
+                                "provider": {"name": "codex"}},
+             "approval_checkpoints": {"deploy": "human"}}))
+        control = repo / ".git" / "orbit-independent-qa"
+        control.mkdir()
+        (control / "current.json").write_text(json.dumps({"schema_version": 1, "status": "pass",
+            "target_commit": head, "request_id": "M1", "round": 2, "provider": "codex",
+            "verdict": "PASS", "score": 9.2}))
+        # A forged project mirror must not affect the displayed authoritative state.
+        (orbit / "reviews" / "m1").mkdir(parents=True)
+        (orbit / "reviews" / "m1" / "round-99.json").write_text(json.dumps(
+            {"result": {"verdict": "CHANGES_REQUIRED", "score": 0}}))
         m = _load(orbit)
         qa = m.snapshot()["qa"]
         ck(qa["enabled"] is True and qa["provider"] == "codex", f"qa provider/enabled wrong: {qa}")
-        ck(qa["verdict"] == "PASS" and qa["score"] == 9.2, f"qa must read the NEWEST round verdict: {qa}")
+        ck(qa["verdict"] == "PASS" and qa["score"] == 9.2, f"qa must read authoritative verdict: {qa}")
+        ck(qa["status"] == "awaiting_deploy_approval", f"human deploy gate must remain visible: {qa}")
+        # A new commit makes the old PASS stale; it must become queued for a new exact-commit review.
+        (repo / "tracked.txt").write_text("two\n")
+        subprocess.run(["git", "commit", "-qam", "two"], cwd=repo, check=True)
+        stale = m.snapshot()["qa"]
+        ck(stale["status"] == "awaiting_review" and stale["verdict"] is None,
+           f"stale verdict must not apply to new HEAD: {stale}")
         # disabled → no verdict, never raises
         (orbit / "loop.config.json").write_text(json.dumps({"independent_qa": {"enabled": False}}))
         m2 = _load(orbit)
         qa2 = m2.snapshot()["qa"]
-        ck(qa2["enabled"] is False, "disabled QA must report enabled False")
-        # the scene markup + its updater ship in the page
-        ck(all(x in m.PAGE for x in ("id=qa", "qcommit", "id=rname", "function updateQA")),
-           "the QA review-handoff scene + updater must be in the dashboard page")
+        ck(qa2["enabled"] is False and qa2["status"] == "off", "disabled QA must report off")
+        ck(all(x in m.PAGE for x in ("Delivery pipeline", "id=qaPipe", "function updateQA")),
+           "the commit-bound QA pipeline tracer must ship in the dashboard page")
 
 
 def test_empty_and_malformed_never_crash():

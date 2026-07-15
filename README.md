@@ -12,7 +12,7 @@ Orbit turns a product repository into a durable, observable agentic loop: it rem
 plans the next move, delegates focused tasks, checks the result, repairs failures, and stops at
 hard safety and budget boundaries.
 
-![version](https://img.shields.io/badge/version-0.42.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.42.1-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![observable](https://img.shields.io/badge/observable-live%20dashboard-e8590c)
@@ -30,7 +30,8 @@ gives the work a durable operating system:
 - **Independent QA:** an opt-in second provider reviews an exact commit against an armed acceptance
   manifest; code or manifest changes invalidate the approval.
 - **Reviewer choice:** install-time detection offers Codex, isolated Claude QA, or both. Missing providers
-  block instead of silently weakening the gate; Arabic/RTL QA follows the project, not the provider.
+  block instead of silently weakening the gate; the choice never grants project export consent, and
+  Arabic/RTL QA follows the project, not the provider.
 - **Adversarial thinking:** a cheap counterfactual probe challenges risky assumptions before build.
 - **Model discipline:** Sonnet handles normal work; the Opus 4.8 Advisor is invoked on demand for
   expensive decisions.

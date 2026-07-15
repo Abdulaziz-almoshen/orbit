@@ -174,6 +174,61 @@ def _control_dir(repo: Path, request: dict, request_hash: str, commit: str) -> P
     return common / "orbit-independent-qa" / _safe_id(str(request["id"])) / request_hash / commit
 
 
+def _control_root(repo: Path) -> Path:
+    """Git-common control plane shared by every worktree of this repository."""
+    common = Path(_git(repo, "rev-parse", "--git-common-dir"))
+    if not common.is_absolute():
+        common = (repo / common).resolve()
+    return common / "orbit-independent-qa"
+
+
+def _write_pipeline_state(repo: Path, state: dict) -> Path:
+    """Publish the current exact-commit QA state outside the implementation checkout."""
+    root = _control_root(repo)
+    root.mkdir(parents=True, exist_ok=True)
+    path = root / "current.json"
+    value = {"schema_version": 1, **state,
+             "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
+    return path
+
+
+def _publish_report_state(repo: Path, report: dict, gate: dict, authoritative: Path) -> None:
+    result = report.get("result", {})
+    pipeline_status = "blocked" if result.get("verdict") == "BLOCKED" else gate.get("status", "changes_required")
+    _write_pipeline_state(repo, {
+        "stage": "independent_qa",
+        "status": pipeline_status,
+        "request_id": report.get("request_id"),
+        "request_sha256": report.get("request_sha256"),
+        "target_commit": report.get("target_commit"),
+        "baseline_commit": report.get("baseline_commit"),
+        "round": report.get("round"),
+        "provider": report.get("provider"),
+        "verdict": result.get("verdict"),
+        "score": result.get("score"),
+        "reason": gate.get("reason", ""),
+        "authoritative_record": str(authoritative),
+        "completed_at": report.get("generated_at"),
+    })
+
+
+def _mark_pipeline_error(repo: Path, reason: str) -> None:
+    """Turn only an in-flight state into an error; never rewrite a completed verdict."""
+    try:
+        path = _control_root(repo) / "current.json"
+        current = _load(path)
+        if current.get("status") != "reviewing":
+            return
+        current["status"] = "error"
+        current["reason"] = str(reason)[-2000:]
+        _write_pipeline_state(repo, current)
+    except Exception:
+        pass
+
+
 def _latest_matching(review_dir: Path, request_hash: str, commit: str) -> dict | None:
     for path in reversed(_reports(review_dir)):
         try:
@@ -321,7 +376,11 @@ def run_review(repo: Path, request_path: Path, ref: str) -> dict:
     control_dir = _control_dir(repo, request, request_hash, commit)
     existing = _latest_matching(control_dir, request_hash, commit)
     if existing:
-        return gate_report(existing, request, qa, request_hash, commit)
+        status = gate_report(existing, request, qa, request_hash, commit)
+        matching = _reports(control_dir)
+        authoritative = matching[-1] if matching else control_dir
+        _publish_report_state(repo, existing, status, authoritative)
+        return status
     rounds = _reports(control_dir)
     max_rounds = int(qa.get("max_rounds", 3))
     if len(rounds) >= max_rounds:
@@ -329,6 +388,15 @@ def run_review(repo: Path, request_path: Path, ref: str) -> dict:
     providers = _provider_specs(qa)
 
     round_no = len(rounds) + 1
+    provider_name = "+".join(x.get("name") or qa.get("provider", {}).get("name") or "command"
+                             for x in providers)
+    _write_pipeline_state(repo, {
+        "stage": "independent_qa", "status": "reviewing",
+        "request_id": request["id"], "request_sha256": request_hash,
+        "target_commit": commit, "baseline_commit": baseline, "round": round_no,
+        "provider": provider_name,
+        "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    })
     review_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="orbit-independent-qa-") as tmp:
         worktree = Path(tmp) / "snapshot"
@@ -364,7 +432,7 @@ def run_review(repo: Path, request_path: Path, ref: str) -> dict:
 
     envelope = {"schema_version": 1, "request_id": request["id"], "request_sha256": request_hash,
                 "baseline_commit": baseline, "target_commit": commit, "round": round_no,
-                "provider": "+".join(x.get("name", "command") for x in providers),
+                "provider": provider_name,
                 "provider_results": {name: value for name, value in provider_results},
                 "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "result": result}
     report_path = review_dir / f"round-{round_no}.json"
@@ -375,6 +443,7 @@ def run_review(repo: Path, request_path: Path, ref: str) -> dict:
     status = gate_report(envelope, request, qa, request_hash, commit)
     status["report_path"] = str(report_path)
     status["authoritative_record"] = str(control_path)
+    _publish_report_state(repo, envelope, status, control_path)
     return status
 
 
@@ -407,6 +476,7 @@ def main() -> int:
         print(json.dumps(status, indent=2, ensure_ascii=False))
         return 0 if status.get("passed") else 2
     except (QAError, subprocess.TimeoutExpired) as exc:
+        _mark_pipeline_error(repo, str(exc))
         print(json.dumps({"passed": False, "status": "error", "reason": str(exc)}), file=sys.stderr)
         return 3
 

@@ -19,6 +19,7 @@ import json
 import os
 import re
 import socketserver
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -73,36 +74,66 @@ def _age(ts_iso):
         return None
 
 
+def _git(*args):
+    try:
+        p = subprocess.run(["git", "-C", str(ORBIT.parent), *args], text=True, capture_output=True,
+                           timeout=3)
+        return p.stdout.strip() if p.returncode == 0 else ""
+    except Exception:
+        return ""
+
+
+def _meaningful_worktree_dirty() -> bool:
+    ignored = (".orbit/activity.jsonl", ".orbit/agents.json", ".orbit/run.json",
+               ".orbit/tasks.json", ".orbit/locks/", ".orbit/archive/", ".orbit/.last-task-route")
+    for line in _git("status", "--porcelain").splitlines():
+        path = line[3:].split(" -> ")[-1] if len(line) > 3 else ""
+        if path and not any(path == x or path.startswith(x) for x in ignored):
+            return True
+    return False
+
+
 def _qa_state():
-    """Independent-QA state for the board's review-handoff scene: provider + latest verdict/score.
-    Reads the authoritative round-*.json envelopes under paths.independent_reviews. Never raises."""
+    """Exact-HEAD independent-QA pipeline state from Git's out-of-worktree control plane."""
     cfg = _json("loop.config.json", {}) or {}
     iq = (cfg.get("independent_qa") or {}) if isinstance(cfg, dict) else {}
     enabled = bool(iq.get("enabled"))
-    provider = ((iq.get("provider") or {}).get("mode")) or "claude"
-    rel = ((cfg.get("paths") or {}).get("independent_reviews") if isinstance(cfg, dict) else None)
-    if rel:
-        rp = Path(rel)
-        rdir = rp if rp.is_absolute() else (ORBIT.parent / rp)   # config path is relative to the repo root
-    else:
-        rdir = ORBIT / "reviews"
-    verdict, score, at = None, None, None
+    export = iq.get("external_export") if isinstance(iq.get("external_export"), dict) else {}
+    approved = export.get("approved") is True
+    provider_cfg = iq.get("provider") if isinstance(iq.get("provider"), dict) else {}
+    provider = provider_cfg.get("mode") or provider_cfg.get("name") or "claude"
+    head = _git("rev-parse", "HEAD")
+    common = _git("rev-parse", "--git-common-dir")
+    control = {}
     try:
-        rounds = sorted(rdir.glob("**/round-*.json"), key=lambda x: x.stat().st_mtime)
-        for f in reversed(rounds):
-            try:
-                d = json.loads(f.read_text())
-            except Exception:
-                continue
-            res = d.get("result", d) if isinstance(d, dict) else {}
-            v = res.get("verdict") if isinstance(res, dict) else None
-            if v in ("PASS", "CHANGES_REQUIRED", "BLOCKED"):
-                verdict, score = v, res.get("score")
-                at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(f.stat().st_mtime))
-                break
+        cp = Path(common)
+        if common and not cp.is_absolute():
+            cp = (ORBIT.parent / cp).resolve()
+        candidate = cp / "orbit-independent-qa" / "current.json"
+        if common and candidate.is_file():
+            value = json.loads(candidate.read_text())
+            if isinstance(value, dict) and value.get("schema_version") == 1:
+                control = value
     except Exception:
         pass
-    return {"enabled": enabled, "provider": provider, "verdict": verdict, "score": score, "at": at}
+    status = "off" if not enabled else ("awaiting_project_approval" if not approved else "awaiting_review")
+    exact = bool(head and control.get("target_commit") == head)
+    if enabled and approved and exact:
+        status = control.get("status") or "awaiting_review"
+    verdict = control.get("verdict") if exact else None
+    score = control.get("score") if exact else None
+    deploy = ((cfg.get("approval_checkpoints") or {}).get("deploy")
+              if isinstance(cfg, dict) else None)
+    if status == "pass":
+        status = "awaiting_deploy_approval" if deploy == "human" else (
+            "deploy_forbidden" if deploy == "FORBIDDEN" else "ready_to_deploy")
+    dirty = _meaningful_worktree_dirty()
+    return {"enabled": enabled, "export_approved": approved, "provider": provider,
+            "status": status, "verdict": verdict, "score": score, "head": head,
+            "target_commit": control.get("target_commit"), "request_id": control.get("request_id"),
+            "round": control.get("round"), "reason": control.get("reason", ""),
+            "updated_at": control.get("updated_at"), "exact_commit": exact, "dirty": dirty,
+            "deployment_gate": deploy}
 
 
 def snapshot() -> dict:
@@ -110,6 +141,7 @@ def snapshot() -> dict:
     run = _json("run.json", {}) or {}
     tasks = _json("tasks.json", []) or []
     agents = _json("agents.json", {}) or {}
+    agents = agents if isinstance(agents, dict) else {}
     lock = _json("locks/active-writer.json", None)
     decisions = []
     dfile = ORBIT / "decisions"
@@ -122,7 +154,9 @@ def snapshot() -> dict:
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "run": run,
         "tasks": tasks if isinstance(tasks, list) else [],
-        "agents": agents if isinstance(agents, dict) else {},
+        "agents": agents,
+        "active_actors": [v.get("display") or k for k, v in agents.items()
+                          if isinstance(v, dict) and v.get("status") == "active"],
         "activity": _jsonl("activity.jsonl", 120),
         "writer_lock": lock if isinstance(lock, dict) else None,
         "lock_stale": bool(lock and isinstance(lock, dict)
@@ -155,40 +189,24 @@ ul{margin:0;padding:0;list-style:none}li{padding:5px 0;border-top:1px solid var(
 .bar{height:6px;background:#21262d;border-radius:3px;overflow:hidden;margin-top:6px}.bar>i{display:block;height:100%;background:var(--accent)}
 .empty{color:var(--dim);font-style:italic}
 .qa{max-width:1100px;margin:16px auto 0;padding:0 20px}
-.qa-in{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 16px}
-.qa.off .qa-in{opacity:.5}
-.qa-hd{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim)}
-.qa-hd #qaStatus{text-transform:none;letter-spacing:0;margin-left:8px;font-weight:600;color:var(--fg)}
-.qa-arena{position:relative;height:92px}
-.qa-char{position:absolute;bottom:4px;width:92px;text-align:center}
-#qbuilder{left:6px}#qreviewer{right:6px}
-.blob{width:42px;height:46px;margin:0 auto;border-radius:46% 46% 44% 44%/54% 54% 44% 44%;position:relative;animation:qbob 2.6s ease-in-out infinite}
-.b-build{background:#d97757}.b-rev{background:#10a37f}
-@keyframes qbob{50%{transform:translateY(-3px)}}
-.eyes{position:absolute;top:16px;left:11px;width:5px;height:5px;border-radius:50%;background:#0d1117;box-shadow:14px 0 0 #0d1117}
-.mouth{position:absolute;left:13px;top:28px;width:16px;height:7px;border-bottom:2.5px solid #0d1117;border-radius:0 0 12px 12px}
-.qa-char.sad .mouth{border-bottom:0;border-top:2.5px solid #0d1117;border-radius:12px 12px 0 0;top:31px}
-.qa-char.happy .mouth{height:9px;border-bottom-width:3px}
-.qn{font-size:11px;color:var(--dim);margin-top:2px}.qn b{color:var(--fg)}
-.qa-commit{position:absolute;bottom:30px;left:calc(50% - 10px);font-size:18px;filter:drop-shadow(0 2px 3px rgba(0,0,0,.4));transition:left .9s cubic-bezier(.34,1.1,.5,1),opacity .5s}
-.qa-deploy{position:absolute;right:12px;top:2px;font-size:15px;opacity:.25;transition:.4s}
-.qa.v-idle .qa-commit{opacity:.45}
-.qa.v-review .qa-commit{left:calc(100% - 132px)}
-.qa.v-review #qreviewer .blob{animation:qbob 2.6s ease-in-out infinite,qtilt 1.1s ease-in-out infinite}
-@keyframes qtilt{50%{transform:translateY(-3px) rotate(-7deg)}}
-.qa.v-fail .qa-commit{left:70px}
-.qa.v-pass .qa-commit{left:calc(100% - 46px);opacity:0}
-.qa.v-pass .qa-deploy{opacity:1;transform:scale(1.2)}
+.qa-in{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+.qa-hd{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.qa-title{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim)}
+.qa-current{font-size:17px;font-weight:700;margin-top:3px}.qa-meta{font-size:12px;color:var(--dim);text-align:right}
+.pipe{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-top:15px}
+.stage{border:1px solid var(--line);border-radius:8px;padding:10px;min-height:72px;position:relative}
+.stage:after{content:'›';position:absolute;right:-9px;top:22px;color:var(--dim);z-index:1}
+.stage:last-child:after{display:none}.stage-name{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--dim)}
+.stage-state{font-size:12px;font-weight:650;margin-top:7px}.stage.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.stage.active .stage-state{color:var(--accent)}.stage.done .stage-state{color:var(--ok)}
+.stage.failed{border-color:var(--bad)}.stage.failed .stage-state{color:var(--bad)}
+.stage.blocked{border-color:var(--warn)}.stage.blocked .stage-state{color:var(--warn)}
+@media(max-width:800px){.pipe{grid-template-columns:repeat(2,1fr)}.stage:after{display:none}.qa-hd{display:block}.qa-meta{text-align:left;margin-top:6px}}
 </style></head><body>
 <header><span class=dot id=live></span><h1>🛰 Orbit board</h1><span class=muted id=gen></span></header>
-<section id=qa class="qa off"><div class=qa-in>
-  <div class=qa-hd>Independent QA<span id=qaStatus class=muted></span></div>
-  <div class=qa-arena>
-    <div class="qa-char" id=qbuilder><div class="blob b-build"><span class=eyes></span><span class=mouth></span></div><div class=qn>Builder · <b>Claude</b></div></div>
-    <div class="qa-char" id=qreviewer><div class="blob b-rev"><span class=eyes></span><span class=mouth></span></div><div class=qn>Reviewer · <b id=rname>Codex</b></div></div>
-    <div class="qa-commit" id=qcommit>📦</div>
-    <div class="qa-deploy" id=qdeploy>🚀</div>
-  </div>
+<section id=qa class=qa><div class=qa-in>
+  <div class=qa-hd><div><div class=qa-title>Delivery pipeline</div><div class=qa-current id=qaCurrent>Loading…</div></div><div class=qa-meta id=qaMeta></div></div>
+  <div class=pipe id=qaPipe></div>
 </div></section>
 <div class=wrap id=app></div>
 <script>
@@ -202,7 +220,7 @@ function render(s){
  const run=s.run||{};
  // Run summary
  app.appendChild(card('Run',rows([
-   ['phase',esc(run.phase||run.mode||'—')],['active role',esc(run.active_role||'—')],
+   ['phase',esc(run.phase||run.mode||'—')],['active actors',esc((s.active_actors||[]).join(', ')||'—')],
    ['cycle',esc(run.cycle==null?'—':run.cycle)],
    ['confidence',(s.confidence==null?'—':s.confidence+'%'),s.confidence==null?'muted':(s.confidence>=70?'ok':s.confidence>=40?'warn':'bad')],
  ])));
@@ -219,8 +237,8 @@ function render(s){
  // Owner / agents
  const ab=E('ul');const ags=Object.entries(s.agents||{}).filter(([,v])=>v&&typeof v=='object');
  if(!ags.length)ab.appendChild(E('li','empty','no agents recorded'));
- for(const[role,a]of ags.sort((x,y)=>(x[1].seq||99)-(y[1].seq||99))){const st=a.status||'';const c=st=='active'?'doing':st=='done'?'check':'todo';
-   ab.appendChild(E('li',null,'<span class="'+c+'">●</span> <b>'+esc(a.display||role)+'</b> <span class=muted>'+esc(a.responsibility||a.mission||'')+'</span>'))}
+ for(const[role,a]of ags.sort((x,y)=>(x[1].seq||99)-(y[1].seq||99))){const st=a.status||'';const c=st=='active'?'doing':st=='done'?'check':st=='blocked'||st=='failed'?'bad':'todo';
+   ab.appendChild(E('li',null,'<span class="'+c+'">●</span> <b>'+esc(a.display||role)+'</b> <span class="pill '+c+'">'+esc(st||'idle')+'</span> <span class=muted>'+esc(a.responsibility||a.mission||'')+'</span>'))}
  app.appendChild(card('Team',ab));
  // Checklist
  const cb=E('ul');const ts=Array.isArray(s.tasks)?s.tasks:[];
@@ -242,20 +260,31 @@ function render(s){
 }
 function updateQA(qa){
  qa=qa||{};
- const sc=document.getElementById('qa'),st=document.getElementById('qaStatus'),rn=document.getElementById('rname'),
-       rev=document.getElementById('qreviewer'),bld=document.getElementById('qbuilder'),commit=document.getElementById('qcommit');
- if(!sc)return;
- const prov=qa.provider||'claude';
- rn.textContent=prov==='both'?'Codex + Claude':(prov==='codex'?'Codex':'Claude');
- rev.classList.remove('sad','happy');bld.classList.remove('sad','happy');
- sc.classList.remove('v-idle','v-review','v-fail','v-pass','off');
- if(!qa.enabled){sc.classList.add('off','v-idle');st.textContent=' — off';commit.textContent='📦';return}
- const v=qa.verdict;
- if(v==='PASS'){sc.classList.add('v-pass');rev.classList.add('happy');bld.classList.add('happy');commit.textContent='🚀';
-   st.innerHTML=' <b class=ok>PASS ✓</b>'+(qa.score!=null?(' '+qa.score+'/10 → deploy'):' → deploy')}
- else if(v==='CHANGES_REQUIRED'||v==='BLOCKED'){sc.classList.add('v-fail');rev.classList.add('sad');commit.textContent='📦';
-   st.innerHTML=' <b class=bad>'+(v==='BLOCKED'?'BLOCKED':'CHANGES REQUIRED')+'</b> → repair'}
- else{sc.classList.add('v-review');commit.textContent='📦';st.textContent=' — '+rn.textContent+' reviewing…'}
+ const current=document.getElementById('qaCurrent'),meta=document.getElementById('qaMeta'),pipe=document.getElementById('qaPipe');
+ if(!current||!meta||!pipe)return;
+ const provider=qa.provider==='both'?'Codex + Claude':(qa.provider==='codex'?'Codex':qa.provider==='claude'?'Claude':qa.provider||'Reviewer');
+ const labels={off:'Independent QA is off',awaiting_project_approval:'Waiting for project QA approval',
+   awaiting_review:'Commit ready — QA not started',reviewing:provider+' is reviewing this exact commit',
+   changes_required:'Changes required — return to builder',blocked:'QA blocked',error:'QA runner error',
+   awaiting_deploy_approval:'QA passed — waiting for human deployment approval',ready_to_deploy:'QA passed — ready for deployment',
+   deploy_forbidden:'QA passed — deployment forbidden by policy'};
+ current.textContent=labels[qa.status]||('QA state: '+(qa.status||'unknown'));
+ const bits=[];if(qa.head)bits.push('HEAD '+qa.head.slice(0,8));if(qa.request_id)bits.push(qa.request_id);
+ if(qa.round!=null)bits.push('round '+qa.round);bits.push(provider);if(qa.score!=null)bits.push(qa.score+'/10');
+ meta.textContent=bits.join(' · ');
+ const qstate=qa.status==='reviewing'?['active','reviewing']:qa.status==='changes_required'?['failed','failed']:
+   qa.status==='blocked'||qa.status==='error'?['blocked',qa.status]:qa.verdict==='PASS'?['done','passed']:
+   qa.enabled&&qa.export_approved?['active','queued']:['blocked',qa.enabled?'approval required':'off'];
+ const stages=[
+   ['Build',qa.dirty?'active':'done',qa.dirty?'working tree changed':'committed snapshot'],
+   ['Verify','idle','internal evidence'],
+   ['Commit',qa.head?'done':'idle',qa.head?qa.head.slice(0,8):'no commit'],
+   ['Independent QA',qstate[0],qstate[1]],
+   ['Repair',qa.status==='changes_required'?'active':'idle',qa.status==='changes_required'?'required':'waiting'],
+   ['Deploy',qa.status==='awaiting_deploy_approval'?'blocked':qa.status==='ready_to_deploy'?'active':'idle',
+      qa.status==='awaiting_deploy_approval'?'human approval':qa.status==='ready_to_deploy'?'ready':'locked']];
+ pipe.innerHTML='';for(const [name,state,label] of stages){const box=E('div','stage '+state),n=E('div','stage-name'),v=E('div','stage-state');
+   n.textContent=name;v.textContent=label;box.appendChild(n);box.appendChild(v);pipe.appendChild(box)}
 }
 async function tick(){try{const r=await fetch('data');const s=await r.json();render(s);updateQA(s.qa);document.getElementById('live').style.background='var(--ok)'}catch(e){document.getElementById('live').style.background='var(--bad)'}}
 tick();setInterval(tick,2000);

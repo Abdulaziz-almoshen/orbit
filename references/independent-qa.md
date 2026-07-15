@@ -19,8 +19,9 @@ The stock adapter uses `codex exec`, but `provider.argv` is an argv-array contra
 reviewer that writes the result schema. Orbit never uses a shell for it.
 
 At install, `bin/orbit-qa-configure` detects runnable Codex/Claude CLIs and stores the one-time default
-under `$ORBIT_HOME/qa.json`. Choices are `codex`, `claude`, `both`, or `later`. A project receives that
-preference once when scaffolded and may override it thereafter. Claude QA is a fresh, non-persistent,
+under `$ORBIT_HOME/qa.json`. Choices are `codex`, `claude`, `both`, or `later`. A project receives only
+that provider preference when scaffolded and may override it thereafter; it remains disabled and export
+remains unapproved until the project explicitly consents. Claude QA is a fresh, non-persistent,
 isolated internal review; Codex is an independent-provider review. `both` requires both verdicts to pass
 and aggregates the lower score/worst criterion. A missing selected provider blocks—fallback always needs
 human approval. Arabic/RTL detection activates the same project rubric regardless of provider.
@@ -35,6 +36,8 @@ also rejects later manifest edits. Activating the stage requires both
 `committed_snapshot_only`; record `approved_by` and `approved_at` as an auditable consent receipt.
 Uncommitted files are never copied into the review worktree. The reviewer is
 report-only and must not edit, commit, push, merge, deploy, message, or approve its own implementation.
+The runner publishes its current exact-commit status to Git's control plane for the dashboard tracer;
+a project mirror, stale commit verdict, or newer file modification time never drives pipeline state.
 
 Project-specific checks belong in rubric files listed by the request—for example GTM lead coverage,
 Arabic UI content quality, or prompt/evidence standards. Orbit owns the lifecycle and binding; the

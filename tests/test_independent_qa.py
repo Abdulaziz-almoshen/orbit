@@ -52,9 +52,13 @@ def main():
 
     # A fresh scaffold installs the stage; a reinstall additively migrates old config.
     with tempfile.TemporaryDirectory() as d:
-        target = Path(d)
+        target = Path(d) / "repo"; target.mkdir()
+        orbit_home = Path(d) / "orbit-home"; orbit_home.mkdir()
+        (orbit_home / "qa.json").write_text(json.dumps({"configured": True, "enabled": True,
+            "provider": "codex", "approved": True, "approved_at": "2026-07-15T00:00:00Z"}))
+        env = {**os.environ, "ORBIT_HOME": str(orbit_home)}
         subprocess.run([sys.executable, str(ROOT / "scripts/scaffold.py"), "--target", str(target)],
-                       text=True, capture_output=True, check=True)
+                       env=env, text=True, capture_output=True, check=True)
         expected = ["scripts/orbit-independent-qa", ".orbit/qa/independent-review-request.schema.json",
                     ".orbit/qa/independent-review-result.schema.json", ".orbit/review-requests/TEMPLATE.json"]
         for rel in expected:
@@ -64,13 +68,17 @@ def main():
         cfg = json.loads(cfg_path.read_text())
         if "independent_qa" not in cfg or cfg["independent_qa"].get("enabled") is not False:
             fails.append("fresh scaffold did not install disabled-by-default independent QA config")
+        if cfg["independent_qa"].get("external_export", {}).get("approved") is not False:
+            fails.append("global QA preference improperly granted project export approval")
+        if cfg["independent_qa"].get("provider", {}).get("mode") != "codex":
+            fails.append("global QA preference did not preselect the provider")
         cfg.pop("independent_qa", None); cfg.pop("_independent_qa_help", None)
         cfg["custom_project_value"] = "preserve-me"
         cfg.get("paths", {}).pop("independent_reviews", None)
         cfg.get("paths", {}).pop("independent_qa_runner", None)
         cfg_path.write_text(json.dumps(cfg))
         subprocess.run([sys.executable, str(ROOT / "scripts/scaffold.py"), "--target", str(target)],
-                       text=True, capture_output=True, check=True)
+                       env=env, text=True, capture_output=True, check=True)
         migrated = json.loads(cfg_path.read_text())
         if ("independent_qa" not in migrated or migrated.get("custom_project_value") != "preserve-me"
                 or "independent_qa_runner" not in migrated.get("paths", {})):
@@ -87,7 +95,7 @@ def main():
         if upgraded.get("mode") != "codex" or "claude" not in upgraded.get("adapters", {}):
             fails.append(f"stock v0.41 provider was not safely migrated: {upgraded}")
 
-    # Install-time preference applies once and Arabic is auto-detected without clobbering later choices.
+    # Install preference preselects only; project consent stays off and later project choices survive.
     with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as oh:
         target = Path(d)
         Path(oh, "qa.json").write_text(json.dumps({"configured": True, "enabled": True,
@@ -97,18 +105,24 @@ def main():
         subprocess.run([sys.executable, str(ROOT / "scripts/scaffold.py"), "--target", str(target)],
                        env=env, text=True, capture_output=True, check=True)
         cfg = json.loads((target / ".orbit/loop.config.json").read_text())["independent_qa"]
-        if not cfg.get("enabled") or cfg.get("provider", {}).get("mode") != "both":
+        if cfg.get("enabled") is not False or cfg.get("external_export", {}).get("approved") is not False:
+            fails.append(f"install preference improperly activated project QA: {cfg}")
+        if cfg.get("provider", {}).get("mode") != "both":
             fails.append(f"install QA preference was not applied: {cfg}")
         if not cfg.get("arabic_content_qa", {}).get("detected"):
             fails.append("Arabic surface was not auto-detected")
         cfg["provider"]["mode"] = "claude"
+        cfg["enabled"] = True
+        cfg["external_export"].update({"approved": True, "approved_by": "project owner",
+                                       "approved_at": "2026-07-15T01:00:00Z"})
         full = json.loads((target / ".orbit/loop.config.json").read_text()); full["independent_qa"] = cfg
         (target / ".orbit/loop.config.json").write_text(json.dumps(full))
         subprocess.run([sys.executable, str(ROOT / "scripts/scaffold.py"), "--target", str(target)],
                        env=env, text=True, capture_output=True, check=True)
         after = json.loads((target / ".orbit/loop.config.json").read_text())["independent_qa"]
-        if after["provider"]["mode"] != "claude":
-            fails.append("re-scaffold overwrote the project's later QA-provider choice")
+        if (after["provider"]["mode"] != "claude" or not after["enabled"]
+                or not after["external_export"]["approved"]):
+            fails.append("re-scaffold overwrote the project's later QA/provider consent choice")
 
     with tempfile.TemporaryDirectory() as d:
         repo = Path(d) / "repo"
@@ -150,6 +164,13 @@ def main():
             gate = qa.check_gate(repo, request_path, target)
             if not gate.get("passed"):
                 fails.append(f"matching gate did not pass: {gate}")
+            common = Path(run(repo, "rev-parse", "--git-common-dir"))
+            if not common.is_absolute():
+                common = (repo / common).resolve()
+            pipeline = json.loads((common / "orbit-independent-qa/current.json").read_text())
+            if (pipeline.get("status") != "pass" or pipeline.get("target_commit") != target
+                    or pipeline.get("provider") != "fake" or pipeline.get("verdict") != "PASS"):
+                fails.append(f"authoritative pipeline state was not exact-commit/pass: {pipeline}")
             # A forged project mirror cannot replace the authoritative control-plane result.
             mirror = Path(status["report_path"])
             forged = json.loads(mirror.read_text()); forged["result"]["verdict"] = "BLOCKED"
