@@ -16,7 +16,7 @@ break the user's workflow, and "the event didn't fire in this Claude Code versio
 
 Wired to (each a settings.json hook entry): SubagentStart, SubagentStop, TaskCreated,
 TaskCompleted, PostToolUse, PostToolUseFailure, PostToolBatch, Stop, Notification. (route.py owns
-UserPromptSubmit — routing telemetry — so this collector leaves it alone.)
+PermissionRequest. (route.py owns UserPromptSubmit — routing telemetry — so this collector leaves it alone.)
 """
 import json
 import os
@@ -88,6 +88,14 @@ def _file_path(data):
     return ti.get("file_path") or ti.get("path") or ""
 
 
+def _permission_text(data):
+    tool = _redact(_tool_name(data) or "tool", 40)
+    ti = data.get("tool_input") if isinstance(data.get("tool_input"), dict) else {}
+    detail = ti.get("command") or ti.get("file_path") or ti.get("path") or ti.get("url") or ""
+    detail = _redact(detail, 180)
+    return f"Allow {tool}: {detail}" if detail else f"Allow {tool}?"
+
+
 def _map(event, data):
     """Map a Claude Code hook event to activity.emit() kwargs, or None to ignore this event."""
     agent = _redact(data.get("agent_type") or data.get("agent") or "subagent", 24) or "subagent"
@@ -118,6 +126,9 @@ def _map(event, data):
         blocked = any(k in low for k in ("waiting", "need", "input", "permission", "approve"))
         return {"role": "human", "phase": "decide", "status": "blocked" if blocked else "info",
                 "msg": note}
+    if event == "PermissionRequest":
+        return {"role": "human", "phase": "decide", "status": "blocked",
+                "msg": _permission_text(data)}
     # TaskCreated / TaskCompleted are handled separately (they mirror the native checklist).
     return None
 
@@ -129,18 +140,29 @@ def _attention(orbit_dir: Path, data: dict) -> None:
     sentence "Claude is waiting for your input". `question_available` prevents reporters from
     presenting the generic sentence as if it were the question.
     """
-    message = _redact(data.get("message") or data.get("msg") or "", 300)
-    title = _redact(data.get("title") or "", 120)
-    kind = _redact(data.get("notification_type") or "notification", 40)
+    event = str(data.get("hook_event_name") or "")
+    permission = event == "PermissionRequest"
+    message = _permission_text(data) if permission else _redact(data.get("message") or data.get("msg") or "", 300)
+    title = "Permission requested" if permission else _redact(data.get("title") or "", 120)
+    kind = "permission_request" if permission else _redact(data.get("notification_type") or "notification", 40)
     generic = re.search(r"(?i)^(claude\s+(?:code\s+)?(?:is\s+)?(?:waiting|needs?)|permission needed|input needed)", message)
+    path = orbit_dir / "attention.json"
+    if not permission and generic and path.is_file() and time.time() - path.stat().st_mtime < 10:
+        try:
+            previous = json.loads(path.read_text())
+            if (previous.get("notification_type") == "permission_request" and
+                    previous.get("session_id") == _redact(data.get("session_id"), 80)):
+                return  # keep the exact tool request; its generic companion notification adds nothing
+        except Exception:
+            pass
     value = {"schema": 1, "source": "Claude Code", "session_id": _redact(data.get("session_id"), 80),
              "notification_type": kind, "title": title, "message": message,
-             "question_available": bool(message and not generic),
+             "question_available": bool(message and (permission or not generic)),
              "answer_in": "originating Claude Code terminal",
              "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
     tmp = orbit_dir / ".attention.json.tmp"
     tmp.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n")
-    os.replace(tmp, orbit_dir / "attention.json")
+    os.replace(tmp, path)
 
 
 def _mirror_task(activity, event, data):
@@ -187,7 +209,9 @@ def main():
         return
 
     try:
-        if event == "Notification":
+        if event == "PermissionRequest":
+            _attention(orbit_dir, data)
+        elif event == "Notification":
             note = str(data.get("message") or data.get("msg") or "").lower()
             kind = str(data.get("notification_type") or "")
             if kind in ("permission_prompt", "elicitation_dialog", "idle_prompt") or any(

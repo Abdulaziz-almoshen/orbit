@@ -10,6 +10,8 @@ truth — the update checker compares it against GitHub.
 - Attention telemetry records the originating Claude Code session, notification kind, bounded title
   and message, and whether the host actually supplied the question. Generic “waiting for input” text
   is never misrepresented as the question.
+- PermissionRequest telemetry captures the redacted tool/command being approved; its generic companion
+  notification cannot overwrite the exact request. Reporter-only activation never installs Bash hooks.
 - The redacted dashboard snapshot joins project identity, the matching session/model, writer lock,
   and attention record. The pet names the project and session and tells the user where to answer.
 - Claude Code's official multi-line status-line surface now shows the live QA handoff directly below

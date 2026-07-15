@@ -63,6 +63,19 @@ def main():
         if len(data2["hooks"]["PreToolUse"]) != n_pre or len(data2["hooks"]["UserPromptSubmit"]) != n_ups:
             fails.append("re-running install_hooks double-added a hook")
 
+    # 4. Reporter-only activation observes permissions but never installs the Bash safety/ask hook.
+    with tempfile.TemporaryDirectory() as d:
+        t = Path(d); (t / ".claude").mkdir()
+        s = t / ".claude" / "settings.json"; s.write_text("{}")
+        sc.install_hooks(t, reporter_only=True)
+        data = json.loads(s.read_text())
+        if "PermissionRequest" not in data.get("hooks", {}):
+            fails.append("reporter-only activation did not wire exact permission-request telemetry")
+        if data.get("hooks", {}).get("PreToolUse"):
+            fails.append("reporter-only activation installed a PreToolUse/Bash hook")
+        if "orbit-statusline" not in json.dumps(data.get("statusLine", {})):
+            fails.append("reporter-only activation did not wire the terminal reporter")
+
     if fails:
         print("FAIL: install_hooks")
         for f in fails:

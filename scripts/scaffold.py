@@ -324,7 +324,8 @@ ORBIT_GUARD_CMD = (
     "do [ -f \"$p\" ] && exec python3 \"$p\"; done; exit 0'"
 )
 ORBIT_HOOK_EVENTS = ["SubagentStart", "SubagentStop", "TaskCreated", "TaskCompleted",
-                     "PostToolUse", "PostToolUseFailure", "PostToolBatch", "Stop", "Notification"]
+                     "PostToolUse", "PostToolUseFailure", "PostToolBatch", "Stop", "Notification",
+                     "PermissionRequest"]
 STATUSLINE_CMD = 'python3 "$CLAUDE_PROJECT_DIR/scripts/orbit-statusline"'
 # The single-writer lock hook — trusted-install resolved (like orbit-hook), so a repo can't weaken its
 # own lock. Fails OPEN on any error (a bug never bricks the repo); disable with ORBIT_LOCK_DISABLE=1.
@@ -778,7 +779,7 @@ def _auto_heal(target: Path) -> str:
     return ", ".join(parts) if parts else "already healthy"
 
 
-def install_hooks(target: Path, has_ui: bool = False) -> None:
+def install_hooks(target: Path, has_ui: bool = False, reporter_only: bool = False) -> None:
     """Wire Orbit's always-on hooks into .claude/settings.json (default-on + announced):
 
       • PreToolUse(Bash) → orbit-guard  — the binding safety wall (deny/ask on dangerous commands),
@@ -789,9 +790,10 @@ def install_hooks(target: Path, has_ui: bool = False) -> None:
       • PreToolUse(Edit|Write|MultiEdit) → design-gate.py — UI repos only (has_ui): a coarse
         backstop that asks once per cycle if a UI production file has no design-decision record.
         Never denies; fails open. Not a per-change heavy-redesign blocker — see its own docstring.
-      • [SubagentStart/Stop, TaskCreated/Completed, PostToolUse(+Failure/Batch), Stop, Notification]
+      • [SubagentStart/Stop, TaskCreated/Completed, PostToolUse(+Failure/Batch), Stop, Notification,
+        PermissionRequest]
         → bin/orbit-hook — the telemetry collector, wired from the TRUSTED install path (not the
-        repo), observe-only + fail-open: makes long runs visible in orbit-status / the status line.
+        repo), observe-only + fail-open: makes long runs and exact permission questions visible.
 
     Backs up settings.json first, merges each hook idempotently (never double-adds), prints what it
     added + the one-line removal. Remove anytime with `orbit-uninstall`.
@@ -821,17 +823,17 @@ def install_hooks(target: Path, has_ui: bool = False) -> None:
     # A repo that ALREADY wired the project-local guard.py keeps it — we never re-wire or clobber it
     # (its custom §8 rules are preserved; `orbit-doctor` suggests migrating to rules.json).
     _guard_wired = any(("guard.py" in json.dumps(e) or "orbit-guard" in json.dumps(e)) for e in pre)
-    if not _guard_wired:
+    if not reporter_only and not _guard_wired:
         pre.append({"matcher": "Bash", "hooks": [{"type": "command", "command": ORBIT_GUARD_CMD}]})
         added.append("PreToolUse[matcher=Bash] → orbit-guard   (TRUSTED safety wall: built-in rules + "
                      ".orbit/security/rules.json; a repo can't weaken its own wall)")
 
     ups = hooks.setdefault("UserPromptSubmit", [])
-    if not any("route.py" in json.dumps(e) for e in ups):
+    if not reporter_only and not any("route.py" in json.dumps(e) for e in ups):
         ups.append({"hooks": [{"type": "command", "command": ROUTE_CMD}]})
         added.append("UserPromptSubmit → route.py            (routing: classify task vs question)")
 
-    if has_ui and not any("design-gate.py" in json.dumps(e) for e in pre):
+    if not reporter_only and has_ui and not any("design-gate.py" in json.dumps(e) for e in pre):
         pre.append({"matcher": "Edit|Write|MultiEdit",
                     "hooks": [{"type": "command", "command": DESIGN_GATE_CMD}]})
         added.append("PreToolUse[matcher=Edit|Write|MultiEdit] → design-gate.py   "
@@ -840,7 +842,7 @@ def install_hooks(target: Path, has_ui: bool = False) -> None:
     # Single-writer lock (v0.30.0): deny writes under a FOREIGN session's lock — many readers, one
     # writer. Two matchers (the edit tools + Bash), added together + idempotently. Trusted-install
     # resolved (a repo can't weaken its own lock) and FAIL-OPEN on any error (never bricks the repo).
-    if not any("orbit-lock-hook" in json.dumps(e) for e in pre):
+    if not reporter_only and not any("orbit-lock-hook" in json.dumps(e) for e in pre):
         pre.append({"matcher": "Edit|Write|MultiEdit",
                     "hooks": [{"type": "command", "command": ORBIT_LOCK_HOOK_CMD}]})
         pre.append({"matcher": "Bash",
@@ -852,7 +854,7 @@ def install_hooks(target: Path, has_ui: bool = False) -> None:
     # task did real work but never made the board visible (no .orbit/tasks.json / set_team) — i.e. it
     # ran as a black box instead of Orbit's checklist. Conservative + fail-open (see the hook header).
     stop = hooks.setdefault("Stop", [])
-    if not any("orbit-stop-check.py" in json.dumps(e) for e in stop):
+    if not reporter_only and not any("orbit-stop-check.py" in json.dumps(e) for e in stop):
         stop.append({"hooks": [{"type": "command", "command": STOP_CHECK_CMD}]})
         added.append("Stop → orbit-stop-check.py            "
                      "(observability: block once if a task ran without a visible checklist)")
@@ -881,7 +883,8 @@ def install_hooks(target: Path, has_ui: bool = False) -> None:
         tmp = settings.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(data, indent=2))
         tmp.replace(settings)
-        print("Installed Orbit's always-on hooks (announced, not silent):")
+        print(("Installed Orbit reporter hooks" if reporter_only else "Installed Orbit's always-on hooks")
+              + " (announced, not silent):")
         for a in added:
             print("  + .claude/settings.json  →  hooks." + a)
         if backed_up:
@@ -1050,7 +1053,7 @@ def main():
     )
     if args.install_hooks or args.enable_reporter:
         print()
-        install_hooks(target, has_ui)
+        install_hooks(target, has_ui, reporter_only=args.enable_reporter and not args.install_hooks)
     else:
         print(
             "\nSafety guard: NOT wired yet (re-run with --install-hooks, or let the skill do it in\n"

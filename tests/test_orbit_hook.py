@@ -98,6 +98,8 @@ def main():
         fire({"hook_event_name": "PostToolUse", "tool_name": "Read",
               "tool_input": {"file_path": "README.md"}, "cwd": d}, d)   # must be skipped
         fire({"hook_event_name": "PostToolUseFailure", "tool_name": "Bash", "cwd": d}, d)
+        fire({"hook_event_name": "PermissionRequest", "tool_name": "Bash",
+              "tool_input": {"command": "npm test"}, "session_id": "session-abc123", "cwd": d}, d)
         fire({"hook_event_name": "Notification",
               "message": "Claude is \x1b[31mwaiting\x1b[0m for your input",
               "title": "Input needed", "notification_type": "elicitation_dialog",
@@ -134,8 +136,10 @@ def main():
         if not run.get("blocked_question"):
             fails.append("run.json blocked_question not set by the notification")
         attention = json.loads(open(os.path.join(d, ".orbit", "attention.json")).read())
-        if attention.get("session_id") != "session-abc123" or attention.get("question_available") is not False:
-            fails.append(f"generic notification must preserve session without pretending it is the question: {attention}")
+        if (attention.get("session_id") != "session-abc123" or
+                attention.get("message") != "Allow Bash: npm test" or
+                attention.get("question_available") is not True):
+            fails.append(f"exact permission request must survive its generic companion notification: {attention}")
 
     # --- fail-open: unknown event, un-scaffolded repo, garbage input ------------------
     with tempfile.TemporaryDirectory() as d:
