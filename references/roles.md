@@ -150,8 +150,8 @@ Parallel roles must not corrupt shared state. The rules:
    mirrors current in-flight handoffs in STATE.md's Handoffs section.
 4. **Gates are sequential even when work is parallel.** Input → (Engineers ∥ Analyst
    in parallel) → Safety (veto) → Reviewer (the diff) → **QA Engineer (the product vs the
-   requirements)** → Reporter. The three gates (Safety, Reviewer, QA) are choke points by
-   design; nothing reaches "done" without passing all of them.
+   requirements)** → **Independent QA (when enabled; separate provider, exact commit)** → Reporter.
+   These gates are choke points by design; nothing reaches "done" without passing all enabled gates.
 5. **Escalation beats guessing.** If a role hits an ambiguous, high-impact decision, it
    stops and records an Open Question in its report rather than improvising. The
    Orchestrator decides whether to pause for a human (see stop conditions).

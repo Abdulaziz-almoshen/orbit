@@ -258,8 +258,9 @@ python3 "$ORBIT/scripts/scaffold.py" --target . --surfaces <detected> [--install
   surfaces detected → a single generic `builder`. (Empty `--surfaces` is allowed; `--frontend` still
   works as an alias for `--surfaces web`.)
 - Add **`--install-hooks`** to wire the safety hooks now (or leave it for Phase 6a).
-- It **never overwrites** — existing files are left untouched and reported, so a re-run is safe.
-  The **one exception is a security migration**: a repo scaffolded before 0.23.0 has a `guard.py`
+- It **never overwrites customized files** — existing project values are preserved and reported, so a
+  re-run is safe. It may add new config keys and replace a byte-identical known-old Orbit engine/check,
+  always with a backup. A repo scaffolded before 0.23.0 has a `guard.py`
   whose blocks Claude Code silently ignored and a `route.py` that crashed the dashboard — the
   scaffolder replaces those *known-old* files (backing each up + announcing it), and only *warns*
   (never clobbers) if you'd edited them. Tell the user plainly when this fires.
@@ -323,7 +324,7 @@ The scaffolder placed `loop.config.json`, `loop.py`, and `ralph_loop.sh`. Your j
 **fill real thresholds** in `.orbit/loop.config.json` with the user (caps, eval gates, approval
 checkpoints) and wire `loop.py`'s `dispatch()` seam to their orchestrator.
 
-The loop is **read → plan → counterfactual preflight → act → evaluate → update → decide**. The non-negotiable part is the
+The loop is **read → plan → counterfactual preflight → act → internal gates → independent QA when enabled → update → decide**. The non-negotiable part is the
 stop conditions — Daisy stressed these to avoid runaway cost and damage. Every loop ships with, at
 minimum: a max-iterations cap, a token/cost budget per cycle and per run, a max-runtime wall
 clock, eval gates that block progress unless inputs/quality/safety checks pass, an explicit done
@@ -331,6 +332,12 @@ signal, and human-approval checkpoints for any high-impact or outward-facing act
 never takes an irreversible, financial, or outward-facing action on its own — it proposes; a human
 disposes.** This is baked into the config and the Safety role; see `references/loop-design.md` only
 if you're changing the loop's shape.
+
+For high-assurance handoffs, enable the provider-neutral `independent_qa` stage. The Planner must arm
+and commit the acceptance manifest before implementation; after internal gates pass, the separate
+reviewer evaluates the exact candidate commit. A request edit or code change invalidates the approval
+and routes back through review. Private-code export is disabled until the project explicitly approves
+`committed_snapshot_only`. Follow `references/independent-qa.md`; keep product rubrics in the project.
 
 ### Phase 6 — Tools and hooks
 

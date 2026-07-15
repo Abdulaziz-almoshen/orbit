@@ -3,6 +3,21 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.41.0
+
+**Independent, commit-bound QA.** Orbit now supports an opt-in second-provider stage after its internal
+Safety, Reviewer, and QA gates.
+
+- Planner-created acceptance manifests are armed and committed before implementation.
+- The reviewer sees only an exact detached commit snapshot; uncommitted files are excluded.
+- Structured P0-P3 findings, full criterion coverage, score thresholds, and request/commit hashes drive
+  a mechanical PASS-or-repair gate. Every repaired commit requires a fresh review.
+- Codex is the stock adapter, but the argv contract is provider-neutral and shell-free.
+- The engine resolves from Orbit's trusted install and authoritative verdicts live in the Git control
+  plane; project-visible reports are mirrors and cannot be forged into approval by the builder.
+- Private-code export remains disabled until the project explicitly approves committed-snapshot-only
+  review. Existing scaffolds receive the new files and additive config defaults without losing custom values.
+
 ## 0.40.0
 
 **Parallel work without shared-checkout races.** Orbit keeps the existing single-writer behavior for

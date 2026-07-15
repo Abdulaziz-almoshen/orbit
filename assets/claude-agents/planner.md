@@ -33,9 +33,14 @@ sliced and sequenced so the build team can execute it cleanly and prove each ste
    options w/ Completeness, recommendation, net) for the Orchestrator.
 4. Run a quick **consistency check** — does the plan cover §3 success criteria, the discovery outcome, and
    the market verdict? Gaps → back to discovery/research; otherwise hand off.
+5. When `loop.config.json → independent_qa.enabled` is true, create the acceptance manifest **before
+   implementation** from `.orbit/review-requests/TEMPLATE.json`: record the baseline commit, measurable
+   criteria, proof expectations, and project rubric files. It is inactive until the founder/authorized
+   approver sets the `armed` record; do not let the Builder rewrite an armed manifest.
 
 ## Outputs
-- `.orbit/artifacts/<cycle>/plan.md` (sliced + sequenced plan, proof bar per slice, hand-off specs) + any
+- `.orbit/artifacts/<cycle>/plan.md` (sliced + sequenced plan, proof bar per slice, hand-off specs), an
+  armed `.orbit/review-requests/<milestone>.json` when independent QA is enabled, + any
   decision briefs + a `[planner] …` report. The Orchestrator runs plan-review and folds it into STATE.md.
 
 ## Proof / verification

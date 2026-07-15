@@ -69,6 +69,22 @@ def main():
     if loop.needs_human("unknown_action", cfg) is not True:
         fails.append("unknown action should default to requiring a human")
 
+    # 3b. Independent QA is a first-class lifecycle gate, opt-in and fail-closed when enabled.
+    if not loop.evaluate_independent_qa({}, {}).get("passed"):
+        fails.append("disabled independent QA should be a no-op")
+    missing = loop.evaluate_independent_qa({}, {"independent_qa": {"enabled": True}})
+    if missing.get("passed") or missing.get("status") != "missing_input":
+        fails.append(f"enabled independent QA did not fail closed on missing commit/request: {missing}")
+    with tempfile.TemporaryDirectory() as d:
+        runner = os.path.join(d, "orbit-independent-qa")
+        with open(runner, "w") as f:
+            f.write("import json\nprint(json.dumps({'passed': True, 'status': 'pass', 'reason': 'approved'}))\n")
+        result = loop.evaluate_independent_qa(
+            {"commit": "abc", "independent_qa_request": "request.json"},
+            {"independent_qa": {"enabled": True}, "paths": {"independent_qa_runner": runner}})
+        if not result.get("passed"):
+            fails.append(f"independent QA lifecycle adapter did not pass provider result: {result}")
+
     # 4. --resume must NOT double-count budget, and must continue the cycle counter (not reset to 1)
     with tempfile.TemporaryDirectory() as d:
         ckpt = os.path.join(d, "steps.jsonl")

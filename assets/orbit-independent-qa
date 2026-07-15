@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Project wrapper for Orbit's trusted independent-QA engine.
+set -u
+cd "${CLAUDE_PROJECT_DIR:-.}" 2>/dev/null || true
+for p in "${CLAUDE_PLUGIN_ROOT:-}/bin/orbit-independent-qa" \
+         "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/orbit/bin/orbit-independent-qa" \
+         "$HOME"/.claude/plugins/cache/*/orbit/*/bin/orbit-independent-qa \
+         "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/*/orbit/*/bin/orbit-independent-qa; do
+  [ -f "$p" ] && exec python3 "$p" "$@"
+done
+echo "orbit-independent-qa: trusted Orbit install not found" >&2
+exit 1

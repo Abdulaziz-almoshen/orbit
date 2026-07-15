@@ -104,6 +104,25 @@
     "repeat_failure_action": "advisor_or_human"
   },
 
+  "_independent_qa_help": "Optional second-provider release gate. The Planner arms an acceptance manifest before implementation; after the internal gates pass, Orbit reviews only an exact committed snapshot. Both enabled and external_export.approved must be true before any private code is sent. Project-specific rubrics stay in the project and are listed by each request.",
+  "independent_qa": {
+    "enabled": false,
+    "stage": "after_internal_gates_before_done",
+    "min_score": 8.5,
+    "max_rounds": 3,
+    "timeout_seconds": 900,
+    "external_export": {
+      "approved": false,
+      "approved_by": "",
+      "approved_at": "",
+      "scope": "committed_snapshot_only"
+    },
+    "provider": {
+      "name": "codex",
+      "argv": ["codex", "exec", "--ephemeral", "--sandbox", "read-only", "--output-schema", "{schema}", "-o", "{output}", "-"]
+    }
+  },
+
   "_model_policy_help": "Two-lane model switching. The everyday executor runs the loop cheaply; the Advisor is an on-demand Opus judgment call, not a default worker. Claude Code subagents use aliases ('sonnet'/'opus') so the host resolves to the current account model family; display names preserve the intended product language.",
   "model_policy": {
     "default": "executor",
@@ -132,7 +151,7 @@
     }
   },
 
-  "done_when": "STATE.md run_goal satisfied AND the Reviewer quality gate passed",
+  "done_when": "STATE.md run_goal satisfied AND internal Safety/Reviewer/QA gates passed AND the independent QA gate passed when enabled",
 
   "_proof_help": "First-class verification: the CONCRETE evidence a cycle actually worked, not just 'looks done'. kind: command (run it, expect exit 0) | metric (read a number, compare) | checklist (all items true) | review (Reviewer rubric >= threshold). The loop must produce this proof before calling a task done.",
   "proof": { "kind": "review", "expect": "reviewer_score >= eval_gates.quality.min_reviewer_score", "command": "" },
@@ -150,6 +169,8 @@
     "activity": ".orbit/activity.jsonl",
     "tasks": ".orbit/tasks.json",
     "checkpoints": ".orbit/steps.jsonl",
+    "independent_qa_runner": "scripts/orbit-independent-qa",
+    "independent_reviews": ".orbit/reviews",
     "stop_sentinel": ".orbit/STOP"
   }
 }

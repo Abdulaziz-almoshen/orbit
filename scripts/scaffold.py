@@ -33,15 +33,16 @@ import shutil
 import time
 from pathlib import Path
 
-SCHEMA_VERSION = 2                         # bumps if setup.json / manifest shape changes
-MANIFEST_REL = ".orbit/.scaffold-manifest.json"   # {rel: sha256} of the check files WE placed
+SCHEMA_VERSION = 3                         # bumps if setup.json / manifest shape changes
+MANIFEST_REL = ".orbit/.scaffold-manifest.json"   # {rel: sha256} of managed files WE placed
 
-# The check files the scaffolder MANAGES and can carry forward on a re-run. `marker` is a
+# The engine/check files the scaffolder MANAGES and can carry forward on a re-run. `marker` is a
 # version-STABLE substring identifying the file as ours (so we don't touch an unrelated file at
 # that path). We auto-replace a managed check ONLY when it is byte-identical to what we last placed
 # (the manifest) OR to a known-old shipped version — i.e. the user has NOT customized it. A
 # customized file (or unknown provenance) gets a warning + manual instructions, never an overwrite.
 MANAGED_CHECKS = {
+    ".orbit/loop.py":                   ("loop.py",                  b"Reference self-prompting loop runner"),
     ".orbit/checks/guard.py":           ("checks/guard.py",           b"Orbit safety guard"),
     ".orbit/checks/route.py":           ("checks/route.py",           b"UserPromptSubmit hook"),
     ".orbit/checks/learn.py":           ("checks/learn.py",           b"active-learning"),
@@ -49,6 +50,9 @@ MANAGED_CHECKS = {
 }
 # Known-old shipped hashes for repos scaffolded BEFORE the manifest existed (no manifest to compare).
 _LEGACY_OLD = {
+    ".orbit/loop.py": {
+        "2c5b87a05a617fea38a0bacfdaa8cc3881850f8f1cc0551106dec4825a230559",  # 0.40.0
+    },
     ".orbit/checks/guard.py": {
         "0c5eb314a1dc64ad408adeb0d2170644f9bc48eeb343b562fbe6bf17fb098013",  # <0.23.0 (dead output shape)
         "3c5f77344b6857059593dc28e612fd9cae07948401adf6b447ae9df3270abc9c",  # 0.23.0 (narrow + bypassable)
@@ -202,6 +206,7 @@ FILE_PLAN = [
     ("ralph_loop.sh",    "scripts/ralph_loop.sh",     0o755),
     ("orbit-lock",       "scripts/orbit-lock",        0o755),   # thin wrapper → trusted bin/orbit-lock
     ("orbit-worktree",   "scripts/orbit-worktree",    0o755),   # isolated worker worktree manager
+    ("orbit-independent-qa", "scripts/orbit-independent-qa", 0o755),  # trusted second-provider gate
     ("orbit-memory",     "scripts/orbit-memory",      0o755),   # review/promote/forget the learning ledger
     ("orbit-context",    "scripts/orbit-context",     0o755),   # context budget doctor + safe compactor
     ("orbit-status",     "scripts/orbit-status",      0o755),
@@ -213,6 +218,9 @@ FILE_PLAN = [
     ("checks/route.py",  ".orbit/checks/route.py",    0o755),  # the UserPromptSubmit router (Phase 6a)
     ("checks/orbit-stop-check.py", ".orbit/checks/orbit-stop-check.py", 0o755),  # Stop: observability backstop
     ("checks/learn.py",  ".orbit/checks/learn.py",    0o755),  # the active-learning ledger helper
+    ("qa/independent-review-request.schema.json", ".orbit/qa/independent-review-request.schema.json", None),
+    ("qa/independent-review-result.schema.json", ".orbit/qa/independent-review-result.schema.json", None),
+    ("qa/review-request.template.json", ".orbit/review-requests/TEMPLATE.json", None),
 ]
 
 # Reusable skill-library playbooks copied into .orbit/skills/ (the provisioning step).
@@ -264,6 +272,7 @@ UI_SURFACES = {"web", "frontend", "ui", "mobile", "ios", "android"}  # → stand
 DIRS = [
     ".orbit", ".orbit/roles", ".orbit/skills",
     ".orbit/artifacts", ".orbit/checks", ".orbit/decisions", ".orbit/locks", ".orbit/security",
+    ".orbit/qa", ".orbit/review-requests", ".orbit/reviews",
     ".claude/agents", "scripts",
 ]
 
@@ -434,6 +443,32 @@ def _stamp_setup(target: Path, prev_version: str) -> None:
             p.write_text(text)
     except Exception:
         pass
+
+
+def _merge_loop_config_defaults(target: Path, created: list, warnings: list) -> None:
+    """Add newly shipped top-level defaults while preserving all project customizations."""
+    dst = target / ".orbit/loop.config.json"
+    src = ASSETS / "loop.config.json"
+    if not dst.exists():
+        return
+    try:
+        current = json.loads(dst.read_text())
+        defaults = json.loads(src.read_text())
+        changed = []
+        for key in ("_independent_qa_help", "independent_qa"):
+            if key not in current:
+                current[key] = defaults[key]
+                changed.append(key)
+        paths = current.setdefault("paths", {})
+        for key in ("independent_reviews", "independent_qa_runner"):
+            if key not in paths:
+                paths[key] = defaults["paths"][key]
+                changed.append(f"paths.{key}")
+        if changed:
+            dst.write_text(json.dumps(current, indent=2) + "\n")
+            created.append(f".orbit/loop.config.json  (added defaults: {', '.join(changed)}; existing values preserved)")
+    except Exception as exc:
+        warnings.append(f"Could not add independent-QA defaults to .orbit/loop.config.json: {exc}")
 
 
 def scaffold_drift(target: Path) -> dict:
@@ -641,6 +676,7 @@ def _auto_heal(target: Path) -> str:
         (target / d).mkdir(parents=True, exist_ok=True)
     for src_rel, dst_rel, mode in FILE_PLAN:
         _place(ASSETS / src_rel, target / dst_rel, created, skipped, mode)
+    _merge_loop_config_defaults(target, created, warnings)
     playbooks = PLAYBOOKS_ALWAYS + (PLAYBOOKS_FRONTEND if has_ui else [])
     for pb in playbooks:
         _place(PLAYBOOKS / pb, target / ".orbit/skills" / pb, created, skipped)
@@ -839,6 +875,7 @@ def main():
     # 1. engine files
     for src_rel, dst_rel, mode in FILE_PLAN:
         _place(ASSETS / src_rel, target / dst_rel, created, skipped, mode)
+    _merge_loop_config_defaults(target, created, warnings)
 
     # 2. working-state file (from the reference template)
     _place(REFERENCES / "state-template.md", target / ".orbit/STATE.md", created, skipped)

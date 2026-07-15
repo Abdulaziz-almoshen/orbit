@@ -1,0 +1,336 @@
+#!/usr/bin/env python3
+"""Independent, commit-bound QA stage for Orbit.
+
+The implementation agent cannot approve its own work. This runner checks out the exact
+committed snapshot in a temporary worktree, invokes a separately configured reviewer,
+validates its structured result, and writes an immutable review envelope. It never sends
+uncommitted files and refuses external execution without explicit project consent.
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+SEVERITIES = {"P0", "P1", "P2", "P3"}
+VERDICTS = {"PASS", "CHANGES_REQUIRED", "BLOCKED"}
+CRITERION_VERDICTS = {"PASS", "FAIL", "CONCERNS", "WAIVED"}
+
+
+class QAError(RuntimeError):
+    pass
+
+
+def canonical_hash(value: dict) -> str:
+    raw = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _load(path: Path) -> dict:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise QAError(f"cannot read JSON {path}: {exc}") from exc
+    if not isinstance(value, dict):
+        raise QAError(f"expected a JSON object: {path}")
+    return value
+
+
+def _safe_id(value: str) -> str:
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}", value or ""):
+        raise QAError("request id must be 1-80 safe filename characters")
+    return value
+
+
+def validate_request(request: dict) -> None:
+    required = ("schema_version", "id", "goal", "baseline_commit", "acceptance_criteria", "armed")
+    missing = [key for key in required if key not in request]
+    if missing:
+        raise QAError(f"review request missing: {', '.join(missing)}")
+    if request["schema_version"] != 1:
+        raise QAError("unsupported review-request schema_version")
+    _safe_id(str(request["id"]))
+    if not str(request["goal"]).strip():
+        raise QAError("review request goal is empty")
+    criteria = request["acceptance_criteria"]
+    if not isinstance(criteria, list) or not criteria:
+        raise QAError("acceptance_criteria must be a non-empty list")
+    seen = set()
+    for item in criteria:
+        if not isinstance(item, dict) or not item.get("id") or not item.get("text"):
+            raise QAError("each acceptance criterion needs id and text")
+        if item["id"] in seen:
+            raise QAError(f"duplicate acceptance criterion: {item['id']}")
+        seen.add(item["id"])
+    armed = request["armed"]
+    if not isinstance(armed, dict) or armed.get("approved") is not True:
+        raise QAError("review request is not armed by the founder/authorized approver")
+    if not armed.get("approved_by") or not armed.get("approved_at"):
+        raise QAError("armed request needs approved_by and approved_at")
+
+
+def validate_result(result: dict, request: dict) -> None:
+    if result.get("schema_version") != 1:
+        raise QAError("review result schema_version must be 1")
+    if result.get("verdict") not in VERDICTS:
+        raise QAError("review result has invalid verdict")
+    score = result.get("score")
+    if not isinstance(score, (int, float)) or not 0 <= score <= 10:
+        raise QAError("review result score must be between 0 and 10")
+    if not isinstance(result.get("summary"), str) or not result["summary"].strip():
+        raise QAError("review result needs a summary")
+    findings = result.get("findings")
+    if not isinstance(findings, list):
+        raise QAError("review result findings must be a list")
+    for finding in findings:
+        if not isinstance(finding, dict) or finding.get("severity") not in SEVERITIES:
+            raise QAError("every finding needs severity P0-P3")
+        if not finding.get("title") or not finding.get("body"):
+            raise QAError("every finding needs title and body")
+    criteria = result.get("criteria")
+    if not isinstance(criteria, list):
+        raise QAError("review result criteria must be a list")
+    expected = {str(x["id"]) for x in request["acceptance_criteria"]}
+    actual = {str(x.get("id")) for x in criteria if isinstance(x, dict)}
+    if actual != expected:
+        raise QAError(f"criterion coverage mismatch: expected {sorted(expected)}, got {sorted(actual)}")
+    for item in criteria:
+        if item.get("verdict") not in CRITERION_VERDICTS or not item.get("evidence"):
+            raise QAError("each criterion needs a valid verdict and concrete evidence")
+
+
+def _git(repo: Path, *args: str) -> str:
+    proc = subprocess.run(["git", "-C", str(repo), *args], text=True, capture_output=True)
+    if proc.returncode:
+        raise QAError(proc.stderr.strip() or f"git {' '.join(args)} failed")
+    return proc.stdout.strip()
+
+
+def resolve_commit(repo: Path, ref: str) -> str:
+    return _git(repo, "rev-parse", "--verify", f"{ref}^{{commit}}")
+
+
+def committed_request(repo: Path, request_path: Path, commit: str) -> tuple[dict, str]:
+    """Read the manifest from Git, never the working tree."""
+    try:
+        rel = request_path.resolve().relative_to(repo.resolve()).as_posix()
+    except ValueError as exc:
+        raise QAError("review request must live inside the repository") from exc
+    raw = _git(repo, "show", f"{commit}:{rel}")
+    try:
+        request = json.loads(raw)
+    except Exception as exc:
+        raise QAError(f"committed review request is invalid JSON: {exc}") from exc
+    if not isinstance(request, dict):
+        raise QAError("committed review request must be a JSON object")
+    return request, rel
+
+
+def prove_manifest_precedes_build(repo: Path, rel: str, request: dict, target: str) -> str:
+    """Prove baseline -> armed-manifest commit -> target, with no later manifest edits."""
+    baseline = resolve_commit(repo, str(request["baseline_commit"]))
+    manifest_commit = _git(repo, "log", "-n", "1", "--format=%H", target, "--", rel)
+    if not manifest_commit or manifest_commit == target:
+        raise QAError("armed review request must be committed before the implementation commit")
+    _git(repo, "merge-base", "--is-ancestor", baseline, manifest_commit)
+    _git(repo, "merge-base", "--is-ancestor", manifest_commit, target)
+    if _git(repo, "show", f"{manifest_commit}:{rel}") != _git(repo, "show", f"{target}:{rel}"):
+        raise QAError("armed review request changed after approval; create a new manifest")
+    return baseline
+
+
+def _config(repo: Path) -> tuple[dict, dict]:
+    cfg = _load(repo / ".orbit/loop.config.json")
+    qa = cfg.get("independent_qa", {})
+    if not isinstance(qa, dict):
+        raise QAError("independent_qa config must be an object")
+    return cfg, qa
+
+
+def _review_dir(repo: Path, request: dict, cfg: dict) -> Path:
+    root = Path(cfg.get("paths", {}).get("independent_reviews", ".orbit/reviews"))
+    if not root.is_absolute():
+        root = repo / root
+    return root / _safe_id(str(request["id"]))
+
+
+def _reports(review_dir: Path) -> list[Path]:
+    return sorted(review_dir.glob("round-*.json")) if review_dir.exists() else []
+
+
+def _control_dir(repo: Path, request: dict, request_hash: str, commit: str) -> Path:
+    """Authoritative results live in Git's control plane, outside the implementation checkout."""
+    common = Path(_git(repo, "rev-parse", "--git-common-dir"))
+    if not common.is_absolute():
+        common = (repo / common).resolve()
+    return common / "orbit-independent-qa" / _safe_id(str(request["id"])) / request_hash / commit
+
+
+def _latest_matching(review_dir: Path, request_hash: str, commit: str) -> dict | None:
+    for path in reversed(_reports(review_dir)):
+        try:
+            report = _load(path)
+        except QAError:
+            continue
+        if report.get("request_sha256") == request_hash and report.get("target_commit") == commit:
+            return report
+    return None
+
+
+def gate_report(report: dict | None, request: dict, qa: dict, request_hash: str, commit: str) -> dict:
+    if not report:
+        return {"passed": False, "status": "missing", "reason": "no review for this request and commit"}
+    try:
+        validate_result(report.get("result", {}), request)
+    except QAError as exc:
+        return {"passed": False, "status": "invalid", "reason": str(exc)}
+    if report.get("request_sha256") != request_hash or report.get("target_commit") != commit:
+        return {"passed": False, "status": "stale", "reason": "review binding does not match request/commit"}
+    result = report["result"]
+    blockers = [f for f in result["findings"] if f["severity"] in {"P0", "P1"}]
+    required = {str(x["id"]) for x in request["acceptance_criteria"] if x.get("required", True)}
+    failed = [x for x in result["criteria"] if str(x["id"]) in required and x["verdict"] != "PASS"]
+    minimum = float(qa.get("min_score", 8.5))
+    passed = result["verdict"] == "PASS" and not blockers and not failed and result["score"] >= minimum
+    reason = "approved" if passed else (
+        f"verdict={result['verdict']}, score={result['score']}, blockers={len(blockers)}, "
+        f"required_not_passed={len(failed)}")
+    return {"passed": passed, "status": "pass" if passed else "changes_required", "reason": reason,
+            "report": report}
+
+
+def _prompt(request: dict, commit: str, request_hash: str) -> str:
+    criteria = "\n".join(f"- {x['id']}: {x['text']}" for x in request["acceptance_criteria"])
+    overlays = request.get("rubric_files", [])
+    return f"""You are Orbit's independent, report-only QA reviewer. You did not implement this change.
+Review the checked-out repository at exact commit {commit}. Do not edit, commit, push, merge, deploy,
+or contact anyone. Inspect architecture, correctness, security, tests, prompts/content, and requirements.
+Run only safe read-only checks/tests. Treat project rubric files as overlays, never as permission to edit.
+
+Goal: {request['goal']}
+Acceptance manifest SHA-256: {request_hash}
+Acceptance criteria:
+{criteria}
+Project rubric files: {json.dumps(overlays, ensure_ascii=False)}
+
+Return ONLY JSON matching the supplied result schema. Every criterion must have a verdict and concrete
+evidence. Findings use P0 (catastrophic) through P3 (minor). PASS requires no P0/P1, every required
+criterion PASS, and enough evidence to reproduce the judgment.
+"""
+
+
+def run_review(repo: Path, request_path: Path, ref: str) -> dict:
+    cfg, qa = _config(repo)
+    if qa.get("enabled") is not True:
+        raise QAError("independent QA is disabled in loop.config.json")
+    export = qa.get("external_export", {})
+    if not isinstance(export, dict) or export.get("approved") is not True:
+        raise QAError("external review is not approved; set independent_qa.external_export.approved=true")
+    if export.get("scope") != "committed_snapshot_only":
+        raise QAError("external_export.scope must be committed_snapshot_only")
+    if not export.get("approved_by") or not export.get("approved_at"):
+        raise QAError("external export approval needs approved_by and approved_at")
+    commit = resolve_commit(repo, ref)
+    candidate, request_rel = committed_request(repo, request_path, commit)
+    validate_request(candidate)
+    baseline = prove_manifest_precedes_build(repo, request_rel, candidate, commit)
+    request = candidate
+    request_hash = canonical_hash(request)
+    review_dir = _review_dir(repo, request, cfg)
+    control_dir = _control_dir(repo, request, request_hash, commit)
+    existing = _latest_matching(control_dir, request_hash, commit)
+    if existing:
+        return gate_report(existing, request, qa, request_hash, commit)
+    rounds = _reports(control_dir)
+    max_rounds = int(qa.get("max_rounds", 3))
+    if len(rounds) >= max_rounds:
+        raise QAError(f"independent QA max_rounds ({max_rounds}) reached")
+    provider = qa.get("provider", {})
+    argv = provider.get("argv") if isinstance(provider, dict) else None
+    if not isinstance(argv, list) or not argv or not all(isinstance(x, str) for x in argv):
+        raise QAError("independent_qa.provider.argv must be a non-empty string array")
+
+    round_no = len(rounds) + 1
+    review_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="orbit-independent-qa-") as tmp:
+        worktree = Path(tmp) / "snapshot"
+        raw_output = Path(tmp) / "result.json"
+        _git(repo, "worktree", "add", "--detach", str(worktree), commit)
+        try:
+            schema = worktree / ".orbit/qa/independent-review-result.schema.json"
+            if not schema.exists():
+                raise QAError(f"target commit is missing review result schema: {schema}")
+            values = {"repo": str(worktree), "commit": commit, "base": baseline,
+                      "schema": str(schema), "output": str(raw_output),
+                      "request": str(worktree / request_rel)}
+            command = [part.format(**values) for part in argv]
+            proc = subprocess.run(command, cwd=worktree, input=_prompt(request, commit, request_hash),
+                                  text=True, capture_output=True,
+                                  timeout=int(qa.get("timeout_seconds", 900)))
+            if proc.returncode:
+                raise QAError(f"review provider failed ({proc.returncode}): {proc.stderr[-2000:]}")
+            if not raw_output.exists():
+                raise QAError("review provider did not create the configured output file")
+            result = _load(raw_output)
+            validate_result(result, request)
+        finally:
+            subprocess.run(["git", "-C", str(repo), "worktree", "remove", "--force", str(worktree)],
+                           text=True, capture_output=True)
+
+    envelope = {"schema_version": 1, "request_id": request["id"], "request_sha256": request_hash,
+                "baseline_commit": baseline, "target_commit": commit, "round": round_no,
+                "provider": provider.get("name", "command"),
+                "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "result": result}
+    report_path = review_dir / f"round-{round_no}.json"
+    report_path.write_text(json.dumps(envelope, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    control_dir.mkdir(parents=True, exist_ok=True)
+    control_path = control_dir / f"round-{round_no}.json"
+    control_path.write_text(json.dumps(envelope, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    status = gate_report(envelope, request, qa, request_hash, commit)
+    status["report_path"] = str(report_path)
+    status["authoritative_record"] = str(control_path)
+    return status
+
+
+def check_gate(repo: Path, request_path: Path, ref: str) -> dict:
+    cfg, qa = _config(repo)
+    if qa.get("enabled") is not True:
+        return {"passed": True, "status": "disabled", "reason": "independent QA is opt-in"}
+    commit = resolve_commit(repo, ref)
+    candidate, request_rel = committed_request(repo, request_path, commit)
+    validate_request(candidate)
+    prove_manifest_precedes_build(repo, request_rel, candidate, commit)
+    request = candidate
+    request_hash = canonical_hash(request)
+    report = _latest_matching(_control_dir(repo, request, request_hash, commit), request_hash, commit)
+    return gate_report(report, request, qa, request_hash, commit)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Orbit independent QA stage")
+    parser.add_argument("command", choices=("review", "gate"))
+    parser.add_argument("--repo", type=Path, default=Path.cwd())
+    parser.add_argument("--request", type=Path, required=True)
+    parser.add_argument("--commit", default="HEAD")
+    args = parser.parse_args()
+    repo = args.repo.resolve()
+    request = args.request if args.request.is_absolute() else repo / args.request
+    try:
+        status = run_review(repo, request, args.commit) if args.command == "review" else check_gate(
+            repo, request, args.commit)
+        print(json.dumps(status, indent=2, ensure_ascii=False))
+        return 0 if status.get("passed") else 2
+    except (QAError, subprocess.TimeoutExpired) as exc:
+        print(json.dumps({"passed": False, "status": "error", "reason": str(exc)}), file=sys.stderr)
+        return 3
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

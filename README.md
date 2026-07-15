@@ -12,7 +12,7 @@ Orbit turns a product repository into a durable, observable agentic loop: it rem
 plans the next move, delegates focused tasks, checks the result, repairs failures, and stops at
 hard safety and budget boundaries.
 
-![version](https://img.shields.io/badge/version-0.40.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.41.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![observable](https://img.shields.io/badge/observable-live%20dashboard-e8590c)
@@ -27,8 +27,11 @@ gives the work a durable operating system:
 - **Memory:** project goals, decisions, conventions, and progress persist in `CLAUDE.md` and `.orbit/STATE.md`.
 - **Plan and progress:** every run has a visible checklist, owner, phase, gate, and next action.
 - **Iterative quality:** failures become evidence-backed repair packets and return to the loop.
+- **Independent QA:** an opt-in second provider reviews an exact commit against an armed acceptance
+  manifest; code or manifest changes invalidate the approval.
 - **Adversarial thinking:** a cheap counterfactual probe challenges risky assumptions before build.
-- **Model discipline:** Sonnet handles normal work; Opus is reserved for expensive decisions.
+- **Model discipline:** Sonnet handles normal work; the Opus 4.8 Advisor is invoked on demand for
+  expensive decisions.
 - **Cost control:** token, dollar, runtime, context, iteration, and fan-out limits are explicit.
 - **Parallel work:** independent workers use isolated Git worktrees instead of fighting over one checkout.
 - **Safety:** catastrophic commands are blocked; risky operations pause for approval.

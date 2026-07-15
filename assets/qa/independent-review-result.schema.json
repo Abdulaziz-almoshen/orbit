@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Orbit Independent Review Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "verdict", "score", "summary", "findings", "criteria", "recommendations"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "verdict": { "enum": ["PASS", "CHANGES_REQUIRED", "BLOCKED"] },
+    "score": { "type": "number", "minimum": 0, "maximum": 10 },
+    "summary": { "type": "string", "minLength": 1 },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "severity", "title", "body", "criterion_ids"],
+        "properties": {
+          "id": { "type": "string" },
+          "severity": { "enum": ["P0", "P1", "P2", "P3"] },
+          "title": { "type": "string", "minLength": 1 },
+          "body": { "type": "string", "minLength": 1 },
+          "file": { "type": "string" },
+          "line": { "type": "integer", "minimum": 1 },
+          "criterion_ids": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "criteria": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "verdict", "evidence"],
+        "properties": {
+          "id": { "type": "string" },
+          "verdict": { "enum": ["PASS", "FAIL", "CONCERNS", "WAIVED"] },
+          "evidence": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "recommendations": { "type": "array", "items": { "type": "string" } }
+  }
+}

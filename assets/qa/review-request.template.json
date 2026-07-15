@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "id": "replace-with-milestone-id",
+  "goal": "State the user-visible outcome being implemented.",
+  "baseline_commit": "REPLACE_WITH_COMMIT_BEFORE_THE_ARMED_MANIFEST_COMMIT",
+  "scope": { "include": [], "exclude": [] },
+  "rubric_files": [],
+  "acceptance_criteria": [
+    { "id": "AC-1", "text": "Replace with a measurable acceptance criterion.", "required": true, "evidence": "Name the expected proof." }
+  ],
+  "armed": { "approved": false, "approved_by": "", "approved_at": "" }
+}

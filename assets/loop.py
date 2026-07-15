@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
@@ -230,6 +231,28 @@ def evaluate_gates(cycle_output: dict, cfg: dict) -> dict:
             "_gates_spec": gates}
 
 
+def evaluate_independent_qa(cycle_output: dict, cfg: dict) -> dict:
+    """Run the opt-in, separately configured reviewer against an exact commit."""
+    qa = cfg.get("independent_qa", {}) or {}
+    if qa.get("enabled") is not True:
+        return {"passed": True, "status": "disabled", "reason": "independent QA is opt-in"}
+    request = cycle_output.get("independent_qa_request")
+    commit = cycle_output.get("commit")
+    if not request or not commit:
+        return {"passed": False, "status": "missing_input",
+                "reason": "enabled independent QA requires result.commit and result.independent_qa_request"}
+    runner = Path(cfg.get("paths", {}).get("independent_qa_runner", "scripts/orbit-independent-qa"))
+    command = [sys.executable, str(runner), "review", "--request", str(request), "--commit", str(commit)]
+    proc = subprocess.run(command, text=True, capture_output=True)
+    raw = proc.stdout if proc.stdout.strip() else proc.stderr
+    try:
+        status = json.loads(raw)
+    except Exception:
+        status = {"passed": False, "status": "error", "reason": raw[-2000:] or "review runner failed"}
+    status["passed"] = bool(proc.returncode == 0 and status.get("passed"))
+    return status
+
+
 # ------------------------------------------------------------------- event handlers
 # Same events as the Claude Code hooks, in one portable place. Wire validation/notify.
 def on_inputs_loaded(ctx):    ...  # run input-validation checks; fail input gate on problems
@@ -259,7 +282,7 @@ def update_state(cfg: dict, cycle: int, action: str, eval_result: dict, decision
 
 
 def _g(ev: dict) -> str:
-    return "gates[" + ",".join(k for k in ("input", "quality", "safety") if ev.get(k)) + "]"
+    return "gates[" + ",".join(k for k in ("input", "quality", "safety", "independent_qa") if ev.get(k)) + "]"
 
 
 # ----------------------------------------------------------------- stop conditions
@@ -396,11 +419,20 @@ def run(cfg: dict, resume: bool = False):
         emit("reviewer", "evaluate", "start", "checking gates", cycle=cycle)
         ev = steps.run(f"c{cycle}:evaluate", lambda: evaluate_gates(result, cfg))
         passed = ev["input"] and ev["quality"] and ev["safety"]
+        goal_met = _goal_met(result, cfg)
+        if passed and goal_met:
+            emit("independent-qa", "evaluate", "start", "reviewing exact committed snapshot", cycle=cycle)
+            qa_status = steps.run(f"c{cycle}:independent-qa", lambda: evaluate_independent_qa(result, cfg))
+            ev["independent_qa"] = bool(qa_status.get("passed"))
+            ev.setdefault("reasons", {})["independent_qa"] = qa_status.get("reason", qa_status.get("status", ""))
+            passed = passed and ev["independent_qa"]
+            emit("independent-qa", "evaluate", "done" if ev["independent_qa"] else "blocked",
+                 ev["reasons"]["independent_qa"], cycle=cycle)
         fail_streak = 0 if passed else fail_streak + 1
         emit("reviewer", "evaluate", "done" if passed else "blocked", _g(ev), cycle=cycle)
 
         # UPDATE
-        decision = "done" if (passed and _goal_met(result, cfg)) else \
+        decision = "done" if (passed and goal_met) else \
                    "continue" if passed else "fix-and-retry"
         update_state(cfg, cycle, result.get("summary", "(no summary)"), ev, decision)
         emit("orchestrator", "update", "done", f"decision: {decision}", cycle=cycle)

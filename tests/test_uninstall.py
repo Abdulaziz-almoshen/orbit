@@ -38,7 +38,7 @@ def main():
         subprocess.run([UNINSTALL, "--force"], cwd=d, capture_output=True, text=True)
 
         # removed
-        for gone in (".orbit", "scripts/ralph_loop.sh", "scripts/orbit-status"):
+        for gone in (".orbit", "scripts/ralph_loop.sh", "scripts/orbit-status", "scripts/orbit-independent-qa"):
             if os.path.exists(os.path.join(d, gone)):
                 fails.append(f"orbit-uninstall left {gone} behind")
         # preserved
