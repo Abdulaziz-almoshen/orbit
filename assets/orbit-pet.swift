@@ -35,10 +35,12 @@ final class ReporterDelegate: NSObject, NSApplicationDelegate {
         panel.orderFrontRegardless()
     }
 
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 }
 
 let app = NSApplication.shared
+ProcessInfo.processInfo.disableAutomaticTermination("Orbit reporter is active")
+ProcessInfo.processInfo.disableSuddenTermination()
 app.setActivationPolicy(.accessory)
 let delegate = ReporterDelegate()
 app.delegate = delegate
