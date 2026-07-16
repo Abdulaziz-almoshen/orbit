@@ -213,7 +213,7 @@ def _reporter_state(snap):
         state, urgency = "needs_action", "critical"
         title = "Your answer is needed"
         summary = ("Question: " + question) if attention.get("question_available") else (
-            f"{model} is waiting, but the notification did not include the question.")
+            f"{model} paused and needs your input. Open the session to see the prompt and answer.")
         where = str(attention.get("answer_in") or "").strip()
         next_action = (where if re.match(r"^(answer|open|choose|approve|review)\b", where, re.I)
                        else f"Answer in {where}." if where
@@ -485,8 +485,10 @@ body.collapsed .card{display:none}
 .dismiss{width:24px;height:24px;border:0;background:transparent;color:var(--dim);font-size:19px;line-height:1;border-radius:6px;cursor:pointer}
 .dismiss:hover{background:rgba(255,255,255,.09);color:var(--fg)}
 .inner{padding:11px 14px 13px}
-.kl{font-size:10px;letter-spacing:.13em;color:var(--dim)}
-.task{font-size:15px;font-weight:720;line-height:1.25;margin:1px 0 5px;overflow:hidden;text-overflow:ellipsis}
+.hl{font-size:15px;font-weight:720;line-height:1.25;margin:0 0 6px;overflow:hidden;text-overflow:ellipsis}
+.trow{display:flex;gap:7px;align-items:baseline;margin:0 0 5px}
+.tk{font-size:10px;letter-spacing:.11em;color:var(--dim);text-transform:uppercase;flex:0 0 auto}
+.tn{font-size:12.5px;font-weight:600;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .say{font-size:12.5px;color:#c9d1d9;line-height:1.4;max-height:56px;overflow:hidden}
 .chips{display:flex;gap:5px;flex-wrap:wrap;margin:9px 0}
 .chip{font:10px/1.2 ui-monospace,Menlo,monospace;color:#b8c1ca;border:1px solid var(--line);border-radius:999px;padding:3px 7px;white-space:nowrap}
@@ -495,7 +497,7 @@ body.collapsed .card{display:none}
 .actions{display:flex;gap:7px;flex-wrap:wrap}
 .action{border:1px solid var(--line);border-radius:8px;background:#202731;color:var(--fg);padding:7px 11px;font:600 11.5px ui-sans-serif,system-ui;cursor:pointer}
 .action.primary{background:var(--blue);border-color:var(--blue);color:#08101f}.action:hover{filter:brightness(1.1)}
-[data-mood=needs_action] .proj,[data-mood=needs_action] .task,[data-mood=blocked] .task{color:var(--amber)}
+[data-mood=needs_action] .proj,[data-mood=needs_action] .hl,[data-mood=blocked] .hl{color:var(--amber)}
 @keyframes float{50%{transform:translateY(-5px)}}@keyframes ping{50%{transform:scale(.72);opacity:.55}}
 </style></head><body class=collapsed data-mood=working>
 <div class=wrap>
@@ -503,7 +505,8 @@ body.collapsed .card{display:none}
  <div class=card id=card>
   <div class=bar id=bar><span class=grip>drag</span><span class=proj id=proj>Orbit</span><button class=dismiss id=dismiss title="Dismiss (Esc)">&times;</button></div>
   <div class=inner>
-   <div class=kl>TASK</div><div class=task id=title>Reading state...</div>
+   <div class=hl id=title>Reading state...</div>
+   <div class=trow id=trow hidden><span class=tk>Task</span><span class=tn id=current></span></div>
    <div class=say id=say></div>
    <div class=chips><span class=chip id=actor>session</span><span class=chip id=progress>0/0</span><span class=chip id=timing>live</span><span class=chip id=commit hidden></span></div>
    <div class=next id=next></div>
@@ -520,6 +523,7 @@ function render(x){
  document.body.dataset.mood=x.state||'working';
  var p=x.project||'Orbit'; proj.textContent=p; plabel.textContent=p;
  title.textContent=x.title||'Watching Orbit'; say.textContent=x.summary||'';
+ var task=x.current_task||''; trow.hidden=!task; current.textContent=task;
  actor.textContent=(x.actor||x.model||'session')+(x.session_id?(' '+x.session_id.slice(0,8)):'');
  progress.textContent=(x.tasks_done||0)+'/'+(x.tasks_total||0)+' tasks';
  timing.textContent=x.elapsed?('elapsed '+x.elapsed):(x.quiet?('quiet '+x.quiet):'live');

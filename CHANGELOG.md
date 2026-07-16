@@ -3,6 +3,17 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.47.2
+
+**Reporter card: show the task name distinctly, and stop apologizing when there's no question.**
+
+- The card headline (the state, e.g. "Your answer is needed") and the active task name are now
+  separate rows — the task name gets its own labeled line and hides when there is no active task,
+  instead of the "TASK" label sitting over the status headline.
+- When Claude pauses on a bare permission prompt that carries no question text, the card now reads
+  "…paused and needs your input. Open the session to see the prompt and answer." instead of the
+  apologetic "the notification did not include the question."
+
 ## 0.47.1
 
 **Fix: `orbit-pet start` now launches the board when run from the Orbit repo itself.**
