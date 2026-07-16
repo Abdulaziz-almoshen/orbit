@@ -27,6 +27,34 @@ from urllib.parse import urlencode
 
 ORBIT = Path(os.environ.get("ORBIT_DIR", ".orbit"))
 
+# Auto-follow: when a root is configured, the board tracks whichever project under it changed its Orbit
+# state most recently, so one reporter can watch all your repos without being repointed by hand.
+FOLLOW_ROOT = Path(os.environ["ORBIT_FOLLOW"]).expanduser() if os.environ.get("ORBIT_FOLLOW") else None
+
+
+def _mtime(path):
+    try:
+        return path.stat().st_mtime
+    except Exception:
+        return 0.0
+
+
+def _active_orbit():
+    """The most-recently-active .orbit under FOLLOW_ROOT (one level deep), or the fixed ORBIT if none."""
+    if not FOLLOW_ROOT:
+        return ORBIT
+    best, best_t = None, -1.0
+    try:
+        for od in FOLLOW_ROOT.glob("*/.orbit"):
+            if not od.is_dir():
+                continue
+            t = max(_mtime(od / n) for n in ("run.json", "activity.jsonl", "attention.json", "tasks.json"))
+            if t > best_t:
+                best, best_t = od, t
+    except Exception:
+        return ORBIT
+    return best or ORBIT
+
 # Redact anything that looks like a credential before it reaches the page.
 _SECRET = re.compile(
     r'(?i)\b(api[_-]?key|secret|token|password|passwd|bearer|authorization|client[_-]?secret)\b'
@@ -290,6 +318,9 @@ def _reporter_state(snap):
 
 def snapshot() -> dict:
     """The whole board as one redacted, JSON-safe object. Every field degrades to empty, never raises."""
+    global ORBIT
+    if FOLLOW_ROOT:                       # re-resolve each poll so the reporter follows the active repo
+        ORBIT = _active_orbit()
     run = _json("run.json", {}) or {}
     tasks = _json("tasks.json", []) or []
     agents = _json("agents.json", {}) or {}
@@ -625,9 +656,18 @@ def main():
     ap = argparse.ArgumentParser(description="Read-only Orbit web board over .orbit/")
     ap.add_argument("--port", type=int, default=0, help="port (0 = auto-pick)")
     ap.add_argument("--once", action="store_true", help="print the JSON snapshot and exit (no server)")
+    ap.add_argument("--follow", metavar="ROOT", default=None,
+                    help="track whichever project under ROOT is most recently active (one level deep)")
     args = ap.parse_args()
+    global FOLLOW_ROOT, ORBIT
+    if args.follow:
+        FOLLOW_ROOT = Path(args.follow).expanduser()
+    if FOLLOW_ROOT:                        # follow mode: resolve to the active project up front
+        ORBIT = _active_orbit()
     if not ORBIT.is_dir():
-        print(f"orbit-dashboard: no {ORBIT}/ here — run /orbit first, or set ORBIT_DIR.", file=sys.stderr)
+        hint = f"no active .orbit under {FOLLOW_ROOT}" if FOLLOW_ROOT else \
+            f"no {ORBIT}/ here — run /orbit first, or set ORBIT_DIR."
+        print(f"orbit-dashboard: {hint}", file=sys.stderr)
         sys.exit(1)
     if args.once:
         print(json.dumps(snapshot(), indent=2))

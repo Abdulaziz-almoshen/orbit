@@ -12,7 +12,7 @@ Orbit turns a product repository into a durable, observable agentic loop: it rem
 plans the next move, delegates focused tasks, checks the result, repairs failures, and stops at
 hard safety and budget boundaries.
 
-![version](https://img.shields.io/badge/version-0.47.4-2b6cb0)
+![version](https://img.shields.io/badge/version-0.48.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![observable](https://img.shields.io/badge/observable-live%20dashboard-e8590c)

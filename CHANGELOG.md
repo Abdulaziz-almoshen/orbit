@@ -3,6 +3,18 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.48.0
+
+**The Reporter pet now auto-follows your active repo — and always runs the latest board.**
+
+- **Auto-follow (default).** `orbit-pet start` watches every project under the parent of `--project`
+  and tracks whichever one changed its Orbit state most recently, re-resolving each poll. No more
+  "the pet was pointed at the wrong repo" — work in any repo and the card follows you. The board gains
+  a `--follow ROOT` flag (and honors `ORBIT_FOLLOW`); pin to one repo with `orbit-pet start --no-follow`.
+- **Always the current reporter.** The pet now runs the board shipped alongside it, not each project's
+  own scaffolded copy — so every repo gets the latest reporter (honest stopped/question states, the
+  task-done beat, kinder copy) immediately, without being re-scaffolded.
+
 ## 0.47.4
 
 **New: the Reporter announces each task completion — "✓ <task> is done — ready for the next."**

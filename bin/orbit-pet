@@ -22,27 +22,30 @@ def live_pid(path=PID):
         return None
 
 
-def ensure_dashboard(url: str, project: Path):
-    """Start the project's read-only board when the reporter URL is not already available."""
+def ensure_dashboard(url: str, project: Path, follow_root: Path = None):
+    """Start the read-only board when the reporter URL is not already available."""
     try:
         urllib.request.urlopen(url, timeout=1).read(256)
         return live_pid(DASH_PID)
     except Exception:
         pass
-    # A scaffolded project ships the board wrapper at scripts/orbit-dashboard; the Orbit repo itself
-    # keeps the source at assets/orbit-dashboard. Accept either so the pet starts in both places.
-    dashboard = project / "scripts" / "orbit-dashboard"
+    # Always run the latest board shipped alongside this orbit-pet, so every project — however long ago
+    # it was scaffolded — gets the current reporter. Fall back to the project's own wrapper if missing.
+    dashboard = ROOT / "assets" / "orbit-dashboard"
     if not dashboard.is_file():
-        dashboard = ROOT / "assets" / "orbit-dashboard"
+        dashboard = project / "scripts" / "orbit-dashboard"
     parsed = urlparse(url)
     if parsed.hostname not in ("127.0.0.1", "localhost") or not parsed.port or not dashboard.is_file():
         raise SystemExit(f"Orbit dashboard pet view is unavailable at {url}; run scripts/orbit-dashboard first")
+    env = {**os.environ}
+    if follow_root:
+        env["ORBIT_FOLLOW"] = str(follow_root)     # board tracks the most-active project under this root
     log = (HOME / "dashboard.log").open("ab", buffering=0)
     # The scaffolded wrapper is +x; the raw repo source is not, so run it under the interpreter then.
     cmd = [str(dashboard), "--port", str(parsed.port)]
     if not os.access(dashboard, os.X_OK):
         cmd = [sys.executable, *cmd]
-    proc = subprocess.Popen(cmd, cwd=project,
+    proc = subprocess.Popen(cmd, cwd=project, env=env,
                             stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
                             start_new_session=True)
     DASH_PID.write_text(str(proc.pid) + "\n")
@@ -70,6 +73,10 @@ def main():
     ap.add_argument("command", choices=("start", "stop", "status"), nargs="?", default="start")
     ap.add_argument("--url", default="http://127.0.0.1:8765/pet")
     ap.add_argument("--project", type=Path, default=Path.cwd())
+    ap.add_argument("--follow", metavar="ROOT", default=None,
+                    help="track the most-active project under ROOT (default: the project's parent dir)")
+    ap.add_argument("--no-follow", action="store_true",
+                    help="watch only --project, do not follow other repos")
     args = ap.parse_args(); HOME.mkdir(parents=True, exist_ok=True)
     pid = live_pid()
     if args.command == "status":
@@ -98,14 +105,19 @@ def main():
     if pid:
         print(f"Orbit reporter pet already running (pid {pid})."); return 0
     project = args.project.resolve()
-    dashboard_pid = ensure_dashboard(args.url, project)
+    # Follow by default: watch every repo under the project's parent, tracking whichever is active.
+    follow_root = None if args.no_follow else (Path(args.follow).expanduser().resolve()
+                                               if args.follow else project.parent)
+    dashboard_pid = ensure_dashboard(args.url, project, follow_root)
     log = (HOME / "pet.log").open("ab", buffering=0)
     proc = subprocess.Popen([str(binary()), args.url], stdin=subprocess.DEVNULL,
                             stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
     PID.write_text(str(proc.pid) + "\n")
     STATE.write_text(json.dumps({"pid": proc.pid, "url": args.url, "project": str(project),
+                                 "follow_root": str(follow_root) if follow_root else None,
                                  "dashboard_pid": dashboard_pid}) + "\n")
-    print(f"Orbit reporter pet started (pid {proc.pid}) · {project.name} · {args.url}")
+    scope = f"following {follow_root}" if follow_root else project.name
+    print(f"Orbit reporter pet started (pid {proc.pid}) · {scope} · {args.url}")
     return 0
 
 

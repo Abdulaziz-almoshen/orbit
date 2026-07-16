@@ -109,6 +109,26 @@ def test_task_done_beat():
         ck("Add refund path" in r["next_action"], f"the next task must be surfaced: {r}")
 
 
+def test_follow_tracks_the_active_project():
+    """In follow mode the board tracks whichever project under the root changed its Orbit state most
+    recently — so one reporter can watch every repo without being repointed by hand."""
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        for name in ("alpha", "beta"):
+            (root / name / ".orbit").mkdir(parents=True)
+            (root / name / ".orbit" / "run.json").write_text(json.dumps({"active_task": f"{name} work"}))
+        time.sleep(0.02)
+        (root / "beta" / ".orbit" / "run.json").write_text(json.dumps({"active_task": "beta work"}))
+        m = _load(root / "alpha" / ".orbit")     # start pinned to alpha
+        m.FOLLOW_ROOT = root
+        ck(m.snapshot()["project"]["name"] == "beta",
+           "follow must resolve to the most recently active project, not the pinned one")
+        # make alpha newest; the very next snapshot must switch without a restart
+        time.sleep(0.02)
+        (root / "alpha" / ".orbit" / "run.json").write_text(json.dumps({"active_task": "alpha work again"}))
+        ck(m.snapshot()["project"]["name"] == "alpha", "follow must re-resolve every snapshot")
+
+
 def test_reporter_progress_and_stall():
     with tempfile.TemporaryDirectory() as d:
         orbit = Path(d) / ".orbit"; orbit.mkdir()
@@ -233,7 +253,8 @@ def test_readonly_http_surface():
 
 def main():
     for fn in (test_snapshot_shape_and_redaction, test_stop_reason_is_not_a_question,
-               test_task_done_beat, test_reporter_progress_and_stall, test_qa_scene_state,
+               test_task_done_beat, test_follow_tracks_the_active_project,
+               test_reporter_progress_and_stall, test_qa_scene_state,
                test_empty_and_malformed_never_crash, test_readonly_http_surface):
         try:
             fn()
