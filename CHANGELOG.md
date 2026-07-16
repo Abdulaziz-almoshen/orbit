@@ -3,6 +3,21 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.47.0
+
+**The Reporter pet is now movable, dismissable, and calm — a card you control, not a fixed banner.**
+
+- **Drag it anywhere.** The card and the pet are drag handles: the page reports cursor deltas to the
+  native shell over the JS bridge, which moves the panel and clamps it on-screen. (The borderless
+  panel's own `isMovableByWindowBackground` never fired because the WebView covers it.) The last
+  position is remembered in `~/.orbit/pet-pos.json` and restored on the next launch.
+- **Dismiss the message.** `×` or `Esc` collapses the card down to just the pet; the native window
+  shrinks with it so the reporter stops covering your desktop. It re-opens automatically on the next
+  new question or QA/deploy attention, and you can click the pet to open it any time.
+- **Clear content.** The card leads with the current task name and the actual question — not a vague
+  "something needs you" line. **Focus session** and **Open board** stay wired to the native shell.
+- Card-only and silent: attention brings the card forward, never a system notification or sound.
+
 ## 0.46.0
 
 **Orbit Reporter is now an actionable situation manager, not a passive speech bubble.**

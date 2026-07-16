@@ -178,8 +178,9 @@ def test_readonly_http_surface():
                 ck("Orbit board" in html, "GET / must serve the board HTML")
                 pet = urllib.request.urlopen(base + "/pet", timeout=3).read().decode()
                 ck(all(x in pet for x in ("Orbit reporter", "Open board", "primary_action",
-                                           "secondary_action", "progress_percent", "messageHandlers?.orbit")),
-                   "GET /pet must serve the actionable live situation panel")
+                                           "secondary_action", "type:'drag'", "type:'resize'",
+                                           "messageHandlers?.orbit")),
+                   "GET /pet must serve the draggable, dismissable reporter card")
                 data = json.loads(urllib.request.urlopen(base + "/data", timeout=3).read())
                 ck(data["run"].get("phase") == "test", "GET /data must serve the snapshot")
                 ck(data.get("project", {}).get("name") == Path(d).name,
