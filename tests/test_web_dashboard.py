@@ -92,6 +92,23 @@ def test_stop_reason_is_not_a_question():
         ck("max_iterations (2)" in r["summary"], f"the stop reason must be shown: {r}")
 
 
+def test_task_done_beat():
+    """When a task finishes and nothing is actively running, the reporter announces the completion and
+    what's next — a distinct 'task_done' beat, not silent progress or an all-done summary."""
+    with tempfile.TemporaryDirectory() as d:
+        orbit = Path(d) / ".orbit"
+        orbit.mkdir()
+        (orbit / "run.json").write_text(json.dumps({"active_task": ""}))
+        (orbit / "tasks.json").write_text(json.dumps([
+            {"subject": "Wire Stripe webhook", "status": "completed"},
+            {"subject": "Add refund path", "status": "pending"},
+            {"subject": "Write deploy hook", "status": "pending"}]))
+        r = _load(orbit).snapshot()["reporter"]
+        ck(r["state"] == "task_done", f"a finished task with more queued must be 'task_done': {r}")
+        ck("Wire Stripe webhook" in r["summary"], f"the finished task must be named: {r}")
+        ck("Add refund path" in r["next_action"], f"the next task must be surfaced: {r}")
+
+
 def test_reporter_progress_and_stall():
     with tempfile.TemporaryDirectory() as d:
         orbit = Path(d) / ".orbit"; orbit.mkdir()
@@ -216,7 +233,7 @@ def test_readonly_http_surface():
 
 def main():
     for fn in (test_snapshot_shape_and_redaction, test_stop_reason_is_not_a_question,
-               test_reporter_progress_and_stall, test_qa_scene_state,
+               test_task_done_beat, test_reporter_progress_and_stall, test_qa_scene_state,
                test_empty_and_malformed_never_crash, test_readonly_http_surface):
         try:
             fn()

@@ -3,6 +3,17 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.47.4
+
+**New: the Reporter announces each task completion — "✓ <task> is done — ready for the next."**
+
+- When a task finishes and nothing else is actively running, the pet pops a distinct `task_done`
+  beat naming the finished task and the next one queued (or "ready for the next task" when the queue
+  is empty), then goes calm. Previously a mid-run completion silently rolled to the next task and only
+  an all-tasks-complete state was ever announced.
+- Completion milestones (`task_done` and all-done) now surface the card even though they are not
+  alarms — a positive green beat, dismissable like any other.
+
 ## 0.47.3
 
 **Fix: the Reporter no longer cries "Your answer is needed" when the loop simply stopped.**

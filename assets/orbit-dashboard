@@ -260,6 +260,17 @@ def _reporter_state(snap):
         state, title = "qa_ready", "Commit is ready for QA"
         summary = f"Commit {head[:8] or 'HEAD'} is queued for independent review."
         next_action = "Waiting for the configured QA provider to start."
+    elif done and total and done < total:
+        # A task just finished and nothing is actively running: announce the completion + what's next.
+        # `done` is in the event_key, so this pops once when the count rises, then goes calm.
+        last = next((t for t in reversed(tasks) if isinstance(t, dict)
+                     and str(t.get("status")) == "completed"), None)
+        finished = _task_title(last, "") if last else ""
+        state, urgency, title = "task_done", "medium", "A task is done"
+        summary = (f"✓ {finished} — done ({done} of {total})." if finished
+                   else f"{done} of {total} tasks finished.")
+        next_action = (f"Ready for the next task: {next_task}" if next_task
+                       else "Ready for the next task — open the board to see what's queued.")
     elif total and done >= total:
         state, title = "done", "All reported tasks are complete"
         summary = f"{done} of {total} tasks finished."
@@ -485,7 +496,8 @@ PET_PAGE = """<!doctype html><html lang=en><head><meta charset=utf-8>
 .badge{position:absolute;right:-4px;top:2px;width:16px;height:16px;border-radius:50%;background:var(--blue);border:3px solid #0e1116}
 [data-mood=needs_action] .badge,[data-mood=slow] .badge{background:var(--amber);animation:ping 1.1s infinite}
 [data-mood=qa] .badge{background:#10a37f;animation:ping 1.1s infinite}
-[data-mood=done] .badge{background:var(--green)}
+[data-mood=done] .badge,[data-mood=task_done] .badge{background:var(--green)}
+[data-mood=task_done] .hl{color:var(--green)}
 [data-mood=blocked] .badge,[data-mood=stalled] .badge{background:var(--red);animation:ping .85s infinite}
 [data-mood=stopped] .badge{background:var(--dim)}
 .plabel{font-size:9px;color:var(--dim);margin-top:8px;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;overflow:hidden}
@@ -552,7 +564,8 @@ async function tick(){
   render(x);
   if(x.event_key && x.event_key!==lastKey){
    var initial=!lastKey; lastKey=x.event_key;
-   if(['critical','high'].indexOf(x.urgency)>=0 && x.event_key!==dismissedKey){
+   var notify=['critical','high'].indexOf(x.urgency)>=0||x.state==='task_done'||x.state==='done';
+   if(notify && x.event_key!==dismissedKey){
     if(!initial) post({type:'transition',urgency:x.urgency});
     setSize(false);
    }
