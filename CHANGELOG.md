@@ -3,6 +3,19 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.47.3
+
+**Fix: the Reporter no longer cries "Your answer is needed" when the loop simply stopped.**
+
+- A halt marker in `blocked_question` (e.g. `STOP — max_iterations reached`) was treated as a user
+  question, so the card raised a critical "Your answer is needed" alarm with no actual question to
+  show — and sat there indefinitely. Halt markers now route to an honest `stopped` state: "The loop
+  stopped · Reason: … · Open the board and restart the loop to continue." A real question (captured
+  text ending in "?", a permission prompt, or `question_available`) still shows verbatim.
+- The "TASK" label now truly hides when there is no active task (a `.trow{display:flex}` rule was
+  overriding the `[hidden]` attribute).
+- Regression test: a STOP reason must become `stopped`, never a phantom critical question.
+
 ## 0.47.2
 
 **Reporter card: show the task name distinctly, and stop apologizing when there's no question.**

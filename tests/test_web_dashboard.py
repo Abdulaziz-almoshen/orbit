@@ -75,6 +75,23 @@ def test_snapshot_shape_and_redaction():
            f"focus action must carry the exact session id: {reporter['primary_action']}")
 
 
+def test_stop_reason_is_not_a_question():
+    """A halt marker in blocked_question (the loop stopped itself) must NOT masquerade as a user
+    question. Otherwise the card cries 'Your answer is needed' with no real question to show."""
+    with tempfile.TemporaryDirectory() as d:
+        orbit = Path(d) / ".orbit"
+        orbit.mkdir()
+        (orbit / "run.json").write_text(json.dumps({"phase": "decide", "active_role": "reviewer",
+            "active_task": "", "blocked_question": "STOP — max_iterations (2) reached"}))
+        r = _load(orbit).snapshot()["reporter"]
+        ck(r["state"] == "stopped", f"a STOP halt must become a 'stopped' state, not needs_action: {r}")
+        ck(r["title"] == "The loop stopped" and r["urgency"] != "critical",
+           f"a halt must be reported honestly, not as a critical question: {r}")
+        ck("Your answer is needed" not in r["title"] and "?" not in r["summary"],
+           f"a halt must not manufacture a phantom question: {r}")
+        ck("max_iterations (2)" in r["summary"], f"the stop reason must be shown: {r}")
+
+
 def test_reporter_progress_and_stall():
     with tempfile.TemporaryDirectory() as d:
         orbit = Path(d) / ".orbit"; orbit.mkdir()
@@ -198,7 +215,8 @@ def test_readonly_http_surface():
 
 
 def main():
-    for fn in (test_snapshot_shape_and_redaction, test_reporter_progress_and_stall, test_qa_scene_state,
+    for fn in (test_snapshot_shape_and_redaction, test_stop_reason_is_not_a_question,
+               test_reporter_progress_and_stall, test_qa_scene_state,
                test_empty_and_malformed_never_crash, test_readonly_http_surface):
         try:
             fn()

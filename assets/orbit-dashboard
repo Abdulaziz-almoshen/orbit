@@ -207,17 +207,28 @@ def _reporter_state(snap):
     title, summary, next_action = "Watching Orbit", "No active work is reported yet.", "Waiting for activity."
 
     question = str(run.get("blocked_question") or attention.get("message") or "").strip()
-    needs_input = bool(question and (run.get("blocked_question") or attention.get("question_available") or
-                                     re.search(r"question|permission|input|choose|approve", question, re.I)))
+    # A halt marker (the loop stopped itself — e.g. "STOP — max_iterations reached") is NOT a question
+    # the user must answer. Treating it as one is a false alarm: the card claims an answer is needed but
+    # has no real question to show. Detect it and route to an honest "the loop stopped" state instead.
+    stopped = bool(question and (re.match(r"\s*STOP\b", question, re.I)
+                                 or re.search(r"max[ _-]?iterations", question, re.I)))
+    has_question = attention.get("question_available") or question.rstrip().endswith("?")
+    needs_input = bool(question and not stopped and (has_question or
+                       re.search(r"question|permission|choose|approve|which|should i", question, re.I)))
     if needs_input:
         state, urgency = "needs_action", "critical"
         title = "Your answer is needed"
-        summary = ("Question: " + question) if attention.get("question_available") else (
+        summary = ("Question: " + question) if has_question else (
             f"{model} paused and needs your input. Open the session to see the prompt and answer.")
         where = str(attention.get("answer_in") or "").strip()
         next_action = (where if re.match(r"^(answer|open|choose|approve|review)\b", where, re.I)
                        else f"Answer in {where}." if where
                        else "Open the originating session and answer there.")
+    elif stopped:
+        state, urgency, title = "stopped", "high", "The loop stopped"
+        reason = re.sub(r"^\s*STOP\s*[—\-:]*\s*", "", question).strip() or "the run halted"
+        summary = f"Reason: {reason}. Nothing is running now — the loop will not continue on its own."
+        next_action = "Open the board to review, then restart the loop if you want it to continue."
     elif qa.get("status") == "changes_required":
         state, urgency, title = "blocked", "high", "QA returned findings"
         summary = "The exact commit was rejected and must be repaired before the pipeline continues."
@@ -476,6 +487,7 @@ PET_PAGE = """<!doctype html><html lang=en><head><meta charset=utf-8>
 [data-mood=qa] .badge{background:#10a37f;animation:ping 1.1s infinite}
 [data-mood=done] .badge{background:var(--green)}
 [data-mood=blocked] .badge,[data-mood=stalled] .badge{background:var(--red);animation:ping .85s infinite}
+[data-mood=stopped] .badge{background:var(--dim)}
 .plabel{font-size:9px;color:var(--dim);margin-top:8px;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;overflow:hidden}
 .card{flex:1 1 auto;min-width:0;order:1;background:rgba(22,27,34,.98);border:1px solid var(--line);border-radius:14px;box-shadow:0 16px 36px rgba(0,0,0,.5)}
 body.collapsed .card{display:none}
@@ -487,6 +499,7 @@ body.collapsed .card{display:none}
 .inner{padding:11px 14px 13px}
 .hl{font-size:15px;font-weight:720;line-height:1.25;margin:0 0 6px;overflow:hidden;text-overflow:ellipsis}
 .trow{display:flex;gap:7px;align-items:baseline;margin:0 0 5px}
+.trow[hidden]{display:none}
 .tk{font-size:10px;letter-spacing:.11em;color:var(--dim);text-transform:uppercase;flex:0 0 auto}
 .tn{font-size:12.5px;font-weight:600;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .say{font-size:12.5px;color:#c9d1d9;line-height:1.4;max-height:56px;overflow:hidden}
@@ -498,6 +511,7 @@ body.collapsed .card{display:none}
 .action{border:1px solid var(--line);border-radius:8px;background:#202731;color:var(--fg);padding:7px 11px;font:600 11.5px ui-sans-serif,system-ui;cursor:pointer}
 .action.primary{background:var(--blue);border-color:var(--blue);color:#08101f}.action:hover{filter:brightness(1.1)}
 [data-mood=needs_action] .proj,[data-mood=needs_action] .hl,[data-mood=blocked] .hl{color:var(--amber)}
+[data-mood=stopped] .hl{color:var(--fg)}[data-mood=stopped] .proj{color:var(--dim)}
 @keyframes float{50%{transform:translateY(-5px)}}@keyframes ping{50%{transform:scale(.72);opacity:.55}}
 </style></head><body class=collapsed data-mood=working>
 <div class=wrap>
