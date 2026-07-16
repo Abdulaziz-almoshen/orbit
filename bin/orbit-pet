@@ -29,12 +29,20 @@ def ensure_dashboard(url: str, project: Path):
         return live_pid(DASH_PID)
     except Exception:
         pass
+    # A scaffolded project ships the board wrapper at scripts/orbit-dashboard; the Orbit repo itself
+    # keeps the source at assets/orbit-dashboard. Accept either so the pet starts in both places.
     dashboard = project / "scripts" / "orbit-dashboard"
+    if not dashboard.is_file():
+        dashboard = ROOT / "assets" / "orbit-dashboard"
     parsed = urlparse(url)
     if parsed.hostname not in ("127.0.0.1", "localhost") or not parsed.port or not dashboard.is_file():
         raise SystemExit(f"Orbit dashboard pet view is unavailable at {url}; run scripts/orbit-dashboard first")
     log = (HOME / "dashboard.log").open("ab", buffering=0)
-    proc = subprocess.Popen([str(dashboard), "--port", str(parsed.port)], cwd=project,
+    # The scaffolded wrapper is +x; the raw repo source is not, so run it under the interpreter then.
+    cmd = [str(dashboard), "--port", str(parsed.port)]
+    if not os.access(dashboard, os.X_OK):
+        cmd = [sys.executable, *cmd]
+    proc = subprocess.Popen(cmd, cwd=project,
                             stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
                             start_new_session=True)
     DASH_PID.write_text(str(proc.pid) + "\n")

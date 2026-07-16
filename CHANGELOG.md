@@ -3,6 +3,15 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.47.1
+
+**Fix: `orbit-pet start` now launches the board when run from the Orbit repo itself.**
+
+- `ensure_dashboard` looked only for the scaffolded `scripts/orbit-dashboard` wrapper; running the pet
+  from the Orbit source tree (where the board lives at `assets/orbit-dashboard`) failed with "dashboard
+  pet view is unavailable." It now falls back to the repo source, and launches it under the Python
+  interpreter when the file isn't marked executable. Scaffolded projects are unaffected.
+
 ## 0.47.0
 
 **The Reporter pet is now movable, dismissable, and calm — a card you control, not a fixed banner.**
