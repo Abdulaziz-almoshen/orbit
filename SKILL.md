@@ -60,9 +60,11 @@ v{x}", not a guaranteed fresh check. This preamble is the only "phone-home"; the
 
 The literal preamble also performs a quiet, safe scaffold self-heal whenever the current directory
 has `.orbit/`: missing Orbit-owned files are added, proven-unchanged managed checks are carried
-forward, and `setup.json` is restamped. It never edits settings, roles, CLAUDE.md, domain skills,
-customized checks, or a project with an active writer lock. Deliberate hook removals therefore remain
-removed. The output reports `already healthy`, `repaired N file(s)`, or `preserved (active writer lock)`.
+forward, and `setup.json` is restamped. It never edits CLAUDE.md, portable roles, role bodies, domain
+skills, customized checks, or a project with an active writer lock. It may add Orbit's observer keys
+to known worker frontmatter and enable the project observer env flag; explicit observer/env values
+always win. Deliberate hook removals therefore remain removed. The output reports `already healthy`,
+`repaired N file(s)`, or `preserved (active writer lock)`.
 
 For parallel implementation, keep the coordinator checkout as the integration writer and create an
 isolated worker with `scripts/orbit-worktree create --task <slug>`. Workers may write their own

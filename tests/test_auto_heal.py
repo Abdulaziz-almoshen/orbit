@@ -23,6 +23,9 @@ def main():
         target = Path(td)
         (target / ".orbit/locks").mkdir(parents=True)
         (target / ".claude").mkdir()
+        (target / ".claude/agents").mkdir()
+        (target / ".claude/agents/backend-engineer.md").write_text(
+            "---\nname: backend-engineer\ntools: Read, Write\n---\n\n# Custom backend worker\nKEEP ME\n")
         (target / ".orbit/setup.json").write_text(json.dumps({
             "orbit_version": "0.28.1", "surfaces": ["api"], "domain_skills": ["domain"]
         }))
@@ -35,6 +38,14 @@ def main():
             failures.append("missing engine was not restored")
         if not (target / ".orbit/skills/iterative-repair.md").exists():
             failures.append("missing playbook was not restored")
+        worker = (target / ".claude/agents/backend-engineer.md").read_text()
+        if "observer: watchdog" not in worker or "KEEP ME" not in worker:
+            failures.append("auto-heal did not activate the observer while preserving the worker body")
+        if not (target / ".claude/agents/watchdog.md").exists():
+            failures.append("auto-heal did not restore the watchdog agent")
+        healed_settings = json.loads((target / ".claude/settings.json").read_text())
+        if healed_settings.get("env", {}).get("CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS") != "1":
+            failures.append("auto-heal did not enable the observer environment gate")
         setup = json.loads((target / ".orbit/setup.json").read_text())
         if setup.get("orbit_version") != (ROOT / "VERSION").read_text().strip():
             failures.append("setup metadata was not stamped to plugin version")

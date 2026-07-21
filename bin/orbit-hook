@@ -99,6 +99,11 @@ def _permission_text(data):
 def _map(event, data):
     """Map a Claude Code hook event to activity.emit() kwargs, or None to ignore this event."""
     agent = _redact(data.get("agent_type") or data.get("agent") or "subagent", 24) or "subagent"
+    # Claude's observer is a silent sidecar, not an Orbit worker. Letting its background lifecycle
+    # become the active role would hide the implementer it watches and corrupt elapsed-time/status
+    # reporting. ObserverReport delivery stays in-band with the worker and needs no telemetry mirror.
+    if agent == "watchdog" and event in ("SubagentStart", "SubagentStop"):
+        return None
     if event == "SubagentStart":
         return {"role": agent, "phase": "act", "status": "start", "msg": f"{agent} started"}
     if event == "SubagentStop":

@@ -133,6 +133,13 @@ Keep the two in sync: the `.orbit/roles/` spec is the source of truth; the
 `.claude/agents/` file is its Claude Code embodiment. See `assets/claude-agents/` for a
 worked example.
 
+Implementation adapters additionally declare `observer: watchdog` plus a narrow `observerMessage`.
+Claude Code auto-spawns `.claude/agents/watchdog.md` as a silent, read-only sidecar when the
+experimental observer gate is available. This watchdog is intentionally **not** mirrored into
+`.orbit/roles/`: it is runtime supervision, never a role the Orchestrator may dispatch, and its
+advice cannot grant user authority or replace the Reviewer/QA gates. Orbit's normal hook activation
+sets `CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS=1` unless the project already has an explicit value.
+
 ## Handoff protocol
 
 Parallel roles must not corrupt shared state. The rules:

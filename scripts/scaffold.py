@@ -266,6 +266,18 @@ DESIGN_GATE_FRONTEND = [("checks/design-gate.py", ".orbit/checks/design-gate.py"
 ROLES_CORE = ["dispatcher", "orchestrator", "advisor", "product-discovery", "market-researcher", "planner",
               "reviewer", "qa-engineer", "reporter", "safety-gate"]
 
+# Claude Code-native sidecars. These are deliberately not mirrored into `.orbit/roles/`: the
+# portable runtime has no ObserverReport/digest primitive, and presenting a watchdog as a normal
+# role would invite the orchestrator to dispatch it as a worker.
+CLAUDE_OBSERVERS = ["watchdog"]
+WORKER_AGENT_NAMES = ("builder", "frontend-engineer", "backend-engineer", "mobile-developer",
+                      "data-engineer", "cli-engineer")
+OBSERVER_MESSAGE = (
+    "  Watch this implementation for scope drift, weakened or skipped tests, bypassed Orbit gates,\n"
+    "  unsupported claims of proof, and edits to permissions or governing config. Report only when a\n"
+    "  concise warning can prevent a mistake from compounding."
+)
+
 # The PROJECT-SPECIFIC specialists — provisioned from the detected surfaces, NOT a fixed template.
 # surface keyword -> (engineer filename, display name, what it owns). One engineer per surface;
 # duplicates (web+frontend) collapse to one. Generated from builder.md with the name substituted.
@@ -386,6 +398,61 @@ def _engineer_text(builder: str, name: str, display: str, scope: str) -> str:
                   f"# Role: {display} (Claude Code subagent)")
     t = t.replace("Mirrors `.orbit/roles/builder.md`", f"Mirrors `.orbit/roles/{name}.md`")
     return t
+
+
+def _ensure_worker_observers(target: Path, changed: list, warnings: list) -> None:
+    """Add the observer keys to existing Orbit workers without replacing their customized bodies.
+
+    Existing `observer:` declarations are user intent and always win. Malformed/non-frontmatter
+    files are preserved with a warning. This narrow additive migration is what makes a project
+    refresh activate the watchdog instead of limiting it to newly scaffolded repositories.
+    """
+    agents = target / ".claude/agents"
+    for name in WORKER_AGENT_NAMES:
+        path = agents / f"{name}.md"
+        if not path.exists():
+            continue
+        try:
+            original = path.read_text()
+            match = re.match(r"\A---\n(?P<front>.*?)\n---\n", original, re.DOTALL)
+            if not match:
+                warnings.append(f"{path.relative_to(target)} has malformed frontmatter — observer not added")
+                continue
+            front = match.group("front")
+            if re.search(r"(?m)^observer\s*:", front):
+                continue                              # preserve another observer or an explicit local choice
+            addition = "\nobserver: watchdog"
+            if not re.search(r"(?m)^observerMessage\s*:", front):
+                addition += "\nobserverMessage: >-\n" + OBSERVER_MESSAGE
+            updated = original[:match.end("front")] + addition + original[match.end("front"):]
+            path.write_text(updated)
+            changed.append(f"{path.relative_to(target)}  (added observer watchdog; body preserved)")
+        except Exception as exc:
+            warnings.append(f"Could not add observer to {path.relative_to(target)}: {exc}")
+
+
+def _ensure_observer_setting(target: Path, changed: list, warnings: list) -> None:
+    """Enable Claude's observer gate project-wide, preserving explicit values and invalid files."""
+    path = target / ".claude/settings.json"
+    try:
+        data = json.loads(path.read_text()) if path.exists() else {}
+    except (json.JSONDecodeError, ValueError) as exc:
+        warnings.append(f"{path.relative_to(target)} is invalid JSON ({exc}); observer flag not added")
+        return
+    env = data.get("env")
+    if env is None:
+        env = data["env"] = {}
+    if not isinstance(env, dict):
+        warnings.append(f"{path.relative_to(target)} env is not an object; observer flag not added")
+        return
+    if "CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS" in env:
+        return                                          # preserve explicit enable OR opt-out
+    env["CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS"] = "1"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        path.with_suffix(f".json.bak.{int(time.time())}").write_text(path.read_text())
+    path.write_text(json.dumps(data, indent=2) + "\n")
+    changed.append(".claude/settings.json  (enabled experimental observer agents; explicit values preserved)")
 
 
 def resolve_engineers(surfaces):
@@ -562,7 +629,9 @@ def scaffold_drift(target: Path) -> dict:
     cur = _orbit_version()
     proj_v = _read_json(target / ".orbit/setup.json").get("orbit_version")
     has_ui = (target / ".claude/agents/designer.md").exists()
-    expected = [dst for _, dst, _ in FILE_PLAN] + [f".orbit/skills/{pb}" for pb in PLAYBOOKS_ALWAYS]
+    expected = ([dst for _, dst, _ in FILE_PLAN]
+                + [f".orbit/skills/{pb}" for pb in PLAYBOOKS_ALWAYS]
+                + [f".claude/agents/{name}.md" for name in CLAUDE_OBSERVERS])
     if has_ui:
         expected += [f".orbit/skills/{pb}" for pb in PLAYBOOKS_FRONTEND]
         expected += [d for _, d in DESIGN_GATE_FRONTEND]
@@ -744,8 +813,9 @@ def _active_writer_lock(target: Path) -> bool:
 def _auto_heal(target: Path) -> str:
     """Perform the safe, non-interactive subset of a full scaffold refresh.
 
-    This never edits settings, CLAUDE.md, roles, domain skills, or customized checks. It is safe to
-    run from the update preamble because it only adds Orbit-owned missing files and stamps metadata.
+    This never edits CLAUDE.md, portable roles, role bodies, domain skills, or customized checks. It
+    may add the two observer frontmatter keys to known Orbit workers and the observer env default to
+    settings; explicit observer/settings values always win.
     """
     if not (target / ".orbit").is_dir():
         return "not an Orbit repo"
@@ -768,6 +838,11 @@ def _auto_heal(target: Path) -> str:
         for src_rel, dst_rel in QA_FRONTEND + DESIGN_GATE_FRONTEND:
             _place(ASSETS / src_rel, target / dst_rel, created, skipped, 0o755)
 
+    for observer in CLAUDE_OBSERVERS:
+        _place(AGENTS / f"{observer}.md", target / ".claude/agents" / f"{observer}.md", created, skipped)
+    _ensure_worker_observers(target, created, warnings)
+    _ensure_observer_setting(target, created, warnings)
+
     migrate_hooks(target, created, warnings)
     _write_manifest(target)
     _stamp_setup(target, prev_version)
@@ -782,7 +857,10 @@ def _auto_heal(target: Path) -> str:
 
 
 def install_hooks(target: Path, has_ui: bool = False, reporter_only: bool = False) -> None:
-    """Wire Orbit's always-on hooks into .claude/settings.json (default-on + announced):
+    """Activate Orbit in .claude/settings.json (default-on + announced):
+
+      • env.CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS=1 → arm worker watchdogs unless the user has
+        already set an explicit value. This is skipped for reporter-only activation.
 
       • PreToolUse(Bash) → orbit-guard  — the binding safety wall (deny/ask on dangerous commands),
         TRUSTED-install resolved = built-in hardened rules + the repo's declarative
@@ -814,10 +892,23 @@ def install_hooks(target: Path, has_ui: bool = False, reporter_only: bool = Fals
             print("    Refusing to overwrite it. Fix or move that file, then re-run — "
                   "your hooks were NOT installed.")
             return
-        settings.with_suffix(f".json.bak.{int(time.time())}").write_text(settings.read_text())
 
     hooks = data.setdefault("hooks", {})
     added = []
+
+    # Observer agents are an experimental Claude Code capability. Normal Orbit activation opts in
+    # at project scope; an explicit user value (including "0") always wins. Reporter-only activation
+    # is observational plumbing and must not silently enable an agent runtime experiment.
+    if not reporter_only:
+        env = data.get("env")
+        if env is None:
+            env = data["env"] = {}
+        if isinstance(env, dict) and "CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS" not in env:
+            env["CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS"] = "1"
+            added.append("env.CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS=1   "
+                         "(experimental: silent watchdog for implementation workers)")
+        elif not isinstance(env, dict):
+            print("  Note: .claude/settings.json env is not an object — observer flag left untouched.")
 
     pre = hooks.setdefault("PreToolUse", [])
     # The safety wall. NEW repos wire the TRUSTED orbit-guard (built-in rules + declarative
@@ -882,13 +973,16 @@ def install_hooks(target: Path, has_ui: bool = False, reporter_only: bool = Fals
         statusline_manual = True
 
     if added:
+        if backed_up:
+            settings.with_suffix(f".json.bak.{int(time.time())}").write_text(settings.read_text())
         tmp = settings.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(data, indent=2))
         tmp.replace(settings)
         print(("Installed Orbit reporter hooks" if reporter_only else "Installed Orbit's always-on hooks")
               + " (announced, not silent):")
         for a in added:
-            print("  + .claude/settings.json  →  hooks." + a)
+            prefix = "" if a.startswith("env.") else "hooks."
+            print("  + .claude/settings.json  →  " + prefix + a)
         if backed_up:
             print("  (your previous settings.json was backed up alongside it)")
     else:
@@ -1002,6 +1096,10 @@ def main():
         _place(src, target / ".claude/agents" / f"{role}.md", created, skipped)
         _place(src, target / ".orbit/roles" / f"{role}.md", created, skipped, transform=_strip_frontmatter)
 
+    # 4a.1 Claude-native observer sidecars. Do not mirror these into the portable role catalog.
+    for observer in CLAUDE_OBSERVERS:
+        _place(AGENTS / f"{observer}.md", target / ".claude/agents" / f"{observer}.md", created, skipped)
+
     # 4b. the Designer — only if the project has a UI surface
     if has_ui:
         src = AGENTS / "designer.md"
@@ -1019,6 +1117,10 @@ def main():
             adapter = _engineer_text(builder_text, fn, disp, scope)
             _emit(target / ".claude/agents" / f"{fn}.md", adapter, created, skipped)
             _emit(target / ".orbit/roles" / f"{fn}.md", _strip_frontmatter(adapter), created, skipped)
+
+    # Refresh existing generated workers additively; customized role bodies remain byte-for-byte.
+    _ensure_worker_observers(target, created, warnings)
+    _ensure_observer_setting(target, created, warnings)
 
     # 5. record what we placed (for precise 'unmodified' migration) + stamp the version deterministically
     _write_manifest(target)

@@ -12,7 +12,7 @@ Orbit turns a product repository into a durable, observable agentic loop: it rem
 plans the next move, delegates focused tasks, checks the result, repairs failures, and stops at
 hard safety and budget boundaries.
 
-![version](https://img.shields.io/badge/version-0.48.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.49.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![observable](https://img.shields.io/badge/observable-live%20dashboard-e8590c)
@@ -37,6 +37,8 @@ gives the work a durable operating system:
   expensive decisions.
 - **Cost control:** token, dollar, runtime, context, iteration, and fan-out limits are explicit.
 - **Parallel work:** independent workers use isolated Git worktrees instead of fighting over one checkout.
+- **Live drift detection:** implementation workers can be paired with a silent Claude Code observer
+  that flags a compounding mistake or constraint violation while the work is still in progress.
 - **Safety:** catastrophic commands are blocked; risky operations pause for approval.
 
 ## The loop
@@ -142,6 +144,24 @@ Orbit  |  Build  |  3/8 complete  |  1 active  |  budget $0.42/$1.25
 
 In Claude Code, the native checklist is the primary surface. In headless or portable runs, use
 `scripts/orbit-status --follow` or the read-only dashboard.
+
+## Observer agents (experimental)
+
+Orbit's Claude Code adapter pairs each Builder/surface engineer with `.claude/agents/watchdog.md`.
+The watcher sees Claude Code's truncated, read-only activity digest and stays silent unless a short
+advisory can prevent scope drift, weakened tests, bypassed gates, or unsupported proof. It cannot edit,
+block the worker, or grant user authority, and it does not replace the final Reviewer or QA gates.
+
+Every scaffold and safe update enables the project-scoped experiment, installs a missing watchdog,
+and additively wires existing Orbit workers without replacing customized role bodies. Explicit env
+values and existing alternate observers are preserved. To enable it manually, launch Claude Code with:
+
+```bash
+CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS=1 claude
+```
+
+This is an undocumented, remotely gated Claude Code capability and may be unavailable or change
+without an Orbit release. When unavailable, workers continue normally without the observer.
 
 ## What binds
 

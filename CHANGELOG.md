@@ -3,6 +3,22 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.49.0
+
+**Experimental live worker watchdogs.**
+
+- Builder and generated surface-engineer adapters now declare a Claude Code `watchdog` observer with
+  a focused drift/shortcut message; the watchdog stays silent unless a concise advisory can prevent
+  a compounding mistake.
+- The watchdog has no normal task tools, is Claude-only (not a portable Orbit role), cannot grant
+  authority, and complements rather than replaces Reviewer and QA.
+- Fresh scaffolds and automatic project refreshes enable
+  `CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS=1`, install the watchdog, and additively wire existing
+  Orbit workers without replacing customized role bodies. Explicit env values and alternate
+  observers always win.
+- Observer lifecycle hooks are excluded from the active-worker board, so the silent sidecar never
+  displaces the implementer it watches.
+
 ## 0.48.0
 
 **The Reporter pet now auto-follows your active repo — and always runs the latest board.**
@@ -73,7 +89,6 @@ truth — the update checker compares it against GitHub.
 - **Clear content.** The card leads with the current task name and the actual question — not a vague
   "something needs you" line. **Focus session** and **Open board** stay wired to the native shell.
 - Card-only and silent: attention brings the card forward, never a system notification or sound.
-
 ## 0.46.0
 
 **Orbit Reporter is now an actionable situation manager, not a passive speech bubble.**

@@ -53,7 +53,7 @@ def main():
     for role in sc.ROLES_CORE:
         if not os.path.isfile(os.path.join(ROOT, "assets", "claude-agents", f"{role}.md")):
             fails.append(f"[A] ROLES_CORE has '{role}' but assets/claude-agents/{role}.md is missing")
-    for extra in ("builder", "designer"):
+    for extra in ("builder", "designer", *sc.CLAUDE_OBSERVERS):
         if not os.path.isfile(os.path.join(ROOT, "assets", "claude-agents", f"{extra}.md")):
             fails.append(f"[A] assets/claude-agents/{extra}.md is missing (needed by scaffolder)")
 

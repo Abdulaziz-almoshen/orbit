@@ -5,6 +5,11 @@ description: >-
   the change, write the code/content, build the candidate. On a frontend repo, implements the
   Designer's Design Plan. Hands its output to the Safety and Reviewer gates.
 tools: Read, Grep, Glob, Write, Edit, Bash
+observer: watchdog
+observerMessage: >-
+  Watch this implementation for scope drift, weakened or skipped tests, bypassed Orbit gates,
+  unsupported claims of proof, and edits to permissions or governing config. Report only when a
+  concise warning can prevent a mistake from compounding.
 ---
 
 # Role: Builder / Executor (Claude Code subagent)
