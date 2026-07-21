@@ -8,14 +8,17 @@
 
 ### Stop prompting your agent. Build a system that prompts itself.
 
+#### Every implementation worker now has a silent live watchdog for drift and shortcuts.
+
 Orbit turns a product repository into a durable, observable agentic loop: it remembers the work,
-plans the next move, delegates focused tasks, checks the result, repairs failures, and stops at
-hard safety and budget boundaries.
+plans the next move, delegates focused tasks, **watches implementation live for drift**, checks the
+result, repairs failures, and stops at hard safety and budget boundaries.
 
 ![version](https://img.shields.io/badge/version-0.49.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![observable](https://img.shields.io/badge/observable-live%20dashboard-e8590c)
+![live observer](https://img.shields.io/badge/live%20observer-worker%20watchdog-e8590c)
 
 </div>
 
@@ -47,23 +50,56 @@ gives the work a durable operating system:
 flowchart LR
     R["Read memory"] --> P["Plan"]
     P --> C["Counterfactual probe"]
-    C -->|pass| A["Act"]
+    C -->|pass| W
     C -->|fail| P
-    A --> E["Evaluate"]
+
+    subgraph LIVE["LIVE SUPERVISION · during implementation"]
+        direction TB
+        W["Builder / engineer acts"]
+        O["Silent watchdog observes"]
+        W -. "read-only digest after every turn" .-> O
+        O -. "rare, concise advisory" .-> W
+    end
+
+    W --> E["Safety → Reviewer → QA"]
     E -->|pass| U["Update state"]
     E -->|fail| F["Repair packet"]
-    F --> A
+    F --> W
     U --> D{"Decide"}
     D -->|continue| R
     D -->|done, cap, or human gate| X["Stop"]
+
+    classDef observer fill:#111,stroke:#e8590c,stroke-width:3px,color:#fff;
+    classDef worker fill:#111,stroke:#2b6cb0,stroke-width:3px,color:#fff;
+    class O observer;
+    class W worker;
 ```
 
-Two gates make the loop meaningfully iterative:
+> **New in Orbit 0.49:** the orange watchdog runs beside every implementation worker. It watches
+> *how* the work is being done and can warn before a bad shortcut compounds. It does not edit,
+> approve, block, or replace the final gates.
+
+Three controls make the loop meaningfully safer and iterative:
 
 1. **Counterfactual preflight:** identify the riskiest assumption, run the cheapest useful probe,
    and backtrack to discovery or planning when evidence disagrees.
-2. **Bounded repair:** capture the failure, owner, root cause, required change, and regression test;
+2. **Live observer:** inspect each implementation turn for scope drift, weakened tests, bypassed
+   gates, or proof that the observed results do not support. Healthy work produces no message.
+3. **Bounded repair:** capture the failure, owner, root cause, required change, and regression test;
    repair it and return to the original gate. Repeated failure escalates to Advisor or a human.
+
+### Why the observer matters
+
+| Without live observation | With Orbit 0.49 |
+|---|---|
+| A wrong approach may reach Reviewer after many edits. | The watchdog can flag the drift while the worker is still implementing. |
+| The worker must remember every constraint while optimizing for completion. | A separate Haiku observer has one narrow job: notice compounding mistakes. |
+| Test weakening may only appear in the finished diff. | Attempts to skip, weaken, delete, or reverse-engineer tests can be challenged immediately. |
+| More code and tokens accumulate before repair begins. | One early advisory can avoid an expensive downstream repair cycle. |
+
+The expected steady state is silence. The observer is a **drift tripwire**, not another worker and
+not a security boundary; Safety, Reviewer, QA, approval checkpoints, and hard limits still decide
+whether the result may proceed.
 
 ## Install
 
@@ -147,7 +183,17 @@ In Claude Code, the native checklist is the primary surface. In headless or port
 
 ## Observer agents (experimental)
 
-Orbit's Claude Code adapter pairs each Builder/surface engineer with `.claude/agents/watchdog.md`.
+Orbit's Claude Code adapter automatically pairs each Builder/surface engineer with
+`.claude/agents/watchdog.md`:
+
+```text
+Builder / Engineer ── read-only turn digest ──▶ Watchdog (Haiku)
+        ▲                                         │
+        └──── rare advisory when drift matters ───┘
+
+No finding = no message. The worker continues uninterrupted.
+```
+
 The watcher sees Claude Code's truncated, read-only activity digest and stays silent unless a short
 advisory can prevent scope drift, weakened tests, bypassed gates, or unsupported proof. It cannot edit,
 block the worker, or grant user authority, and it does not replace the final Reviewer or QA gates.

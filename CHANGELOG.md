@@ -18,6 +18,8 @@ truth — the update checker compares it against GitHub.
   observers always win.
 - Observer lifecycle hooks are excluded from the active-worker board, so the silent sidecar never
   displaces the implementer it watches.
+- README now puts the live watchdog in the primary loop diagram and contrasts the before/after value
+  directly, rather than leaving the capability buried in an adapter section.
 
 ## 0.48.0
 
