@@ -1,0 +1,171 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="760" viewBox="0 0 1600 760" role="img" aria-labelledby="title desc">
+  <title id="title">Orbit agent loop with a live observer watchdog</title>
+  <desc id="desc">A seven-stage agent workflow travels across an orbital path. During implementation, a silent watchdog circles the worker, reads each turn, and sends a rare advisory only when drift matters.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07090d"/>
+      <stop offset="0.55" stop-color="#0b1018"/>
+      <stop offset="1" stop-color="#07090d"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#75b7ff"/>
+      <stop offset="1" stop-color="#2b6cb0"/>
+    </linearGradient>
+    <linearGradient id="orange" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffb067"/>
+      <stop offset="1" stop-color="#e8590c"/>
+    </linearGradient>
+    <radialGradient id="core" cx="50%" cy="42%" r="65%">
+      <stop offset="0" stop-color="#172941"/>
+      <stop offset="0.72" stop-color="#0b111a"/>
+      <stop offset="1" stop-color="#07090d"/>
+    </radialGradient>
+    <filter id="blueGlow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="orangeGlow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#75b7ff"/>
+    </marker>
+    <marker id="arrowOrange" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#ff8a3d"/>
+    </marker>
+    <style>
+      .sans { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .mono { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+      .eyebrow { font-size: 14px; font-weight: 700; letter-spacing: 3px; }
+      .stageNo { font-size: 13px; font-weight: 700; letter-spacing: 2px; fill: #6f7c8d; }
+      .stageName { font-size: 20px; font-weight: 680; fill: #f7f9fc; }
+      .stageNote { font-size: 13px; fill: #8c98a8; }
+      .tiny { font-size: 12px; font-weight: 650; letter-spacing: 1.5px; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="760" rx="28" fill="url(#bg)"/>
+  <path d="M0 1H1600" stroke="#27313d"/>
+  <circle cx="800" cy="390" r="310" fill="none" stroke="#14202d" stroke-width="1"/>
+  <circle cx="800" cy="390" r="250" fill="none" stroke="#101a25" stroke-width="1" stroke-dasharray="3 12"/>
+  <path d="M72 140C330 46 600 86 780 210C965 337 1204 319 1528 165" fill="none" stroke="#111c28" stroke-width="1"/>
+  <path d="M86 638C333 717 561 655 734 554C938 436 1184 480 1514 638" fill="none" stroke="#111c28" stroke-width="1"/>
+
+  <g class="sans">
+    <text x="76" y="72" class="eyebrow" fill="#75b7ff">THE ORBIT LOOP · LIVE SUPERVISION</text>
+    <text x="76" y="116" font-size="34" font-weight="720" fill="#f7f9fc">Build fast. Catch drift before it compounds.</text>
+    <text x="76" y="150" font-size="16" fill="#8c98a8">The worker owns the task. The watchdog owns one question: is the method still honest?</text>
+    <g transform="translate(1320 62)">
+      <circle cx="18" cy="18" r="16" fill="none" stroke="#f7f9fc" stroke-width="3"/>
+      <circle cx="18" cy="18" r="9" fill="none" stroke="#f7f9fc" stroke-width="2"/>
+      <path d="M3 26L33 9" stroke="#f7f9fc" stroke-width="3"/>
+      <text x="48" y="15" font-size="12" font-weight="700" letter-spacing="2" fill="#8c98a8">ORBIT 0.49</text>
+      <text x="48" y="36" font-size="15" font-weight="650" fill="#f7f9fc">Observer agents</text>
+    </g>
+  </g>
+
+  <!-- Main lifecycle rail -->
+  <path d="M122 332C250 332 272 280 387 280S552 332 646 332" fill="none" stroke="#354252" stroke-width="2"/>
+  <path d="M956 332C1050 332 1094 280 1208 280S1374 332 1478 332" fill="none" stroke="#354252" stroke-width="2"/>
+  <path d="M134 332H638" fill="none" stroke="#75b7ff" stroke-width="2" marker-end="url(#arrowBlue)" opacity=".75"/>
+  <path d="M962 332H1465" fill="none" stroke="#75b7ff" stroke-width="2" marker-end="url(#arrowBlue)" opacity=".75"/>
+
+  <!-- Left stages -->
+  <g class="sans">
+    <g transform="translate(92 248)">
+      <circle cx="34" cy="84" r="7" fill="#75b7ff" filter="url(#blueGlow)"/>
+      <text x="0" y="0" class="stageNo">01</text><text x="0" y="28" class="stageName">READ</text>
+      <text x="0" y="50" class="stageNote">Memory + state</text>
+    </g>
+    <g transform="translate(280 198)">
+      <circle cx="34" cy="134" r="7" fill="#75b7ff" filter="url(#blueGlow)"/>
+      <text x="0" y="0" class="stageNo">02</text><text x="0" y="28" class="stageName">PLAN</text>
+      <text x="0" y="50" class="stageNote">Smallest provable move</text>
+    </g>
+    <g transform="translate(462 248)">
+      <circle cx="34" cy="84" r="7" fill="#75b7ff" filter="url(#blueGlow)"/>
+      <text x="0" y="0" class="stageNo">03</text><text x="0" y="28" class="stageName">PROBE</text>
+      <text x="0" y="50" class="stageNote">Attack the assumption</text>
+    </g>
+  </g>
+
+  <!-- Central supervised implementation system -->
+  <g transform="translate(800 376)">
+    <circle r="174" fill="url(#core)" stroke="#253445" stroke-width="2"/>
+    <circle r="142" fill="none" stroke="#2b6cb0" stroke-width="3" stroke-dasharray="475 420" stroke-linecap="round" transform="rotate(-42)" opacity=".9"/>
+    <circle r="112" fill="none" stroke="#253445" stroke-width="1" stroke-dasharray="2 9"/>
+
+    <g class="sans" text-anchor="middle">
+      <text y="-52" class="stageNo" fill="#75b7ff">04 · IMPLEMENT</text>
+      <text y="-8" font-size="31" font-weight="740" fill="#ffffff">BUILDER</text>
+      <text y="23" font-size="15" fill="#9ba8b8">owns the task · edits · proves</text>
+      <rect x="-105" y="53" width="210" height="35" rx="17.5" fill="#111b27" stroke="#2b6cb0"/>
+      <text y="76" class="tiny" fill="#75b7ff">WORK CONTINUES BY DEFAULT</text>
+    </g>
+
+    <!-- Observer satellite -->
+    <path d="M-125 -119A173 173 0 0 1 169 -37" fill="none" stroke="#e8590c" stroke-width="2" stroke-dasharray="5 8" marker-end="url(#arrowOrange)"/>
+    <g transform="translate(160 -68)" filter="url(#orangeGlow)">
+      <circle r="31" fill="#11100e" stroke="url(#orange)" stroke-width="4"/>
+      <circle r="10" fill="none" stroke="#ffb067" stroke-width="2"/>
+      <circle r="3" fill="#ffb067"/>
+    </g>
+    <g class="sans" transform="translate(140 -158)" text-anchor="end">
+      <text class="tiny" fill="#ff8a3d">WATCHDOG</text>
+      <text y="24" font-size="13" fill="#b2bbc7">Haiku · silent sidecar</text>
+    </g>
+
+    <!-- Digest and advisory loop -->
+    <path d="M95 45C152 50 181 22 179 -31" fill="none" stroke="#738194" stroke-width="1.5" stroke-dasharray="4 6" marker-end="url(#arrowBlue)"/>
+    <path d="M152 -43C99 -70 56 -59 37 -33" fill="none" stroke="#ff8a3d" stroke-width="2" marker-end="url(#arrowOrange)"/>
+    <g class="sans">
+      <text x="128" y="65" class="tiny" fill="#788596">TURN DIGEST</text>
+      <text x="28" y="-118" class="tiny" fill="#ff8a3d">ONLY IF DRIFT MATTERS</text>
+    </g>
+  </g>
+
+  <!-- Right stages -->
+  <g class="sans">
+    <g transform="translate(1018 248)">
+      <circle cx="34" cy="84" r="7" fill="#75b7ff" filter="url(#blueGlow)"/>
+      <text x="0" y="0" class="stageNo">05</text><text x="0" y="28" class="stageName">GATES</text>
+      <text x="0" y="50" class="stageNote">Safety · Review · QA</text>
+    </g>
+    <g transform="translate(1200 198)">
+      <circle cx="34" cy="134" r="7" fill="#75b7ff" filter="url(#blueGlow)"/>
+      <text x="0" y="0" class="stageNo">06</text><text x="0" y="28" class="stageName">UPDATE</text>
+      <text x="0" y="50" class="stageNote">State + evidence</text>
+    </g>
+    <g transform="translate(1380 248)">
+      <circle cx="34" cy="84" r="7" fill="#75b7ff" filter="url(#blueGlow)"/>
+      <text x="0" y="0" class="stageNo">07</text><text x="0" y="28" class="stageName">DECIDE</text>
+      <text x="0" y="50" class="stageNote">Continue or stop</text>
+    </g>
+  </g>
+
+  <!-- Bottom outcome paths -->
+  <g class="sans">
+    <path d="M1052 366C1052 566 949 634 818 634C688 634 584 563 584 462" fill="none" stroke="#e8590c" stroke-width="2" marker-end="url(#arrowOrange)" opacity=".9"/>
+    <rect x="862" y="607" width="178" height="38" rx="19" fill="#18100c" stroke="#743414"/>
+    <text x="951" y="631" text-anchor="middle" class="tiny" fill="#ff8a3d">FAIL → REPAIR → RETEST</text>
+
+    <path d="M1414 369C1414 665 1112 705 800 705C488 705 186 665 126 369" fill="none" stroke="#2b6cb0" stroke-width="1.5" stroke-dasharray="7 9" marker-end="url(#arrowBlue)" opacity=".75"/>
+    <rect x="669" y="680" width="262" height="39" rx="19.5" fill="#0c1420" stroke="#244d78"/>
+    <text x="800" y="705" text-anchor="middle" class="tiny" fill="#75b7ff">CONTINUE → FRESH CYCLE</text>
+
+    <g transform="translate(92 514)">
+      <circle cx="10" cy="10" r="5" fill="#ff8a3d"/>
+      <text x="28" y="14" class="tiny" fill="#ff8a3d">ONE EARLY WARNING</text>
+      <text x="28" y="40" font-size="19" font-weight="680" fill="#f7f9fc">Less rework. Lower token waste.</text>
+      <text x="28" y="66" font-size="14" fill="#8c98a8">No finding means no interruption.</text>
+    </g>
+
+    <g transform="translate(1200 514)">
+      <text class="tiny" fill="#6f7c8d">AUTHORITY MODEL</text>
+      <text y="30" font-size="16" fill="#d8dee7">Observer advises.</text>
+      <text y="55" font-size="16" fill="#d8dee7">Worker decides.</text>
+      <text y="80" font-size="16" fill="#d8dee7">Human authority never transfers.</text>
+    </g>
+  </g>
+</svg>

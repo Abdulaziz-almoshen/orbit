@@ -46,34 +46,9 @@ gives the work a durable operating system:
 
 ## The loop
 
-```mermaid
-flowchart LR
-    R["Read memory"] --> P["Plan"]
-    P --> C["Counterfactual probe"]
-    C -->|pass| W
-    C -->|fail| P
-
-    subgraph LIVE["LIVE SUPERVISION · during implementation"]
-        direction TB
-        W["Builder / engineer acts"]
-        O["Silent watchdog observes"]
-        W -. "read-only digest after every turn" .-> O
-        O -. "rare, concise advisory" .-> W
-    end
-
-    W --> E["Safety → Reviewer → QA"]
-    E -->|pass| U["Update state"]
-    E -->|fail| F["Repair packet"]
-    F --> W
-    U --> D{"Decide"}
-    D -->|continue| R
-    D -->|done, cap, or human gate| X["Stop"]
-
-    classDef observer fill:#111,stroke:#e8590c,stroke-width:3px,color:#fff;
-    classDef worker fill:#111,stroke:#2b6cb0,stroke-width:3px,color:#fff;
-    class O observer;
-    class W worker;
-```
+<picture>
+  <img src="assets/orbit-loop-observer.svg" alt="The Orbit loop: a Builder works at the center while a silent Watchdog observes every turn and sends a rare advisory only when drift matters; Safety, Reviewer, and QA remain the final gates." width="100%">
+</picture>
 
 > **New in Orbit 0.49:** the orange watchdog runs beside every implementation worker. It watches
 > *how* the work is being done and can warn before a bad shortcut compounds. It does not edit,
