@@ -275,7 +275,7 @@ python3 "$ORBIT/scripts/scaffold.py" --target . --surfaces <detected> [--install
   (never clobbers) if you'd edited them. Tell the user plainly when this fires.
 
 This replaces hand-authoring ~20 files. The **universal spine** (dispatcher, orchestrator,
-advisor, product-discovery, market-researcher, planner, reviewer, qa-engineer, reporter, safety-gate) is the same every
+advisor, product-discovery, market-researcher, planner, reviewer, qa-engineer, cpo, reporter, safety-gate) is the same every
 project; the **specialists vary by the code** (the per-surface engineers + the conditional Designer).
 Everything is in place and working — **don't re-author any of it.**
 

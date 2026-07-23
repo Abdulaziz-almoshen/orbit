@@ -122,6 +122,24 @@ def _meaningful_worktree_dirty() -> bool:
     return False
 
 
+def _cpo_state():
+    """The newest CPO acceptance verdict (.orbit/cpo/round-*.json): goal-fidelity gate after QA."""
+    vdir = ORBIT / "cpo"
+    try:
+        rounds = sorted(vdir.glob("round-*.json"), key=lambda p: p.stat().st_mtime)
+        if not rounds:
+            return {}
+        v = json.loads(rounds[-1].read_text())
+        verdict = str(v.get("verdict", "")).upper()
+        orders = v.get("change_orders") or []
+        top = next((o.get("order", "") for o in orders if isinstance(o, dict)), "")
+        return {"verdict": verdict, "commit": str(v.get("commit", ""))[:8],
+                "returned": verdict in ("ITERATE", "REDEVELOP"), "top_order": top,
+                "goal": str(v.get("goal", ""))}
+    except Exception:
+        return {}
+
+
 def _qa_state():
     """Exact-HEAD independent-QA pipeline state from Git's out-of-worktree control plane."""
     cfg = _json("loop.config.json", {}) or {}
@@ -257,6 +275,11 @@ def _reporter_state(snap):
         reason = re.sub(r"^\s*STOP\s*[—\-:]*\s*", "", question).strip() or "the run halted"
         summary = f"Reason: {reason}. Nothing is running now — the loop will not continue on its own."
         next_action = "Open the board to review, then restart the loop if you want it to continue."
+    elif (snap.get("cpo") or {}).get("returned"):
+        cv = snap["cpo"]
+        state, urgency, title = "blocked", "high", "CPO returned the deliverable"
+        summary = f"Verdict {cv.get('verdict')}: the deliverable does not yet serve the goal."
+        next_action = str(cv.get("top_order") or "Open the board for the CPO change orders.")
     elif qa.get("status") == "changes_required":
         state, urgency, title = "blocked", "high", "QA returned findings"
         summary = "The exact commit was rejected and must be repaired before the pipeline continues."
@@ -358,6 +381,7 @@ def snapshot() -> dict:
         "decisions": decisions,
         "confidence": run.get("confidence") if isinstance(run, dict) else None,
         "qa": _qa_state(),
+        "cpo": _cpo_state(),
     }
     snap["reporter"] = _reporter_state(snap)
     return _redact(snap)

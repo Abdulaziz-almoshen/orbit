@@ -253,6 +253,44 @@ def evaluate_independent_qa(cycle_output: dict, cfg: dict) -> dict:
     return status
 
 
+def evaluate_cpo_acceptance(cycle_output: dict, cfg: dict) -> dict:
+    """The CPO gate AFTER QA: the run is not done until a commit-bound verdict envelope in
+    .orbit/cpo/ says ACCEPT. QA proves the work was built right; the CPO verdict is the recorded
+    judgment that the RIGHT thing was built (deliverable vs the user's goal). The CPO subagent
+    writes the envelope (see .orbit/skills/product-acceptance.md); this gate only enforces it."""
+    cpo = cfg.get("cpo_acceptance", {}) or {}
+    if cpo.get("enabled") is not True:
+        return {"passed": True, "status": "disabled", "reason": "CPO acceptance is not enabled"}
+    commit = cycle_output.get("commit")
+    if not commit:
+        return {"passed": False, "status": "missing_input",
+                "reason": "enabled CPO acceptance requires result.commit (verdicts are commit-bound)"}
+    vdir = Path(cfg.get("paths", {}).get("cpo_verdicts", ".orbit/cpo"))
+    rounds = sorted(vdir.glob("round-*.json"), key=lambda p: p.stat().st_mtime) if vdir.is_dir() else []
+    if not rounds:
+        return {"passed": False, "status": "pending",
+                "reason": "CPO acceptance pending — dispatch the cpo subagent to judge the "
+                          "deliverable against the user's goal and write .orbit/cpo/round-<n>.json"}
+    try:
+        verdict = json.loads(rounds[-1].read_text())
+    except Exception:
+        return {"passed": False, "status": "error",
+                "reason": f"unreadable CPO verdict envelope: {rounds[-1].name}"}
+    if str(verdict.get("commit", "")) != str(commit):
+        return {"passed": False, "status": "stale",
+                "reason": f"newest CPO verdict is for commit {str(verdict.get('commit'))[:8]!r}, "
+                          f"not the cycle's {str(commit)[:8]!r} — re-run the cpo subagent"}
+    v = str(verdict.get("verdict", "")).upper()
+    if v == "ACCEPT":
+        return {"passed": True, "status": "accepted", "verdict": v,
+                "reason": f"CPO accepted commit {str(commit)[:8]} against the goal"}
+    orders = verdict.get("change_orders") or []
+    top = next((o.get("order", "") for o in orders if isinstance(o, dict)), "")
+    return {"passed": False, "status": v.lower() or "rejected", "verdict": v,
+            "reason": f"CPO returned the deliverable ({v or 'no verdict'})"
+                      + (f" — top change order: {top}" if top else "")}
+
+
 # ------------------------------------------------------------------- event handlers
 # Same events as the Claude Code hooks, in one portable place. Wire validation/notify.
 def on_inputs_loaded(ctx):    ...  # run input-validation checks; fail input gate on problems
@@ -282,7 +320,7 @@ def update_state(cfg: dict, cycle: int, action: str, eval_result: dict, decision
 
 
 def _g(ev: dict) -> str:
-    return "gates[" + ",".join(k for k in ("input", "quality", "safety", "independent_qa") if ev.get(k)) + "]"
+    return "gates[" + ",".join(k for k in ("input", "quality", "safety", "independent_qa", "cpo") if ev.get(k)) + "]"
 
 
 # ----------------------------------------------------------------- stop conditions
@@ -428,6 +466,14 @@ def run(cfg: dict, resume: bool = False):
             passed = passed and ev["independent_qa"]
             emit("independent-qa", "evaluate", "done" if ev["independent_qa"] else "blocked",
                  ev["reasons"]["independent_qa"], cycle=cycle)
+            if passed:  # CPO acceptance runs strictly AFTER QA passes — goal fidelity, not correctness
+                emit("cpo", "evaluate", "start", "judging deliverable against the user's goal", cycle=cycle)
+                cpo_status = steps.run(f"c{cycle}:cpo", lambda: evaluate_cpo_acceptance(result, cfg))
+                ev["cpo"] = bool(cpo_status.get("passed"))
+                ev.setdefault("reasons", {})["cpo"] = cpo_status.get("reason", cpo_status.get("status", ""))
+                passed = passed and ev["cpo"]
+                emit("cpo", "evaluate", "done" if ev["cpo"] else "blocked",
+                     ev["reasons"]["cpo"], cycle=cycle)
         fail_streak = 0 if passed else fail_streak + 1
         emit("reviewer", "evaluate", "done" if passed else "blocked", _g(ev), cycle=cycle)
 

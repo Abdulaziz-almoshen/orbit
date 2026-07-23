@@ -21,6 +21,31 @@ truth — the update checker compares it against GitHub.
 - README now puts the live watchdog in the primary loop diagram and contrasts the before/after value
   directly, rather than leaving the capability buried in an adapter section.
 
+## 0.49.0
+
+**New spine role: the CPO — final acceptance after QA, judged against the user's goal, with a
+growing user-model.**
+
+- **The gap it closes:** every existing gate verified the build against artifacts the system wrote
+  for itself (spec, RTM, design baseline). Nothing re-anchored on the user's original ask — a run
+  could pass every test and still miss the intent. The CPO is the user's proxy at the finish line.
+- **Hard gate after QA.** `loop.py` blocks `done` until a commit-bound verdict envelope in
+  `.orbit/cpo/round-<n>.json` says `ACCEPT`. `ITERATE` returns specific change orders into the loop;
+  `REDEVELOP` sends the approach itself back. Stale (wrong-commit) and corrupt envelopes block.
+  Enabled by default — the CPO runs entirely in-model, nothing is exported.
+- **Goal-first, not spec-first.** Rubric: intent fidelity · completeness · coherence · taste (judged
+  by the user-model, not the model's own preferences) · surprise (bonus, never a blocker). No goal
+  record captured → ITERATE with "capture the user's goal first" (ambiguous → ask; clear → discovery,
+  per clarify-and-challenge).
+- **The user-model grows every verdict.** The CPO owns `.orbit/skills/user-model.md` (seeded by
+  scaffold, never clobbered on re-scaffold): dated signals from the user's own words and choices,
+  promoted to durable rules at 3+ consistent signals, extracted into new `.orbit/skills/user-<topic>.md`
+  skills when a cluster stands alone — so iteration N+1 lands closer than N and "surprise" is aimed.
+  Project-scoped; the memory-hygiene property applies verbatim.
+- New playbook `product-acceptance.md` (rubric, verdict schema, update discipline); orchestrator
+  contract and spine docs updated; the board + reporter pet announce "CPO returned the deliverable"
+  with the top change order. 11 spine roles now. Tests: `tests/test_cpo_gate.py`.
+
 ## 0.48.0
 
 **The Reporter pet now auto-follows your active repo — and always runs the latest board.**

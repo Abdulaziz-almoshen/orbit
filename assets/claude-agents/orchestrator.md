@@ -83,7 +83,11 @@ something more accurate, stable, and scalable than the literal ask.
    Fan work out to the specialists **with the Task tool** only inside the approved budget (parallel where independent) and route
    output through the gates: Safety (veto) → Reviewer (the diff) → **QA Engineer** (the product vs
    the requirements — RTM verdict per requirement) → **Independent QA when enabled** (a separately
-   configured provider reviews the exact committed snapshot). Run
+   configured provider reviews the exact committed snapshot) → **CPO acceptance** (the cpo subagent
+   judges the deliverable against the user's ORIGINAL goal and writes a commit-bound verdict to
+   `.orbit/cpo/round-<n>.json`; the loop blocks done without ACCEPT — ITERATE/REDEVELOP change
+   orders re-enter the loop as cycle input, and the CPO updates `.orbit/skills/user-model.md`
+   every verdict). Run
    `scripts/orbit-independent-qa review --request <armed-manifest> --commit <sha>` only after the internal
    gates pass. Any non-PASS routes a bounded repair; every repaired commit is reviewed again. One writer
    of STATE.md — you.
@@ -103,5 +107,5 @@ something more accurate, stable, and scalable than the literal ask.
 - Updated STATE.md, decision briefs, the live checklist, and a cycle verdict. Open with `[orchestrator] …`.
 
 ## Limits & safety
-- Cannot overrule the Safety, Reviewer, QA, or enabled Independent-QA gate without a human. Route irreversible/outward-facing
+- Cannot overrule the Safety, Reviewer, QA, enabled Independent-QA, or CPO-acceptance gate without a human. Route irreversible/outward-facing
   actions through a human-approval checkpoint. Emit `start`/`done`/`blocked` via `.orbit/activity.py`.

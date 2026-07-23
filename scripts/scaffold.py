@@ -245,7 +245,7 @@ PLAYBOOKS_ALWAYS = ["clarify-and-challenge.md", "planning-and-decision-briefs.md
                     "product-discovery.md", "market-and-competitive-research.md",
                     "qa-validation.md", "goal-pipeline.md", "architecture-decisions.md",
                     "safety-rules.md", "deliverable-reports.md", "loop-tiers.md",
-                    "counterfactual-regret.md", "iterative-repair.md"]
+                    "counterfactual-regret.md", "iterative-repair.md", "product-acceptance.md"]
 PLAYBOOKS_FRONTEND = ["design-methodology.md", "anti-ai-aesthetics.md", "design-styles.md",
                       "taste-preflight.md"]
 
@@ -264,7 +264,7 @@ DESIGN_GATE_FRONTEND = [("checks/design-gate.py", ".orbit/checks/design-gate.py"
 # The UNIVERSAL spine — every project gets these (routing, planning, gates, reporting). Copied
 # verbatim to .claude/agents/<role>.md and, frontmatter-stripped, to .orbit/roles/<role>.md.
 ROLES_CORE = ["dispatcher", "orchestrator", "advisor", "product-discovery", "market-researcher", "planner",
-              "reviewer", "qa-engineer", "reporter", "safety-gate"]
+              "reviewer", "qa-engineer", "cpo", "reporter", "safety-gate"]
 
 # Claude Code-native sidecars. These are deliberately not mirrored into `.orbit/roles/`: the
 # portable runtime has no ObserverReport/digest primitive, and presenting a watchdog as a normal
@@ -300,7 +300,7 @@ UI_SURFACES = {"web", "frontend", "ui", "mobile", "ios", "android"}  # → stand
 DIRS = [
     ".orbit", ".orbit/roles", ".orbit/skills",
     ".orbit/artifacts", ".orbit/checks", ".orbit/decisions", ".orbit/locks", ".orbit/security",
-    ".orbit/qa", ".orbit/review-requests", ".orbit/reviews",
+    ".orbit/qa", ".orbit/review-requests", ".orbit/reviews", ".orbit/cpo",
     ".claude/agents", "scripts",
 ]
 
@@ -1067,6 +1067,21 @@ def main():
     playbooks = PLAYBOOKS_ALWAYS + (PLAYBOOKS_FRONTEND if has_ui else [])
     for pb in playbooks:
         _place(PLAYBOOKS / pb, target / ".orbit/skills" / pb, created, skipped)
+
+    # 3a.1 the user-model seed -> .orbit/skills/user-model.md (CPO-owned, grows per project;
+    #      never overwritten on re-scaffold — it holds learned user preferences)
+    user_model = target / ".orbit/skills/user-model.md"
+    if user_model.exists():
+        skipped.append(".orbit/skills/user-model.md  (exists -- learned preferences left untouched)")
+    else:
+        _emit(user_model, (
+            f"# User model — {target.resolve().name}\n\n"
+            "Owned by the CPO (see `.orbit/skills/product-acceptance.md`). Updated on every CPO\n"
+            "verdict. Evidence = the user's own words and choices only. Project-scoped — never\n"
+            "copied to other repos or global memory.\n\n"
+            "## Rules (durable — 3+ consistent signals each)\n\n(none yet)\n\n"
+            "## Signals (dated observations, newest first)\n\n(none yet)\n\n"
+            "## Vocabulary\n\n(none yet)\n"), created, skipped)
 
     # 3b. the 67-style design catalog (UI surfaces only) -> .orbit/skills/design-styles/
     styles_src = PLAYBOOKS / "design-styles"

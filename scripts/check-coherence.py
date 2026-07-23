@@ -28,7 +28,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Skills authored per-domain by the user (placeholders / rubrics we intentionally do NOT ship).
 AUTHOR_PER_DOMAIN = {"input-validation", "output-formatting", "quality-review",
-                     "domain", "domain-knowledge"}
+                     "domain", "domain-knowledge",
+                     "user-model"}   # seeded by scaffold, grown per-project by the CPO
 
 
 def _load_scaffold():

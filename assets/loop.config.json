@@ -104,6 +104,13 @@
     "repeat_failure_action": "advisor_or_human"
   },
 
+  "_cpo_acceptance_help": "The CPO gate AFTER QA: the run cannot finish until the cpo subagent judges the deliverable against the user's ORIGINAL goal and writes a commit-bound ACCEPT envelope to .orbit/cpo/. ITERATE/REDEVELOP verdicts return the work with change orders. Runs entirely in-model (no external export). See .orbit/skills/product-acceptance.md.",
+  "cpo_acceptance": {
+    "enabled": true,
+    "stage": "after_independent_qa_before_done",
+    "max_rounds": 5
+  },
+
   "_independent_qa_help": "Optional second-provider release gate. The Planner arms an acceptance manifest before implementation; after the internal gates pass, Orbit reviews only an exact committed snapshot. Both enabled and external_export.approved must be true before any private code is sent. Project-specific rubrics stay in the project and are listed by each request.",
   "independent_qa": {
     "enabled": false,
@@ -186,6 +193,7 @@
     "checkpoints": ".orbit/steps.jsonl",
     "independent_qa_runner": "scripts/orbit-independent-qa",
     "independent_reviews": ".orbit/reviews",
+    "cpo_verdicts": ".orbit/cpo",
     "stop_sentinel": ".orbit/STOP"
   }
 }

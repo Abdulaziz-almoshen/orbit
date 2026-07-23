@@ -38,7 +38,7 @@ output is good enough to count as progress (it is the quality gate). The Orchest
 delegate freely but cannot overrule either gate without a human.
 
 **Which roles `/orbit` always provisions — the universal spine** (dispatcher, orchestrator,
-advisor, product-discovery, market-researcher, planner, reviewer, qa-engineer, reporter, safety-gate):
+advisor, product-discovery, market-researcher, planner, reviewer, qa-engineer, cpo, reporter, safety-gate):
 Dispatcher, Orchestrator, Advisor, Product Discovery Manager, Market & Competitive Researcher, Planner,
 Reviewer, QA Engineer, Reporter, Safety/Compliance — plus **one Builder/Engineer per detected surface** (web →
 Frontend Engineer, api → Backend Engineer, etc.). This list is canonical in
