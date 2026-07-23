@@ -3,7 +3,7 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
-## 0.49.0
+## 0.50.0
 
 **Experimental live worker watchdogs.**
 
