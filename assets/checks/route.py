@@ -47,7 +47,8 @@ TASK_PAT = re.compile(
     r"run|execute|install|uninstall|commit|push|merge|rebase|revert|bump|release|tag|"
     r"test|retest|verify|translate|move|extract|split|configure|connect|disconnect|"
     r"upgrade|downgrade|format|lint|clean|seed|mock|stub|document|benchmark|profile|"
-    r"roll\s?back|start\s+(?:dev|development|building|implementing)"
+    r"roll\s?back|start\s+(?:dev|development|building|implementing)|"
+    r"restart|relaunch|launch|redeploy|rebuild|resume|enable|disable|turn\s+(?:on|off)"
     r")\b",
     re.IGNORECASE,
 )
@@ -288,6 +289,27 @@ def _writer_lock_banner(cwd: Path, me: str) -> str:
     return ""
 
 
+def _router_mode(cwd: Path) -> str:
+    """'always' (default): every real request engages the loop — ambiguous phrasing and short
+    imperatives route as TASK, and every reply carries a visible lane marker. 'smart': the
+    conservative pre-0.51 behavior (soft directive on ambiguous, no marker on questions).
+    Configured per project in .orbit/loop.config.json → {"router": {"mode": "smart"}}."""
+    try:
+        orbit = _find_orbit(cwd)
+        mode = str((json.loads((orbit / "loop.config.json").read_text())
+                    .get("router") or {}).get("mode", "")).lower()
+        return mode if mode in ("always", "smart") else "always"
+    except Exception:
+        return "always"
+
+
+MARKER_TASK = ("VISIBILITY (mandatory): the FIRST LINE of your reply must be exactly "
+               "'⏣ orbit — loop engaged · T<gear>' (fill in the gear you sized). The user must "
+               "always SEE that Orbit took the request. ")
+MARKER_DIRECT = ("VISIBILITY (mandatory): the FIRST LINE of your reply must be exactly "
+                 "'⏣ orbit — direct answer'. ")
+
+
 def main() -> None:
     try:
         data = json.load(sys.stdin)
@@ -297,15 +319,28 @@ def main() -> None:
     cwd = Path(data.get("cwd") or ".")
 
     kind = classify(prompt)
+    mode = _router_mode(cwd)
     if kind == "skip":
-        sys.exit(0)
+        # acks/negations/slash-commands stay silent in every mode; in always mode a short
+        # imperative with no matched verb ("restart it") is still a request → route it.
+        p = prompt.strip()
+        silent = (not p or p.startswith("/") or ACK_PAT.match(p) or NEGATION_PAT.match(p))
+        if mode != "always" or silent:
+            sys.exit(0)
+        kind = "task"
+    if mode == "always" and kind == "ambiguous":
+        kind = "task"                        # every real request engages the loop — no soft lane
 
     ctx = {"task": TASK_CTX, "question": QUESTION_CTX, "ambiguous": AMBIGUOUS_CTX}[kind]
+    if mode == "always":                     # the user must SEE Orbit take every request
+        ctx = (MARKER_TASK if kind == "task" else MARKER_DIRECT) + ctx
     if kind in ("task", "ambiguous"):
         hint = gear_hint(prompt)                  # soft nudge toward a higher gear (breadth/research/mission)
         if hint:
             ctx = ctx + " " + hint
         emit_activity(cwd, kind, prompt)
+    elif mode == "always":
+        emit_activity(cwd, kind, prompt)     # questions show on the board too — full visibility
 
     banner = _writer_lock_banner(cwd, data.get("session_id"))
     if banner:

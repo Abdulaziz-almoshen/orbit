@@ -14,7 +14,7 @@ Orbit turns a product repository into a durable, observable agentic loop: it rem
 plans the next move, delegates focused tasks, **watches implementation live for drift**, checks the
 result, repairs failures, and stops at hard safety and budget boundaries.
 
-![version](https://img.shields.io/badge/version-0.50.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.51.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![observable](https://img.shields.io/badge/observable-live%20dashboard-e8590c)
@@ -48,6 +48,10 @@ gives the work a durable operating system:
 - **Live drift detection:** implementation workers can be paired with a silent Claude Code observer
   that flags a compounding mistake or constraint violation while the work is still in progress.
 - **Safety:** catastrophic commands are blocked; risky operations pause for approval.
+- **Always-on routing:** a deterministic hook classifies every message before the model sees it.
+  In the default `always` mode each real request engages the loop and every reply opens with a
+  visible `⏣ orbit` lane marker — you always see Orbit take the request. Acks and "don't…"
+  messages stay silent; set `router.mode: "smart"` for conservative routing.
 
 ## The loop
 

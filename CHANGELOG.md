@@ -3,6 +3,24 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.51.0
+
+**Always-on routing: every real request now visibly engages Orbit.**
+
+- The UserPromptSubmit router gains a `router.mode` setting, default **`always`**: ambiguous
+  phrasing and short imperatives ("restart it") route as TASK instead of falling into silent soft
+  lanes, questions are still answered directly, and every reply must open with a visible lane
+  marker — `⏣ orbit — loop engaged · T<gear>` or `⏣ orbit — direct answer` — so it is always
+  obvious that Orbit took the request. Question-lane routing now also logs to the activity stream,
+  so the board and pet show every routed message.
+- Why: with the conservative matcher, natural/speech-to-text phrasing mostly classified as
+  "ambiguous" or was skipped entirely — Orbit was running but invisible, and felt un-triggered.
+- Acks ("yes", "go ahead"), negations ("don't push"), and slash-commands never trigger in either
+  mode. `router.mode: "smart"` in `loop.config.json` restores the pre-0.51 behavior.
+- New task verbs: restart, relaunch, launch, redeploy, rebuild, resume, enable, disable, turn on/off.
+- Tests: `tests/test_router_mode.py` (end-to-end hook behavior per mode); the 65-case classifier
+  corpus and eval suite pass unchanged.
+
 ## 0.50.0
 
 **Experimental live worker watchdogs.**
