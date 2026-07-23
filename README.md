@@ -32,6 +32,11 @@ gives the work a durable operating system:
 - **Iterative quality:** failures become evidence-backed repair packets and return to the loop.
 - **Independent QA:** an opt-in second provider reviews an exact commit against an armed acceptance
   manifest; code or manifest changes invalidate the approval.
+- **CPO acceptance:** after QA proves the work was built right, a CPO role judges whether the *right
+  thing* was built — the deliverable against your original goal. The run cannot finish without a
+  commit-bound `ACCEPT`; `ITERATE`/`REDEVELOP` verdicts return the work with change orders, and every
+  verdict grows a per-project user-model (`.orbit/skills/user-model.md`) so each iteration lands
+  closer to what you actually want.
 - **Reviewer choice:** install-time detection offers Codex, isolated Claude QA, or both. Missing providers
   block instead of silently weakening the gate; the choice never grants project export consent, and
   Arabic/RTL QA follows the project, not the provider.
@@ -47,12 +52,19 @@ gives the work a durable operating system:
 ## The loop
 
 <picture>
-  <img src="assets/orbit-loop-observer.svg" alt="The Orbit loop: a Builder works at the center while a silent Watchdog observes every turn and sends a rare advisory only when drift matters; Safety, Reviewer, and QA remain the final gates." width="100%">
+  <img src="assets/orbit-loop-observer.svg" alt="The Orbit loop: a Builder works at the center while a silent Watchdog observes every turn and sends a rare advisory only when drift matters; Safety, Reviewer, QA, and the CPO remain the final gates." width="100%">
 </picture>
 
 > **New in Orbit 0.49:** the orange watchdog runs beside every implementation worker. It watches
 > *how* the work is being done and can warn before a bad shortcut compounds. It does not edit,
 > approve, block, or replace the final gates.
+
+> **New in Orbit 0.50:** the **CPO** closes the loop's last gap. The gate chain is now
+> Safety → Reviewer → QA Engineer → Independent QA (opt-in) → **CPO acceptance** → done. Every
+> earlier gate verifies the build against artifacts the system wrote for itself; the CPO is the
+> user's proxy — it re-anchors on the goal you actually stated, returns the deliverable
+> (`ITERATE`/`REDEVELOP`) when the goal isn't served, and records what it learns about your
+> taste in a per-project user-model that every later run inherits.
 
 Three controls make the loop meaningfully safer and iterative:
 
