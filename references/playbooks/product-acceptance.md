@@ -78,6 +78,26 @@ Update discipline:
   and note it in the verdict's `user_model_updates` — this is how the system *generates new
   skills* from working with the user.
 
+## Vigilance: on duty until the goal is achieved
+The CPO is a background service, not a per-request reviewer. Once a goal is open, the watch does
+not end until one of exactly three things happens:
+1. a commit-bound **ACCEPT** envelope;
+2. an **explicit park** — write `.orbit/cpo/parked` with the reason and tell the user (a parked
+   goal is a decision on record, never a fade-out);
+3. the **user says stop**.
+The Stop hook enforces this mechanically: substantial work cannot quietly end without a verdict —
+it blocks the stop once and demands the CPO run. "The session ended" is not an outcome; hold the
+bar of a top product org — the gate does not lower because everyone is tired.
+
+## Continuous learning — behind the skills, not just in them
+The user-model is the first layer, not the whole memory. On every verdict, ALSO:
+- Feed each cleared learning through the **active-learning gate** (`.orbit/skills/active-learning.md`)
+  so process lessons (not just taste) improve how the loop itself runs next time.
+- When change orders keep repeating a theme (three rounds citing the same class of miss), that is a
+  **playbook gap**, not a builder failure: record it in the learning ledger as a proposed playbook
+  amendment for the human to review via `scripts/orbit-memory review`. Rules stay project-scoped;
+  durable cross-project promotion always goes through the human — never automatic.
+
 ## Interplay with the other gates
 - Runs **after** independent QA (never instead of it) — the CPO assumes correctness is proven and
   spends its whole budget on intent, wholeness, and delight.

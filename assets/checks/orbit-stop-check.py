@@ -57,6 +57,54 @@ def _mtime(p):
         return 0.0
 
 
+def _cpo_vigilance(orbit, route_mt):
+    """The CPO stays on duty until the goal is achieved: when a routed task did substantial work and
+    the board is visible, but no commit-bound CPO ACCEPT was recorded after the route, block the stop
+    ONCE to demand a verdict (or an explicit park). The system must not quietly go to sleep with an
+    open goal — 'done' is the CPO's word, not the model's feeling. Fail-open + once per route; the
+    escape hatches are honest: an ACCEPT envelope, `.orbit/cpo/parked`, or disabling cpo_acceptance."""
+    try:
+        cfg = json.loads((orbit / "loop.config.json").read_text())
+        if (cfg.get("cpo_acceptance") or {}).get("enabled") is not True:
+            return
+        if (orbit / "cpo" / "parked").exists():             # user explicitly parked the goal
+            return
+        warned = orbit / ".cpo-stop-warned"
+        if warned.exists() and warned.read_text().strip() == repr(route_mt):
+            return                                          # one vigilance nudge per routed task
+        vdir = orbit / "cpo"
+        rounds = sorted(vdir.glob("round-*.json"), key=lambda p: p.stat().st_mtime) if vdir.is_dir() else []
+        if rounds and _mtime(rounds[-1]) > route_mt:
+            v = json.loads(rounds[-1].read_text())
+            if str(v.get("verdict", "")).upper() == "ACCEPT":
+                return                                      # the CPO signed off after this route
+        try:
+            warned.write_text(repr(route_mt))
+        except Exception:
+            pass
+        with (orbit / "activity.jsonl").open("a") as f:
+            f.write(json.dumps({
+                "schema": 2, "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "role": "cpo", "phase": "evaluate", "status": "blocked",
+                "msg": "CPO vigilance: substantial work stopped without a CPO verdict — "
+                       "the goal is not accepted yet.",
+            }) + "\n")
+        print(json.dumps({"decision": "block", "reason": (
+            "[orbit] CPO ON DUTY — the goal is not accepted yet. Substantial work ran this turn but "
+            "no commit-bound ACCEPT exists in .orbit/cpo/. The system stays awake until the goal is "
+            "achieved: dispatch the cpo subagent NOW to judge the deliverable against the user's "
+            "original goal (rubric: .orbit/skills/product-acceptance.md) and write "
+            ".orbit/cpo/round-<n>.json. If the verdict is ITERATE/REDEVELOP, continue the loop on its "
+            "change orders. Only an ACCEPT envelope, an explicit park (write .orbit/cpo/parked with "
+            "the reason and tell the user), or the user saying stop ends the watch."
+        )}))
+        sys.exit(0)
+    except SystemExit:
+        raise
+    except Exception:
+        return                                              # fail open — never break a stop on error
+
+
 def main():
     try:
         data = json.load(sys.stdin)
@@ -98,6 +146,7 @@ def main():
 
     # (3) was the board updated after the route?
     if _mtime(orbit / "tasks.json") > route_mt or _mtime(orbit / "agents.json") > route_mt:
+        _cpo_vigilance(orbit, route_mt)                     # board OK — but is the CPO satisfied?
         return                                              # the board WAS made visible → all good
 
     # GAP: substantial work, no board. Record it + block once.

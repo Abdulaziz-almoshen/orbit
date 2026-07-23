@@ -3,6 +3,27 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.52.0
+
+**The CPO is now a vigilant product manager, not a per-request reviewer.**
+
+- **On duty until the goal is achieved.** The Stop hook gains CPO vigilance: when a routed task did
+  substantial work and the board is visible but no commit-bound `ACCEPT` exists, the stop is blocked
+  once and the CPO is demanded. Exactly three things end the watch: an ACCEPT envelope, an explicit
+  park (`.orbit/cpo/parked` + telling the user), or the user saying stop. "The session ended" is no
+  longer an outcome.
+- **The big-company bar.** The CPO role now carries thirty years of top-tier product judgment
+  (Apple/Meta-grade): before ACCEPT it must answer *"would a staff PM at a top product org put
+  their name on this?"* — the gate does not lower because everyone is tired.
+- **PM stance on every request.** The router's task directive now opens with: you are the product
+  manager, not an order-taker — the user's words are the entry to their goal, never the goal;
+  reconstruct the intent, run discovery on substantial work, iterate until the CPO accepts.
+- **Learning goes behind the skills.** On every verdict the CPO also feeds process lessons through
+  the active-learning gate, and three rounds of change orders repeating one theme are recorded as a
+  proposed playbook amendment in the learning ledger (human-reviewed via `orbit-memory review` —
+  durable promotion is never automatic).
+- Tests: `test_cpo_gate.py` gains the vigilance suite (block once · ACCEPT releases · park releases).
+
 ## 0.51.0
 
 **Always-on routing: every real request now visibly engages Orbit.**

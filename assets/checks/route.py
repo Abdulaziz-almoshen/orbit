@@ -71,7 +71,12 @@ NEGATION_PAT = re.compile(r"^\s*(don'?t|do not|no need to|never mind|nevermind|s
 
 TASK_CTX = (
     "[orbit] ROUTING — default lane: TASK. Route it through the loop (deterministic keyword match; "
-    "if it's clearly NOT a task, say so in one line and answer directly instead). **COST MODE IS LITE "
+    "if it's clearly NOT a task, say so in one line and answer directly instead). **YOU ARE THE "
+    "PRODUCT MANAGER, NOT AN ORDER-TAKER:** the user's words are the entry point to their goal, "
+    "never the goal itself. Reconstruct the intent, imagine what they are really reaching for, and "
+    "on substantial work run discovery before building — then iterate until the CPO accepts the "
+    "deliverable against that goal (the run is not done on your feeling; it is done on the CPO's "
+    "commit-bound ACCEPT).**COST MODE IS LITE "
     "BY DEFAULT:** before any T2/T3/T4 loop, run `scripts/orbit-context doctor` when available; if it "
     "reports FAIL, compact or ask before fan-out. **SIZE THE GEAR FIRST** (the Gearbox — "
     "`.orbit/skills/loop-tiers.md`): score effort/risk/uncertainty and pick the smallest gear that can "

@@ -119,8 +119,48 @@ def test_scaffold_provisions_cpo():
         ck(seed.read_text() == before, "re-scaffold must NEVER clobber learned user preferences")
 
 
+def _run_stop_hook(orbit_root, cwd):
+    hook = ROOT / "assets" / "checks" / "orbit-stop-check.py"
+    proc = subprocess.run([sys.executable, str(hook)], text=True, capture_output=True,
+                          input=json.dumps({"cwd": str(cwd)}),
+                          env={**os.environ, "CLAUDE_PROJECT_DIR": str(cwd)})
+    return json.loads(proc.stdout) if proc.stdout.strip() else None
+
+
+def test_stop_vigilance():
+    """The CPO stays on duty: substantial routed work with a visible board but NO accepting verdict
+    blocks the stop once; ACCEPT or an explicit park releases it."""
+    with tempfile.TemporaryDirectory() as d:
+        cwd = Path(d)
+        orbit = cwd / ".orbit"
+        (orbit / "cpo").mkdir(parents=True)
+        (orbit / "loop.config.json").write_text(json.dumps({"cpo_acceptance": {"enabled": True}}))
+        (orbit / ".last-task-route").write_text("x")
+        route_line = {"schema": 2, "phase": "route", "status": "start", "msg": "routing: task"}
+        work = [{"schema": 2, "phase": "act", "status": "done", "msg": f"w{i}"} for i in range(4)]
+        (orbit / "activity.jsonl").write_text("\n".join(json.dumps(x) for x in [route_line, *work]) + "\n")
+        time.sleep(0.02)
+        (orbit / "tasks.json").write_text("[]")             # board IS visible → old hook would allow
+
+        out = _run_stop_hook(orbit, cwd)
+        ck(out is not None and out.get("decision") == "block" and "CPO ON DUTY" in out.get("reason", ""),
+           f"an open goal with no verdict must block the stop: {out}")
+        out2 = _run_stop_hook(orbit, cwd)
+        ck(out2 is None, f"vigilance must block at most ONCE per route: {out2}")
+
+        (orbit / ".cpo-stop-warned").unlink()               # fresh route simulation: ACCEPT releases
+        time.sleep(0.02)
+        (orbit / "cpo" / "round-1.json").write_text(json.dumps({"commit": "abc", "verdict": "ACCEPT"}))
+        ck(_run_stop_hook(orbit, cwd) is None, "an ACCEPT newer than the route must release the watch")
+
+        (orbit / "cpo" / "round-1.json").unlink()
+        (orbit / "cpo" / "parked").write_text("user parked: demo later")
+        ck(_run_stop_hook(orbit, cwd) is None, "an explicit park must release the watch")
+
+
 def main():
-    for fn in (test_evaluator_paths, test_gate_is_wired_after_qa, test_scaffold_provisions_cpo):
+    for fn in (test_evaluator_paths, test_gate_is_wired_after_qa, test_scaffold_provisions_cpo,
+               test_stop_vigilance):
         try:
             fn()
         except Exception as e:
