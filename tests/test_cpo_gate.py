@@ -74,8 +74,24 @@ def test_evaluator_paths():
         time.sleep(0.02)
         (vdir / "round-4.json").write_text(json.dumps({"commit": "abc12345", "verdict": "ACCEPT"}))
         r = m.evaluate_cpo_acceptance(out, cfg)
-        ck(r["passed"] is True and r["status"] == "accepted",
-           f"a commit-bound ACCEPT must open the gate: {r}")
+        ck(r["passed"] is False and r["status"] == "ungrounded",
+           f"an ACCEPT with no skill basis and no seeded updates must be rejected: {r}")
+
+        time.sleep(0.02)
+        (vdir / "round-4b.json").write_text(json.dumps(
+            {"commit": "abc12345", "verdict": "ACCEPT",
+             "user_model_updates": ["first signal: prefers honest states"]}))
+        r = m.evaluate_cpo_acceptance(out, cfg)
+        ck(r["passed"] is True, f"fresh project: ACCEPT seeding the first user-model signals passes: {r}")
+
+        time.sleep(0.02)
+        (vdir / "round-4c.json").write_text(json.dumps(
+            {"commit": "abc12345", "verdict": "ACCEPT",
+             "basis": {"skills": ["user-model R1: honest states over alarms"],
+                       "research": ["walked the flow"], "weights": {"skills": 0.4, "research": 0.6}}}))
+        r = m.evaluate_cpo_acceptance(out, cfg)
+        ck(r["passed"] is True and r["status"] == "accepted" and "1 skill citation" in r["reason"],
+           f"a grounded, commit-bound ACCEPT must open the gate and count its citations: {r}")
 
         (vdir / "round-5.json").write_text("{broken json")
         r = m.evaluate_cpo_acceptance(out, cfg)

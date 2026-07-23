@@ -113,7 +113,11 @@
   "cpo_acceptance": {
     "enabled": true,
     "stage": "after_independent_qa_before_done",
-    "max_rounds": 5
+    "max_rounds": 5,
+    "basis_weights": {
+      "skills": 0.4,
+      "research": 0.6
+    }
   },
 
   "_independent_qa_help": "Optional second-provider release gate. The Planner arms an acceptance manifest before implementation; after the internal gates pass, Orbit reviews only an exact committed snapshot. Both enabled and external_export.approved must be true before any private code is sent. Project-specific rubrics stay in the project and are listed by each request.",

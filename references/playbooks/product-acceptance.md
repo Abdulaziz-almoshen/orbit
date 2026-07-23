@@ -20,6 +20,23 @@ gate that re-anchors on the artifact the system did NOT write: the user's ask.
 | **Taste** | Judged BY THE USER-MODEL, not your own preferences — does it match what this user consistently values? |
 | **Surprise** | Did we bring something the user didn't ask for but will genuinely love? (Bonus, never a blocker — see the surprise rule in `clarify-and-challenge.md`.) |
 
+## Grounded verdicts — the skills ARE the gate
+A verdict is never a fresh opinion. It is computed from two weighted evidence sources, and the
+envelope must show both:
+- **The accumulated skills (weight 0.4):** `.orbit/skills/user-model.md` + every `user-<topic>.md`
+  skill the CPO has generated. Before judging, READ them all; each rubric score cites the specific
+  rules/signals it rests on (`"user-model R3"`, `"user-reporting #2"`). These skills exist because
+  past verdicts built them — this is what makes the gate consistent run over run instead of a
+  random check that changes mood with the model.
+- **CPO research (weight 0.6):** the fresh pass on THIS deliverable — walking it as the user, the
+  goal record, the QA matrix, comparable products where relevant. New evidence the skills don't
+  hold yet.
+An `ACCEPT` with an empty skills basis is invalid unless the skill files are genuinely empty (a
+brand-new project) — and in that case the verdict's `user_model_updates` must show the first
+signals being written, so the next verdict has a basis. The flywheel: **verdict cites skills →
+verdict updates skills → next verdict is sharper.** Weights are configurable in
+`loop.config.json → cpo_acceptance.basis_weights`.
+
 ## Verdict envelope (commit-bound; the loop enforces it)
 Write `.orbit/cpo/round-<n>.json` — the loop runner blocks `done` until an envelope for the exact
 commit says ACCEPT:
@@ -29,6 +46,11 @@ commit says ACCEPT:
   "commit": "<the exact commit reviewed — must equal the cycle's result.commit>",
   "goal": "<one line: the user's intent as you reconstructed it>",
   "verdict": "ACCEPT | ITERATE | REDEVELOP",
+  "basis": {
+    "skills": ["user-model R1: prefers honest states over alarms", "user-reporting #2: task name first"],
+    "research": ["walked the flow as the user: dismiss works, re-ping works", "goal record spec.md §2 satisfied"],
+    "weights": {"skills": 0.4, "research": 0.6}
+  },
   "scores": {"intent_fidelity": 9, "completeness": 8, "coherence": 9, "taste": 8, "surprise": 6},
   "change_orders": [
     {"priority": "must | should | nice", "order": "<specific, actionable — what and why>"}

@@ -282,8 +282,19 @@ def evaluate_cpo_acceptance(cycle_output: dict, cfg: dict) -> dict:
                           f"not the cycle's {str(commit)[:8]!r} — re-run the cpo subagent"}
     v = str(verdict.get("verdict", "")).upper()
     if v == "ACCEPT":
+        # A grounded gate, not a mood: ACCEPT must cite the accumulated skills it rests on —
+        # or, on a brand-new project with empty skills, show the first signals being written.
+        basis = verdict.get("basis") if isinstance(verdict.get("basis"), dict) else {}
+        cited = [s for s in (basis.get("skills") or []) if str(s).strip()]
+        seeded = [s for s in (verdict.get("user_model_updates") or []) if str(s).strip()]
+        if not cited and not seeded:
+            return {"passed": False, "status": "ungrounded",
+                    "reason": "ACCEPT without basis — the verdict must cite the skills it rests on "
+                              "(basis.skills), or on a fresh project record its first user-model "
+                              "updates. Re-run the cpo subagent per .orbit/skills/product-acceptance.md"}
         return {"passed": True, "status": "accepted", "verdict": v,
-                "reason": f"CPO accepted commit {str(commit)[:8]} against the goal"}
+                "reason": f"CPO accepted commit {str(commit)[:8]} against the goal "
+                          f"({len(cited)} skill citation(s))"}
     orders = verdict.get("change_orders") or []
     top = next((o.get("order", "") for o in orders if isinstance(o, dict)), "")
     return {"passed": False, "status": v.lower() or "rejected", "verdict": v,

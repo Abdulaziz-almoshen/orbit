@@ -3,6 +3,22 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.53.0
+
+**Grounded CPO verdicts: the skills ARE the gate — never a random check.**
+
+- Every CPO verdict must now carry a `basis` block: **accumulated skills (weight 0.4)** — cited
+  rules from `user-model.md` and the generated `user-<topic>.md` skills — plus **fresh CPO research
+  (weight 0.6)** on this exact deliverable. The loop REJECTS an ungrounded ACCEPT (`status:
+  ungrounded`): no skill citations and no first user-model updates → the gate stays shut.
+- Brand-new project escape is honest: with genuinely empty skills, an ACCEPT passes only if the
+  verdict writes the FIRST user-model signals — so the next verdict has a basis. The flywheel:
+  verdict cites skills → verdict updates skills → next verdict is sharper.
+- Weights configurable via `cpo_acceptance.basis_weights`. The prompting loop itself is unchanged —
+  this is an envelope-contract + playbook change enforced at the existing gate.
+- CPO procedure reordered: skills are read FIRST, before the deliverable.
+- Tests: ungrounded-ACCEPT rejection, first-signals bootstrap, citation counting.
+
 ## 0.52.0
 
 **The CPO is now a vigilant product manager, not a per-request reviewer.**
