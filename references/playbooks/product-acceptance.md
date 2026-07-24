@@ -37,6 +37,34 @@ signals being written, so the next verdict has a basis. The flywheel: **verdict 
 verdict updates skills → next verdict is sharper.** Weights are configurable in
 `loop.config.json → cpo_acceptance.basis_weights`.
 
+## The Grill — adversarial interrogation before any verdict
+You are not the builder's teammate reviewing a colleague's diff; you are the last person between
+this deliverable and the user, and your job in this stage is to try to BREAK the acceptance case.
+The sub-agents upstream are optimizing for completion — you do not lean toward them. Priorities,
+in order: **quality first, user experience right behind it, efficiency last.** A fast mediocre
+deliverable is a rejected deliverable.
+
+Grill every deliverable through SIX mandatory lenses — each one ends in `"clean"` (with the
+evidence that earned it) or `"findings"` (each finding severity `must`/`should`/`nice`):
+
+| Lens | The interrogation |
+|---|---|
+| **domain** | Does this fit THIS domain's reality — its vocabulary, its rules, its edge cases? Would a domain expert wince? |
+| **policy** | Does it violate any recorded policy, decision (`.orbit/decisions/`), constraint, or compliance boundary of this project? |
+| **product** | Does it fit the product it lives in — existing flows, naming, information architecture — or is it a bolt-on that ignores what's already there? |
+| **design_ux** | Walk it AS THE USER, end to end. Every state (empty/loading/error), every interaction, copy quality, responsiveness. UX findings are quality findings, not polish — a confusing flow is a `must`. On UI work, load `.orbit/skills/anti-ai-aesthetics.md` and `design-methodology.md` and apply them. |
+| **system_design** | Is the technical shape right — boundaries, data flow, failure modes, the boring-tech bar (`architecture-decisions`)? Will this design embarrass us in three months? |
+| **slop** | Hunt AI slop explicitly: generic filler copy, lorem-flavored placeholders, hedge-words, purple gradients-on-everything, fake data presented as real, dead buttons, TODO stubs shipped as done, tests that assert nothing, comments narrating the obvious, over-abstracted indirection nobody asked for. ANY slop finding is at least a `should`; user-visible slop is a `must`. |
+
+Grill rules:
+- **Every lens runs every time.** A lens that doesn't apply still appears, marked clean with the
+  reason ("no UI surface in this change").
+- **`clean` must be earned** — cite what you checked, not "looks fine." An unearned clean is the
+  same lie as an unearned ACCEPT.
+- **Unresolved `must` findings make ACCEPT impossible** (the loop enforces this). `should`
+  findings block unless explicitly waived in the envelope with a reason the user would agree with.
+- The grill findings ARE the change orders on ITERATE — specific, located, actionable.
+
 ## Verdict envelope (commit-bound; the loop enforces it)
 Write `.orbit/cpo/round-<n>.json` — the loop runner blocks `done` until an envelope for the exact
 commit says ACCEPT:
@@ -51,6 +79,15 @@ commit says ACCEPT:
     "research": ["walked the flow as the user: dismiss works, re-ping works", "goal record spec.md §2 satisfied"],
     "weights": {"skills": 0.4, "research": 0.6}
   },
+  "grill": [
+    {"lens": "domain", "verdict": "clean", "evidence": "terminology matches the recruiting flow glossary"},
+    {"lens": "policy", "verdict": "clean", "evidence": "no decision in .orbit/decisions/ contradicted"},
+    {"lens": "product", "verdict": "clean", "evidence": "reuses the existing card pattern, nav unchanged"},
+    {"lens": "design_ux", "verdict": "findings", "findings": [
+      {"severity": "must", "finding": "error state missing on the submit path — user sees a dead button"}]},
+    {"lens": "system_design", "verdict": "clean", "evidence": "single writer preserved; no new dependency"},
+    {"lens": "slop", "verdict": "clean", "evidence": "copy is specific; no placeholder data; tests assert behavior"}
+  ],
   "scores": {"intent_fidelity": 9, "completeness": 8, "coherence": 9, "taste": 8, "surprise": 6},
   "change_orders": [
     {"priority": "must | should | nice", "order": "<specific, actionable — what and why>"}

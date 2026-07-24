@@ -78,20 +78,52 @@ def test_evaluator_paths():
            f"an ACCEPT with no skill basis and no seeded updates must be rejected: {r}")
 
         time.sleep(0.02)
+        full_grill = [{"lens": l, "verdict": "clean", "evidence": f"checked {l}"}
+                      for l in ("domain", "policy", "product", "design_ux", "system_design", "slop")]
         (vdir / "round-4b.json").write_text(json.dumps(
             {"commit": "abc12345", "verdict": "ACCEPT",
-             "user_model_updates": ["first signal: prefers honest states"]}))
+             "user_model_updates": ["first signal: prefers honest states"], "grill": full_grill}))
         r = m.evaluate_cpo_acceptance(out, cfg)
-        ck(r["passed"] is True, f"fresh project: ACCEPT seeding the first user-model signals passes: {r}")
+        ck(r["passed"] is True, f"fresh project: grilled ACCEPT seeding the first signals passes: {r}")
+
+        def grill(overrides=None):
+            lenses = {l: {"lens": l, "verdict": "clean", "evidence": f"checked {l}"}
+                      for l in ("domain", "policy", "product", "design_ux", "system_design", "slop")}
+            for l, v in (overrides or {}).items():
+                if v is None:
+                    lenses.pop(l)
+                else:
+                    lenses[l] = v
+            return list(lenses.values())
+
+        def accept(g):
+            return {"commit": "abc12345", "verdict": "ACCEPT",
+                    "basis": {"skills": ["user-model R1: honest states over alarms"],
+                              "research": ["walked the flow"]},
+                    "grill": g}
 
         time.sleep(0.02)
-        (vdir / "round-4c.json").write_text(json.dumps(
-            {"commit": "abc12345", "verdict": "ACCEPT",
-             "basis": {"skills": ["user-model R1: honest states over alarms"],
-                       "research": ["walked the flow"], "weights": {"skills": 0.4, "research": 0.6}}}))
+        (vdir / "round-4c.json").write_text(json.dumps(accept(grill({"slop": None}))))
         r = m.evaluate_cpo_acceptance(out, cfg)
-        ck(r["passed"] is True and r["status"] == "accepted" and "1 skill citation" in r["reason"],
-           f"a grounded, commit-bound ACCEPT must open the gate and count its citations: {r}")
+        ck(r["passed"] is False and r["status"] == "ungrilled" and "slop" in r["reason"],
+           f"an ACCEPT missing a grill lens must be rejected naming the lens: {r}")
+
+        time.sleep(0.02)
+        (vdir / "round-4d.json").write_text(json.dumps(accept(grill({"design_ux": {
+            "lens": "design_ux", "verdict": "findings",
+            "findings": [{"severity": "must", "finding": "dead submit button — no error state"}]}}))))
+        r = m.evaluate_cpo_acceptance(out, cfg)
+        ck(r["passed"] is False and r["status"] == "grill_failed" and "dead submit button" in r["reason"],
+           f"an open must finding must block ACCEPT and name the finding: {r}")
+
+        time.sleep(0.02)
+        (vdir / "round-4e.json").write_text(json.dumps(accept(grill({"slop": {
+            "lens": "slop", "verdict": "findings",
+            "findings": [{"severity": "should", "finding": "one hedgy sentence in the empty state",
+                          "waived_because": "user approved the copy verbatim in review"}]}}))))
+        r = m.evaluate_cpo_acceptance(out, cfg)
+        ck(r["passed"] is True and r["status"] == "accepted" and "lenses grilled clean" in r["reason"],
+           f"full grill with only waived/resolved findings must open the gate: {r}")
 
         (vdir / "round-5.json").write_text("{broken json")
         r = m.evaluate_cpo_acceptance(out, cfg)

@@ -61,6 +61,15 @@ verdict only: you never fix code yourself; you write change orders.
 3. **Research the deliverable** (weight 0.6). Walk it as the user — run it, use it, read it.
    Judge with the rubric: intent fidelity, completeness, coherence, taste (per the user-model),
    and the surprise bar (did we bring anything the user didn't ask for but will love?).
+3b. **THE GRILL — interrogate, don't review.** You do not lean toward the sub-agents' work; they
+   optimize for completion, you try to break the acceptance case. Run ALL six lenses every time —
+   domain · policy · product · design_ux · system_design · slop — each ending in an EARNED clean
+   (cite what you checked) or located findings. Priorities in order: quality, user experience,
+   then efficiency. Hunt AI slop by name: filler copy, placeholder data shipped as real, dead
+   buttons, TODO stubs, tests that assert nothing, purple-gradient genericism. The loop rejects an
+   ACCEPT with a missing lens or an open must/unwaived-should finding — grilling is not optional.
+   (On UI work, apply `.orbit/skills/anti-ai-aesthetics.md` + `design-methodology.md` in the
+   design_ux lens.)
 4. **Verdict** (see the playbook's schema): `ACCEPT`, `ITERATE` (specific change orders,
    priority-ordered), or `REDEVELOP` (the approach itself misses the goal — say why and what
    the correct shape is). Write the envelope to `.orbit/cpo/round-<n>.json`, commit-bound, with

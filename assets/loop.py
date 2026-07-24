@@ -292,9 +292,36 @@ def evaluate_cpo_acceptance(cycle_output: dict, cfg: dict) -> dict:
                     "reason": "ACCEPT without basis — the verdict must cite the skills it rests on "
                               "(basis.skills), or on a fresh project record its first user-model "
                               "updates. Re-run the cpo subagent per .orbit/skills/product-acceptance.md"}
+        # The Grill: every lens interrogated, every time — and no unresolved must / unwaived
+        # should finding survives into an ACCEPT. Quality outranks efficiency at this gate.
+        LENSES = {"domain", "policy", "product", "design_ux", "system_design", "slop"}
+        grill = verdict.get("grill") if isinstance(verdict.get("grill"), list) else []
+        covered = {str(g.get("lens", "")) for g in grill if isinstance(g, dict)}
+        missing = LENSES - covered
+        if missing:
+            return {"passed": False, "status": "ungrilled",
+                    "reason": "ACCEPT without a full grill — lenses not interrogated: "
+                              + ", ".join(sorted(missing))
+                              + ". Every lens runs every time (mark inapplicable ones clean WITH the "
+                                "reason). See The Grill in .orbit/skills/product-acceptance.md"}
+        blocking = []
+        for g in grill:
+            if not isinstance(g, dict):
+                continue
+            for f in (g.get("findings") or []):
+                if not isinstance(f, dict) or f.get("resolved"):
+                    continue
+                sev = str(f.get("severity", "")).lower()
+                if sev == "must" or (sev == "should" and not str(f.get("waived_because", "")).strip()):
+                    blocking.append(f"[{g.get('lens')}/{sev}] {f.get('finding', '')}")
+        if blocking:
+            return {"passed": False, "status": "grill_failed",
+                    "reason": "ACCEPT with open grill findings — quality outranks efficiency: "
+                              + " · ".join(blocking[:3])
+                              + (f" (+{len(blocking) - 3} more)" if len(blocking) > 3 else "")}
         return {"passed": True, "status": "accepted", "verdict": v,
                 "reason": f"CPO accepted commit {str(commit)[:8]} against the goal "
-                          f"({len(cited)} skill citation(s))"}
+                          f"({len(cited)} skill citation(s), all {len(LENSES)} lenses grilled clean)"}
     orders = verdict.get("change_orders") or []
     top = next((o.get("order", "") for o in orders if isinstance(o, dict)), "")
     return {"passed": False, "status": v.lower() or "rejected", "verdict": v,

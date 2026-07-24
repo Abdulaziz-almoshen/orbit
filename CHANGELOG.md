@@ -3,6 +3,25 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.54.0
+
+**The Grill: the CPO now interrogates every deliverable — no leaning toward the sub-agents, no slop.**
+
+- New mandatory adversarial stage before any verdict: the CPO tries to BREAK the acceptance case
+  through SIX lenses, every time — **domain** (fits this domain's reality), **policy** (no recorded
+  decision/constraint violated), **product** (fits the product, not a bolt-on), **design_ux** (walked
+  as the user, every state, every interaction — a confusing flow is a `must` finding),
+  **system_design** (the technical shape won't embarrass us in three months), **slop** (AI slop
+  hunted by name: filler copy, placeholder data shipped as real, dead buttons, TODO stubs, tests
+  that assert nothing).
+- **Enforced at the gate, not requested in prose:** an ACCEPT missing any lens is rejected
+  (`ungrilled`, naming the missing lenses); an ACCEPT with an open `must` or unwaived `should`
+  finding is rejected (`grill_failed`, naming the findings). A `clean` must be earned with cited
+  evidence; grill findings ARE the ITERATE change orders.
+- Priorities codified in order: **quality first, user experience right behind it, efficiency last.**
+  On UI work the design_ux lens applies `anti-ai-aesthetics.md` + `design-methodology.md`.
+- Tests: missing-lens rejection, open-must blocking, waived-should acceptance, grilled bootstrap.
+
 ## 0.53.0
 
 **Grounded CPO verdicts: the skills ARE the gate — never a random check.**
