@@ -3,6 +3,28 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.55.0
+
+**Strict capability enforcement: installed Orbit projects must use the team they ship.**
+
+- Added a first-class **Business Analyst** role and `business-analysis.md` playbook. It converts
+  discovery into actors, workflows, business rules, numbered requirements, EARS acceptance
+  criteria, and a goal-to-proof traceability baseline.
+- Added `capability_enforcement.mode: strict`. Every substantial routed task now requires actual
+  completed owners for Product Discovery, Business Analysis, Market Research, Planner, Safety,
+  Reviewer, QA, CPO, and Reporter; UI projects additionally require Designer.
+- The Stop hook reads post-route role completion events and blocks with the exact missing owners.
+  Mentioning a role, listing it as available, or silently applying its “lens” no longer counts.
+- Lite mode now means **sequential mandatory stages**. User approval widens concurrency; it does not
+  waive required capability coverage.
+- Safe auto-heal backfills missing core roles, portable role specs, playbooks, and the strict config
+  into existing installations without overwriting customized files. Managed router/Stop hooks carry
+  the new enforcement behavior forward on update.
+- README and loop visual now show the complete enforced spine; the development command is corrected
+  to `bash tests/run.sh`.
+- Tests cover missing-stage blocking, successful release, UI Designer enforcement, and migration
+  backfill of Business Analysis plus the strict contract.
+
 ## 0.54.0
 
 **The Grill: the CPO now interrogates every deliverable — no leaning toward the sub-agents, no slop.**

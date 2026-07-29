@@ -1,9 +1,9 @@
 # The sub-agent team
 
-One agent doing everything can blow its context and miss domain checks. But the opposite failure is
-also real: waking the whole roster turns judgment into token burn. Orbit's rule is **catalog, not
-payroll**: keep narrow specialists available, then activate zero or one by default and ask before wider
-fan-out. This file defines the standard roster, the activation policy, the spec format, the handoff
+One agent doing everything can blow its context and skip domain checks. Orbit therefore assigns a
+**mandatory stage owner** to each substantial phase, while keeping concurrency at one by default.
+Approval widens fan-out; it does not waive Discovery, Business Analysis, Planning, Design (UI),
+Safety, Reviewer, QA, CPO, or Reporting. This file defines the standard roster, activation policy, handoff
 protocol, and how to render each role for both output layers.
 
 Orbit also has a **model-switching rule**: ordinary execution stays on the Executor lane, while the
@@ -18,9 +18,10 @@ default; rename and re-scope each role to the real subtasks of the product you'r
 | Role | Remit | Reads | Writes |
 |------|-------|-------|--------|
 | **Dispatcher / Router** | Classify each request: **question** → answer directly (no loop); **task** → first **clarify & challenge** (infer from the repo, surface premises, ask only the gap), then hand to the Orchestrator to route through the loop (CLAUDE.md §10). Loads `clarify-and-challenge`. No edit tools. | the user request, CLAUDE.md §10 | a routing decision + clarified intent |
-| **Orchestrator / PM** | **Conducts** the loop: sizes the gear, keeps Cost Mode Lite by default, uses role lenses before workers, owns STATE.md (sole writer), checks stop conditions. On substantial work it may request one specialist for a proof gap, or ask before wider fan-out. Loads `loop-tiers` + `planning-and-decision-briefs`. | CLAUDE.md, STATE.md, selected briefs | STATE.md, ratified plan |
+| **Orchestrator / PM** | **Conducts** the loop: sizes the gear, keeps Cost Mode Lite sequential, dispatches every mandatory stage owner, owns STATE.md (sole writer), checks stop conditions. Asks before wider fan-out. Loads `loop-tiers` + `planning-and-decision-briefs`. | CLAUDE.md, STATE.md, selected briefs | STATE.md, ratified plan |
 | **Advisor** *(Opus 4.8, on demand)* | Senior judgment lane for costly forks: architecture one-way doors, safety/compliance uncertainty, repeated gate failure, or decisions expensive to get wrong. Read-only, max one call per cycle by default; advises, never builds. | a tiny decision packet, selected files | compact verdict + proof/check |
-| **Product Discovery Manager** *(planning phase, on demand)* | De-risk the *bet* before building: frame the **outcome** + the user's **job**, map opportunities from evidence, kill the four risks (value/usability/feasibility/viability), name the **riskiest assumption + cheapest test**. Use as a lens first; spawn only when the bet is genuinely uncertain. Loads `product-discovery`. | clarified intent, repo/analytics, market brief | `discovery-brief.md` |
+| **Product Discovery Manager** *(mandatory on substantial work)* | De-risk the *bet* before building: frame the **outcome** + the user's **job**, map opportunities from evidence, kill the four risks (value/usability/feasibility/viability), name the **riskiest assumption + cheapest test**. Loads `product-discovery`. | clarified intent, repo/analytics, market brief | `discovery-brief.md` |
+| **Business Analyst** *(mandatory on substantial work)* | Convert the goal and discovery evidence into actors, workflows, business rules, numbered requirements, EARS acceptance criteria, and a goal-to-proof traceability baseline. Loads `business-analysis`. | goal, discovery/market briefs, repository behavior | `business-analysis.md` |
 | **Market & Competitive Researcher** *(planning phase, on demand)* | What already exists, what the user would use instead, where the gap is — a **reuse-vs-build verdict**, graded feature matrix, positioning. Timeboxed, cited. Use only for external uncertainty that changes the decision. Loads `market-and-competitive-research`. Distinct from Input/Research below. | the JTBD/intent, the web, deps | `market-brief.md` |
 | **Planner** *(planning phase, substantial lane)* | Turn the validated, de-risked bet into the **plan of record** — thin vertical slices, sequenced by dependency + risk, a proof bar per slice, hand-off specs. Emits **decision briefs** in the standard format up to the Orchestrator. Loads `planning-and-decision-briefs`. | discovery + market briefs, §3 criteria | `plan.md` + decision briefs |
 | **Input / Research Specialist** *(optional — provision when the domain has a distinct data-intake lane)* | Gather, clean, and validate the **data inputs** the work consumes; guarantee they're complete and fresh. (Supply-side data — *not* the demand-side Market Researcher above.) | external sources, `input-validation` skill *(author per domain)* | validated inputs + a quality report |
@@ -38,8 +39,8 @@ output is good enough to count as progress (it is the quality gate). The Orchest
 delegate freely but cannot overrule either gate without a human.
 
 **Which roles `/orbit` always provisions — the universal spine** (dispatcher, orchestrator,
-advisor, product-discovery, market-researcher, planner, reviewer, qa-engineer, cpo, reporter, safety-gate):
-Dispatcher, Orchestrator, Advisor, Product Discovery Manager, Market & Competitive Researcher, Planner,
+advisor, product-discovery, business-analyst, market-researcher, planner, reviewer, qa-engineer, cpo, reporter, safety-gate):
+Dispatcher, Orchestrator, Advisor, Product Discovery Manager, Business Analyst, Market & Competitive Researcher, Planner,
 Reviewer, QA Engineer, Reporter, Safety/Compliance — plus **one Builder/Engineer per detected surface** (web →
 Frontend Engineer, api → Backend Engineer, etc.). This list is canonical in
 `scripts/scaffold.py` → `ROLES_CORE` + `SURFACE_ENGINEERS`; `scripts/check-coherence.py`
@@ -62,6 +63,7 @@ sub-agent, it **provisions the relevant playbooks** by copying them into the rep
 | `planning-and-decision-briefs.md` | **Orchestrator** + **Planner** | always |
 | `clarify-and-challenge.md` | **Dispatcher / Orchestrator** | always (the task path) |
 | `product-discovery.md` | **Product Discovery Manager** | provisioned always; activated on demand when the bet is uncertain |
+| `business-analysis.md` | **Business Analyst** | provisioned always; mandatory on substantial work |
 | `market-and-competitive-research.md` | **Market & Competitive Researcher** | provisioned always; activated on demand when external prior art changes the decision |
 | `technical-review.md` | **Reviewer / Evaluator** | always (any code/technical repo) |
 | `active-learning.md` | **Orchestrator** (the loop's UPDATE phase) | always — silently learns from corrections + major changes |

@@ -11,9 +11,12 @@ Task: $ARGUMENTS
    repo yet, tell the user to run `/orbit` first to set it up, then stop.
 2. **QUEUE** — append the task to `.orbit/STATE.md`'s task queue with a clear done-gate.
 3. **Board FIRST, then RUN the cycle** via the sub-agent roster in `.claude/agents/`:
-   Dispatcher (confirm it's a task, not a question) → the specialists it needs → QA-Engineer
-   (validate against the acceptance criteria / RTM) → Reviewer (quality gate) → Safety (veto) →
-   Reporter.
+   Dispatcher → **Product Discovery → Business Analyst → Market Researcher → Planner** →
+   **Designer on UI work** → Engineer → **Safety → Reviewer → QA Engineer → CPO → Reporter**.
+   For substantial work every bold stage owner is mandatory. Dispatch each actual role and require
+   its completed activity event; mentioning it, privately applying its “lens,” or listing it as
+   available does not count. Lite mode runs the stages sequentially. Approval controls wider
+   concurrency, not whether Orbit may skip its capabilities.
    **Your FIRST action — before spawning any specialist — is to make the board visible:** call
    `.orbit/activity.py` `set_team([...])` to declare who's active + who's queued, `set_tasks([...])`
    to write the checklist, and build the native list with `TaskCreate` — all up front, so the user

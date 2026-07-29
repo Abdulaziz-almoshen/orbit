@@ -184,7 +184,19 @@ engine**: the portable `loop.py` runner (checkpointing, resume, budget) or a dur
   not just chat.
 - The same visible board, persisted across sessions.
 
+## Mandatory capability spine
+
+Gear controls depth and concurrency, not whether quality roles exist. Any routed task that produces
+substantial work must record actual completed owners for:
+
+`Product Discovery → Business Analyst → Market Researcher → Planner → [Designer for UI] → Build →
+Safety → Reviewer → QA Engineer → CPO → Reporter`
+
+Lite mode runs this spine sequentially with bounded packets. T3/T4 may fan out only after approval.
+A role used as an internal “lens,” mentioned in prose, or shown as dormant on the board does not
+satisfy the contract. The Stop hook reads post-route completion events and blocks missing stages.
+T0 remains direct only when no substantive project work occurs.
+
 ## The one-line summary
-T0 answers, T1 does, T2 builds-with-a-team, T3 investigates-then-builds, T4 runs-a-durable-mission —
-each announced as a Gear Card, each on the visible board, each with guardrails matched to its reach.
-**Smallest gear that still proves the result.**
+T0 answers; T2+ runs the complete governed spine at the depth its risk deserves; T3 investigates
+more broadly; T4 makes the mission durable and human-gated. **Smallest depth, full accountability.**

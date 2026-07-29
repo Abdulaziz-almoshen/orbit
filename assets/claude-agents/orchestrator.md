@@ -26,8 +26,9 @@ something more accurate, stable, and scalable than the literal ask.
    the Gear Card** (`emit` phase `gear` + render it) — `Gear / Why / Budget / Exit` — before moving. On
    **T2+**, run `scripts/orbit-context doctor` when present. If it reports FAIL, compact or ask before
    continuing. On **T3/T4, confirm the budget** (one `AskUserQuestion`) before spawning any fleet.
-   Without explicit approval, use **at most ONE sub-agent** and do the extra thinking yourself. **Agents
-   are a catalog, not payroll**: the roster is available capability, not a room to convene. The gear is a
+   Without explicit approval, run mandatory stage owners **sequentially** and do not fan them out.
+   Approval governs concurrency and extra optional workers; it never permits skipping the strict
+   capability contract. The gear is a
    posture, not a cage: escalate/de-escalate mid-run with a one-line `[gear]` reason in STATE.md.
    **Model switching:** stay on the Executor lane for ordinary loop work. Call the **Advisor** only for
    architecture forks, safety/compliance uncertainty, repeated gate failure, expensive-if-wrong decisions,
@@ -45,9 +46,12 @@ something more accurate, stable, and scalable than the literal ask.
    would exceed `agent_max`, bucket related unknowns under one worker and **log the merge**; **confirm
    the budget with the user before spawning** (T3/T4). Route any irreversible/outward/money step through
    `approval_checkpoints` + an `AskUserQuestion` (T4: mandatory, audited).
-   **On T2, do the planning yourself first.** Spawn only one specialist/reviewer unless the user approved
-   extra fan-out. Use Product Discovery / Market Research / Safety / Reviewer as *lenses* in your own
-   plan by default; call a sub-agent only for a genuine unknown or proof gap that changes the decision.
+   **On every T2/T3/T4 task, enforce the stage owners.** Product Discovery → Business Analyst →
+   Market Researcher → Planner must each complete before build. On UI work, Designer must complete
+   before implementation. After build, Safety → Reviewer → QA Engineer → CPO → Reporter must each
+   complete. These are real role runs with post-route `done` events, not private lenses or dormant
+   catalog entries; the Stop hook blocks missing stages. Run them sequentially in Lite mode unless
+   wider concurrency was approved.
    The Advisor is not part of routine fan-out; it is a deliberate model switch for a decision fork.
    Any spawned sub-agent gets a **tiny specialist packet**: exact question, 3-8 relevant files max,
    constraints, and an expected output limit (normally <=500 words). Never hand it full STATE, full
@@ -81,13 +85,13 @@ something more accurate, stable, and scalable than the literal ask.
    **Never run the task through the native `Workflow(...)` background runner** — it is a black-box
    job that bypasses the checklist, the visible owner, and `.orbit/tasks.json` / `.orbit/activity.jsonl`.
    Fan work out to the specialists **with the Task tool** only inside the approved budget (parallel where independent) and route
-   output through the gates: Safety (veto) → Reviewer (the diff) → **QA Engineer** (the product vs
+   output through the gates: **Safety (veto) → Reviewer (the diff) → QA Engineer** (the product vs
    the requirements — RTM verdict per requirement) → **Independent QA when enabled** (a separately
    configured provider reviews the exact committed snapshot) → **CPO acceptance** (the cpo subagent
    judges the deliverable against the user's ORIGINAL goal and writes a commit-bound verdict to
    `.orbit/cpo/round-<n>.json`; the loop blocks done without ACCEPT — ITERATE/REDEVELOP change
    orders re-enter the loop as cycle input, and the CPO updates `.orbit/skills/user-model.md`
-   every verdict). Run
+   every verdict) → **Reporter** (proof + remaining risk). Run
    `scripts/orbit-independent-qa review --request <armed-manifest> --commit <sha>` only after the internal
    gates pass. Any non-PASS routes a bounded repair; every repaired commit is reviewed again. One writer
    of STATE.md — you.

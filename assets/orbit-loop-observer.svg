@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="760" viewBox="0 0 1600 760" role="img" aria-labelledby="title desc">
-  <title id="title">Orbit agent loop with a live observer watchdog</title>
-  <desc id="desc">A seven-stage agent workflow travels across an orbital path. During implementation, a silent watchdog circles the worker, reads each turn, and sends a rare advisory only when drift matters.</desc>
+  <title id="title">Orbit strict capability loop with a live observer watchdog</title>
+  <desc id="desc">A strict specialist spine travels from discovery and business analysis through design, implementation, Safety, Reviewer, QA, CPO, and reporting. During implementation, a silent watchdog circles the worker.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#07090d"/>
@@ -53,15 +53,15 @@
   <path d="M86 638C333 717 561 655 734 554C938 436 1184 480 1514 638" fill="none" stroke="#111c28" stroke-width="1"/>
 
   <g class="sans">
-    <text x="76" y="72" class="eyebrow" fill="#75b7ff">THE ORBIT LOOP · LIVE SUPERVISION</text>
-    <text x="76" y="116" font-size="34" font-weight="720" fill="#f7f9fc">Build fast. Catch drift before it compounds.</text>
-    <text x="76" y="150" font-size="16" fill="#8c98a8">The worker owns the task. The watchdog owns one question: is the method still honest?</text>
+    <text x="76" y="72" class="eyebrow" fill="#75b7ff">THE ORBIT LOOP · STRICT CAPABILITY CONTRACT</text>
+    <text x="76" y="116" font-size="34" font-weight="720" fill="#f7f9fc">Every required specialist. No silent shortcuts.</text>
+    <text x="76" y="150" font-size="16" fill="#8c98a8">Actual completed owners are required. A role mentioned in prose does not pass.</text>
     <g transform="translate(1320 62)">
       <circle cx="18" cy="18" r="16" fill="none" stroke="#f7f9fc" stroke-width="3"/>
       <circle cx="18" cy="18" r="9" fill="none" stroke="#f7f9fc" stroke-width="2"/>
       <path d="M3 26L33 9" stroke="#f7f9fc" stroke-width="3"/>
-      <text x="48" y="15" font-size="12" font-weight="700" letter-spacing="2" fill="#8c98a8">ORBIT 0.49</text>
-      <text x="48" y="36" font-size="15" font-weight="650" fill="#f7f9fc">Observer agents</text>
+      <text x="48" y="15" font-size="12" font-weight="700" letter-spacing="2" fill="#8c98a8">ORBIT 0.55</text>
+      <text x="48" y="36" font-size="15" font-weight="650" fill="#f7f9fc">Enforced team</text>
     </g>
   </g>
 
@@ -75,18 +75,18 @@
   <g class="sans">
     <g transform="translate(92 248)">
       <circle cx="34" cy="84" r="7" fill="#75b7ff" filter="url(#blueGlow)"/>
-      <text x="0" y="0" class="stageNo">01</text><text x="0" y="28" class="stageName">READ</text>
-      <text x="0" y="50" class="stageNote">Memory + state</text>
+      <text x="0" y="0" class="stageNo">01</text><text x="0" y="28" class="stageName">DISCOVER</text>
+      <text x="0" y="50" class="stageNote">Outcome + evidence</text>
     </g>
     <g transform="translate(280 198)">
       <circle cx="34" cy="134" r="7" fill="#75b7ff" filter="url(#blueGlow)"/>
-      <text x="0" y="0" class="stageNo">02</text><text x="0" y="28" class="stageName">PLAN</text>
-      <text x="0" y="50" class="stageNote">Smallest provable move</text>
+      <text x="0" y="0" class="stageNo">02</text><text x="0" y="28" class="stageName">DEFINE</text>
+      <text x="0" y="50" class="stageNote">BA rules + criteria</text>
     </g>
     <g transform="translate(462 248)">
       <circle cx="34" cy="84" r="7" fill="#75b7ff" filter="url(#blueGlow)"/>
-      <text x="0" y="0" class="stageNo">03</text><text x="0" y="28" class="stageName">PROBE</text>
-      <text x="0" y="50" class="stageNote">Attack the assumption</text>
+      <text x="0" y="0" class="stageNo">03</text><text x="0" y="28" class="stageName">PLAN</text>
+      <text x="0" y="50" class="stageNote">Research + Design</text>
     </g>
   </g>
 
@@ -130,17 +130,17 @@
     <g transform="translate(1018 248)">
       <circle cx="34" cy="84" r="7" fill="#75b7ff" filter="url(#blueGlow)"/>
       <text x="0" y="0" class="stageNo">05</text><text x="0" y="28" class="stageName">GATES</text>
-      <text x="0" y="50" class="stageNote">Safety · Review · QA</text>
+      <text x="0" y="50" class="stageNote">Safety · Reviewer · QA</text>
     </g>
     <g transform="translate(1200 198)">
       <circle cx="34" cy="134" r="7" fill="#75b7ff" filter="url(#blueGlow)"/>
-      <text x="0" y="0" class="stageNo">06</text><text x="0" y="28" class="stageName">UPDATE</text>
-      <text x="0" y="50" class="stageNote">State + evidence</text>
+      <text x="0" y="0" class="stageNo">06</text><text x="0" y="28" class="stageName">CPO</text>
+      <text x="0" y="50" class="stageNote">Goal fidelity</text>
     </g>
     <g transform="translate(1380 248)">
       <circle cx="34" cy="84" r="7" fill="#75b7ff" filter="url(#blueGlow)"/>
-      <text x="0" y="0" class="stageNo">07</text><text x="0" y="28" class="stageName">DECIDE</text>
-      <text x="0" y="50" class="stageNote">Continue or stop</text>
+      <text x="0" y="0" class="stageNo">07</text><text x="0" y="28" class="stageName">REPORT</text>
+      <text x="0" y="50" class="stageNote">Proof or iterate</text>
     </g>
   </g>
 
@@ -156,9 +156,9 @@
 
     <g transform="translate(92 514)">
       <circle cx="10" cy="10" r="5" fill="#ff8a3d"/>
-      <text x="28" y="14" class="tiny" fill="#ff8a3d">ONE EARLY WARNING</text>
-      <text x="28" y="40" font-size="19" font-weight="680" fill="#f7f9fc">Less rework. Lower token waste.</text>
-      <text x="28" y="66" font-size="14" fill="#8c98a8">No finding means no interruption.</text>
+      <text x="28" y="14" class="tiny" fill="#ff8a3d">STOP HOOK ENFORCED</text>
+      <text x="28" y="40" font-size="19" font-weight="680" fill="#f7f9fc">Missing owner? The run stays open.</text>
+      <text x="28" y="66" font-size="14" fill="#8c98a8">Sequential by default. Complete by design.</text>
     </g>
 
     <g transform="translate(1200 514)">

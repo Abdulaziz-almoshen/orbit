@@ -242,7 +242,7 @@ FILE_PLAN = [
 # Reusable skill-library playbooks copied into .orbit/skills/ (the provisioning step).
 PLAYBOOKS_ALWAYS = ["clarify-and-challenge.md", "planning-and-decision-briefs.md",
                     "technical-review.md", "active-learning.md",
-                    "product-discovery.md", "market-and-competitive-research.md",
+                    "product-discovery.md", "business-analysis.md", "market-and-competitive-research.md",
                     "qa-validation.md", "goal-pipeline.md", "architecture-decisions.md",
                     "safety-rules.md", "deliverable-reports.md", "loop-tiers.md",
                     "counterfactual-regret.md", "iterative-repair.md", "product-acceptance.md"]
@@ -263,7 +263,8 @@ DESIGN_GATE_FRONTEND = [("checks/design-gate.py", ".orbit/checks/design-gate.py"
 
 # The UNIVERSAL spine — every project gets these (routing, planning, gates, reporting). Copied
 # verbatim to .claude/agents/<role>.md and, frontmatter-stripped, to .orbit/roles/<role>.md.
-ROLES_CORE = ["dispatcher", "orchestrator", "advisor", "product-discovery", "market-researcher", "planner",
+ROLES_CORE = ["dispatcher", "orchestrator", "advisor", "product-discovery", "business-analyst",
+              "market-researcher", "planner",
               "reviewer", "qa-engineer", "cpo", "reporter", "safety-gate"]
 
 # Claude Code-native sidecars. These are deliberately not mirrored into `.orbit/roles/`: the
@@ -539,7 +540,8 @@ def _merge_loop_config_defaults(target: Path, created: list, warnings: list) -> 
         current = json.loads(dst.read_text())
         defaults = json.loads(src.read_text())
         changed = []
-        for key in ("_independent_qa_help", "independent_qa"):
+        for key in ("_independent_qa_help", "independent_qa",
+                    "_capability_enforcement_help", "capability_enforcement"):
             if key not in current:
                 current[key] = defaults[key]
                 changed.append(key)
@@ -813,9 +815,10 @@ def _active_writer_lock(target: Path) -> bool:
 def _auto_heal(target: Path) -> str:
     """Perform the safe, non-interactive subset of a full scaffold refresh.
 
-    This never edits CLAUDE.md, portable roles, role bodies, domain skills, or customized checks. It
-    may add the two observer frontmatter keys to known Orbit workers and the observer env default to
-    settings; explicit observer/settings values always win.
+    This never edits CLAUDE.md, existing portable roles, existing role bodies, domain skills, or
+    customized checks. It backfills missing shipped core roles/playbooks and may add the two observer
+    frontmatter keys to known Orbit workers and the observer env default to settings; existing files
+    and explicit observer/settings values always win.
     """
     if not (target / ".orbit").is_dir():
         return "not an Orbit repo"
@@ -834,6 +837,13 @@ def _auto_heal(target: Path) -> str:
     playbooks = PLAYBOOKS_ALWAYS + (PLAYBOOKS_FRONTEND if has_ui else [])
     for pb in playbooks:
         _place(PLAYBOOKS / pb, target / ".orbit/skills" / pb, created, skipped)
+    # Capability additions must reach already-installed projects. Missing shipped roles are safe to
+    # add; existing/customized role files remain byte-for-byte untouched.
+    for role in ROLES_CORE:
+        src = AGENTS / f"{role}.md"
+        _place(src, target / ".claude/agents" / f"{role}.md", created, skipped)
+        _place(src, target / ".orbit/roles" / f"{role}.md", created, skipped,
+               transform=_strip_frontmatter)
     if has_ui:
         for src_rel, dst_rel in QA_FRONTEND + DESIGN_GATE_FRONTEND:
             _place(ASSETS / src_rel, target / dst_rel, created, skipped, 0o755)

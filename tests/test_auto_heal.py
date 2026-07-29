@@ -38,6 +38,15 @@ def main():
             failures.append("missing engine was not restored")
         if not (target / ".orbit/skills/iterative-repair.md").exists():
             failures.append("missing playbook was not restored")
+        if not (target / ".orbit/skills/business-analysis.md").exists():
+            failures.append("business-analysis playbook was not backfilled")
+        if not (target / ".claude/agents/business-analyst.md").exists():
+            failures.append("Business Analyst role was not backfilled")
+        if not (target / ".orbit/roles/business-analyst.md").exists():
+            failures.append("portable Business Analyst role was not backfilled")
+        healed_cfg = json.loads((target / ".orbit/loop.config.json").read_text())
+        if healed_cfg.get("capability_enforcement", {}).get("mode") != "strict":
+            failures.append("strict capability contract was not backfilled")
         worker = (target / ".claude/agents/backend-engineer.md").read_text()
         if "observer: watchdog" not in worker or "KEEP ME" not in worker:
             failures.append("auto-heal did not activate the observer while preserving the worker body")

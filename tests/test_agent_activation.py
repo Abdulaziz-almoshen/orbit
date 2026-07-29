@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Agent activation policy (v0.38.x): Orbit may ship many specialists, but they are a catalog,
-not payroll. The default run is one owner, zero/one sub-agent, tiny packets, approval before fanout.
+Agent activation policy (v0.55): substantial work has mandatory stage owners, run sequentially by
+default. Approval widens concurrency; it never turns required capabilities into optional lenses.
 
 Run: python3 tests/test_agent_activation.py   (exit 0 = pass)
 """
@@ -21,16 +21,26 @@ def main():
     fails = []
     cfg = json.loads(_read("assets", "loop.config.json"))
     cm = cfg.get("cost_mode", {})
-    if cm.get("activation_model") != "catalog_not_payroll":
-        fails.append("[config] cost_mode.activation_model must be catalog_not_payroll")
-    if cm.get("max_subagents_without_approval") != 1:
-        fails.append("[config] max_subagents_without_approval must be 1")
+    if cm.get("activation_model") != "mandatory_stage_owners":
+        fails.append("[config] activation_model must be mandatory_stage_owners")
+    if cm.get("max_concurrent_subagents_without_approval") != 1:
+        fails.append("[config] default concurrency must be one")
     if cm.get("fanout_requires_approval") is not True:
         fails.append("[config] fanout_requires_approval must be true")
     if cm.get("packet_file_limit") != 8:
         fails.append("[config] packet_file_limit must be 8")
     if cm.get("packet_output_word_limit") != 500:
         fails.append("[config] packet_output_word_limit must be 500")
+
+    contract = cfg.get("capability_enforcement", {})
+    if contract.get("enabled") is not True or contract.get("mode") != "strict":
+        fails.append("[config] strict capability enforcement must ship enabled")
+    for role in ("product-discovery", "business-analyst", "market-researcher", "planner",
+                 "safety-gate", "reviewer", "qa-engineer", "cpo", "reporter"):
+        if role not in contract.get("required_for_substantial", []):
+            fails.append(f"[config] required_for_substantial missing {role}")
+    if "designer" not in contract.get("required_for_ui", []):
+        fails.append("[config] UI work must require Designer")
 
     surfaces = {
         "route.py": _read("assets", "checks", "route.py"),
@@ -41,10 +51,10 @@ def main():
     }
     for name, text in surfaces.items():
         low = text.lower()
-        if "catalog" not in low or "payroll" not in low:
-            fails.append(f"[docs] {name} must say agents are catalog, not payroll")
-        if "one sub-agent" not in low and "1 sub-agent" not in low and "zero or one" not in low:
-            fails.append(f"[docs] {name} must preserve the one-subagent default")
+        if "mandatory" not in low and "required" not in low:
+            fails.append(f"[docs] {name} must describe mandatory stage ownership")
+        if "sequential" not in low and "one active" not in low:
+            fails.append(f"[docs] {name} must preserve single-worker default concurrency")
         if "approval" not in low:
             fails.append(f"[docs] {name} must require approval before wider fanout")
 
@@ -65,7 +75,7 @@ def main():
         for f in fails:
             print("  -", f)
         sys.exit(1)
-    print("PASS: agent-activation (catalog-not-payroll + one-subagent default + tiny packets + board semantics)")
+    print("PASS: agent-activation (mandatory stage owners + sequential default + tiny packets + board semantics)")
 
 
 if __name__ == "__main__":

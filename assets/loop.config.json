@@ -69,15 +69,48 @@
   "_cost_mode_help": "Default behavior that prevents Orbit from becoming a token amplifier. The model obeys these before spawning agents; scripts/orbit-context is the mechanical stoplight for local context bloat.",
   "cost_mode": {
     "default": "lite",
-    "activation_model": "catalog_not_payroll",
-    "max_subagents_without_approval": 1,
-    "max_subagents_with_approval": 4,
+    "activation_model": "mandatory_stage_owners",
+    "max_concurrent_subagents_without_approval": 1,
+    "max_concurrent_subagents_with_approval": 4,
     "fanout_requires_approval": true,
     "packet_file_limit": 8,
     "packet_output_word_limit": 500,
     "require_context_doctor_for_t2_plus": true,
     "forbid_background_workflow": true,
     "status_budget_lines": 20
+  },
+
+  "_capability_enforcement_help": "Strict installed-project contract. For every routed task that produces substantial work, the Stop hook requires actual completed specialist runs in activity.jsonl — merely mentioning or mentally adopting a role does not count. UI projects additionally require Designer. This is intentionally sequential under Lite mode; approval is needed for wider concurrency, not for the mandatory quality stages themselves.",
+  "capability_enforcement": {
+    "enabled": true,
+    "mode": "strict",
+    "work_event_threshold": 3,
+    "require_actual_role_events": true,
+    "required_for_substantial": [
+      "product-discovery",
+      "business-analyst",
+      "market-researcher",
+      "planner",
+      "safety-gate",
+      "reviewer",
+      "qa-engineer",
+      "cpo",
+      "reporter"
+    ],
+    "required_for_ui": ["designer"],
+    "order": [
+      "product-discovery",
+      "business-analyst",
+      "market-researcher",
+      "planner",
+      "designer",
+      "builder",
+      "safety-gate",
+      "reviewer",
+      "qa-engineer",
+      "cpo",
+      "reporter"
+    ]
   },
 
   "counterfactual": {
@@ -182,7 +215,7 @@
     }
   },
 
-  "done_when": "STATE.md run_goal satisfied AND internal Safety/Reviewer/QA gates passed AND the independent QA gate passed when enabled",
+  "done_when": "STATE.md run_goal satisfied AND mandatory capability stages completed AND internal Safety/Reviewer/QA gates passed AND the independent QA gate passed when enabled AND CPO wrote a commit-bound ACCEPT",
 
   "_proof_help": "First-class verification: the CONCRETE evidence a cycle actually worked, not just 'looks done'. kind: command (run it, expect exit 0) | metric (read a number, compare) | checklist (all items true) | review (Reviewer rubric >= threshold). The loop must produce this proof before calling a task done.",
   "proof": { "kind": "review", "expect": "reviewer_score >= eval_gates.quality.min_reviewer_score", "command": "" },

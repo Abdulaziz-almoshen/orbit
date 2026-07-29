@@ -152,8 +152,10 @@ compliance/security · reversibility · runtime/cost), **highest risk-trigger wi
 **declare the gear out loud** (a *Gear Card*) before moving. Full rubric + fan-out math:
 `.orbit/skills/loop-tiers.md`.
 
-**Agents are a catalog, not payroll.** The repo may have many specialists, but the default active count
-is zero. Use role lenses internally first; spawn a worker only for a real uncertainty, risk, or proof gap
+**Mandatory stage owners, sequential by default.** For substantial work, run Product Discovery →
+Business Analyst → Market Researcher → Planner → [Designer for UI] → Build → Safety → Reviewer →
+QA Engineer → CPO → Reporter as actual roles. A private lens does not count. Keep concurrency at one
+unless the user approves wider fan-out
 that it uniquely resolves.
 
 **Model switching:** ordinary loop work stays on the Executor lane (`model_policy.executor`, normally
@@ -170,8 +172,8 @@ keep it to one call per cycle unless the user approves a wider budget.
   small/clear/reversible UI edits never route to the Designer, so they can't trigger a prototype gate —
   that fires only on work the Designer classifies HEAVY; see `design-methodology.md`.)
 - **T2 · Standard** — a real change, ~1 workstream → plan/build with the main agent first, then use at
-  most **one** specialist/reviewer without explicit approval — one sub-agent maximum by default. Use the
-  other roles as lenses in your own thinking unless a genuine unknown changes the decision. A spawned
+  one active specialist at a time without explicit approval. Approval changes concurrency, not the
+  mandatory stage coverage. A spawned
   specialist gets a tiny packet:
   exact question, 3-8 relevant files max, constraints, and a short expected output (normally <=500
   words). Never send full STATE, full activity logs, or broad repo context.

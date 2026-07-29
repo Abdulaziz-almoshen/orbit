@@ -8,13 +8,13 @@
 
 ### Stop prompting your agent. Build a system that prompts itself.
 
-#### Every implementation worker now has a silent live watchdog for drift and shortcuts.
+#### The installed system now has a completion contract: every required specialist must actually run.
 
 Orbit turns a product repository into a durable, observable agentic loop: it remembers the work,
 plans the next move, delegates focused tasks, **watches implementation live for drift**, checks the
 result, repairs failures, and stops at hard safety and budget boundaries.
 
-![version](https://img.shields.io/badge/version-0.54.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.55.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![observable](https://img.shields.io/badge/observable-live%20dashboard-e8590c)
@@ -29,6 +29,10 @@ gives the work a durable operating system:
 
 - **Memory:** project goals, decisions, conventions, and progress persist in `CLAUDE.md` and `.orbit/STATE.md`.
 - **Plan and progress:** every run has a visible checklist, owner, phase, gate, and next action.
+- **Enforced capabilities:** substantial work must complete Product Discovery, Business Analysis,
+  Market Research, Planning, Safety, Reviewer, QA, CPO, and Reporting; UI work must also complete
+  Design. The Stop hook blocks missing owners. Mentioning a role or using it as a private “lens”
+  does not satisfy the contract.
 - **Iterative quality:** failures become evidence-backed repair packets and return to the loop.
 - **Independent QA:** an opt-in second provider reviews an exact commit against an armed acceptance
   manifest; code or manifest changes invalidate the approval.
@@ -69,6 +73,13 @@ gives the work a durable operating system:
 > user's proxy — it re-anchors on the goal you actually stated, returns the deliverable
 > (`ITERATE`/`REDEVELOP`) when the goal isn't served, and records what it learns about your
 > taste in a per-project user-model that every later run inherits.
+
+> **New in Orbit 0.55:** the complete team is enforceable. Every substantial run follows the
+> mandatory spine below, with actual post-route completion evidence from each named role. Lite mode
+> runs it sequentially; approval changes concurrency, never coverage.
+>
+> `Discovery → Business Analysis → Market/Prior Art → Plan → [Design for UI] → Build → Safety →
+> Reviewer → QA → CPO → Reporter`
 
 Three controls make the loop meaningfully safer and iterative:
 
@@ -210,9 +221,11 @@ without an Orbit release. When unavailable, workers continue normally without th
 | Runtime and budget caps | `ralph_loop.sh` and `loop.py` enforce iteration, runtime, token, and dollar limits. |
 | Checkpointing | Durable runner state persists budget and progress across resume. |
 | Telemetry | Hooks observe and redact activity; they fail open and never block work. |
+| Capability completion | Strict Stop contract blocks substantial work when a mandatory role has no completed post-route event; UI projects additionally require Designer. |
 
-The following remain model-governed rather than mechanically guaranteed: discovery depth, plan quality,
-review judgment, when to invoke the Advisor, and the portable runner's model `dispatch()` seam. The
+Role activation is mechanically checked; the quality of discovery, analysis, design, and review
+judgment remains model-governed. Advisor invocation and the portable runner's model `dispatch()` seam
+also remain model-governed. The
 Claude Code path is the complete default path; wire `dispatch()` before using `loop.py` with another
 orchestrator.
 
@@ -220,20 +233,22 @@ orchestrator.
 
 Orbit Lite is the default:
 
-- one primary executor and at most one unapproved sub-agent;
+- mandatory stage owners run sequentially, one at a time;
 - maximum two isolated workers by default;
 - focused packets instead of full repository history and telemetry;
-- Sonnet for ordinary work;
+- the Sonnet Executor lane for ordinary work;
 - one Opus Advisor call for an architectural fork, safety uncertainty, or repeated gate failure;
 - explicit per-cycle and per-run token, dollar, runtime, and context limits.
 
-The goal is not maximum agent count. It is the smallest team that can produce convincing proof.
+Approval is required to widen concurrency, not to activate the required team. The goal is complete
+accountability without uncontrolled fan-out.
 
 ## Frontend projects
 
-UI repositories receive a Designer lane, a 67-style design catalog, prototype-before-build guidance,
-and visual QA helpers. The design gate records the chosen direction and asks when a UI change has no
-design decision on record; it does not pretend to judge visual quality mechanically.
+UI repositories receive a mandatory Designer stage, a 67-style design catalog,
+prototype-before-build guidance, and visual QA helpers. A substantial UI run cannot stop without a
+completed Designer event. The design gate also records the chosen direction and asks when a UI
+change has no design decision on record; visual judgment itself remains human/model work.
 
 ## Self-update
 
@@ -266,7 +281,7 @@ tests/                regression, safety, budget, and lifecycle tests
 ## Development
 
 ```bash
-python3 tests/run.sh
+bash tests/run.sh
 python3 scripts/check-coherence.py
 python3 bin/orbit-verify --root .
 ```

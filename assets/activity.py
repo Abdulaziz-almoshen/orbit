@@ -68,6 +68,7 @@ ROLE_INFO = {
     "dispatcher": ("Dispatcher", "routes the request (task vs question)"),
     "orchestrator": ("Orchestrator", "plans + conducts the loop, owns state"),
     "product-discovery": ("Product Discovery", "de-risks the bet before building"),
+    "business-analyst": ("Business Analyst", "turns intent into testable requirements + business rules"),
     "market-researcher": ("Market Researcher", "what exists, reuse-vs-build, the gap"),
     "planner": ("Planner", "slices the work + sets the proof bar"),
     "builder": ("Builder", "produces the core output"),

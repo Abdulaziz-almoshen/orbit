@@ -3,11 +3,15 @@
 orbit-stop-check.py — Orbit's Stop hook: the observability backstop.
 
 When the main agent finishes a turn, this checks whether a routed TASK actually ran through Orbit's
-visible operating model. The failure it catches: a task that did real work but produced NO board —
+visible operating model. It catches a task that did real work but produced NO board —
 no `.orbit/tasks.json` checklist, no `set_team` roster — i.e. it was run as a black box (e.g. via the
 native `Workflow(...)` background runner) instead of the role-tagged checklist Orbit promises. That
 silently breaks the "watch the team work" contract, so it FAILS LOUDLY: it records an
 observability-gap event and blocks the stop ONCE, telling the model to make the board visible.
+
+In strict mode it also blocks a substantial run that skipped mandatory specialist owners. A role
+must have a post-route `status:done` event; mentioning a role, listing it as available, or privately
+using it as a mental "lens" does not count.
 
 Signal (all three, or it stays silent):
   1. a TASK was routed this turn      — route.py logged a `phase:route status:start` event and
@@ -33,7 +37,7 @@ import sys
 import time
 from pathlib import Path
 
-_WORK_MIN = 3   # >= this many post-route activity events ⇒ "real work happened this turn"
+_WORK_MIN = 3   # shipped fallback; strict projects may set capability_enforcement.work_event_threshold
 
 
 def _find_orbit(start):
@@ -105,6 +109,71 @@ def _cpo_vigilance(orbit, route_mt):
         return                                              # fail open — never break a stop on error
 
 
+def _ui_project(orbit):
+    """Use scaffolded surface metadata first; Designer presence is the old-project fallback."""
+    try:
+        setup = json.loads((orbit / "setup.json").read_text())
+        surfaces = {str(s).lower() for s in setup.get("surfaces", [])}
+        if surfaces & {"web", "frontend", "ui", "mobile", "ios", "android"}:
+            return True
+    except Exception:
+        pass
+    return (orbit.parent / ".claude" / "agents" / "designer.md").is_file()
+
+
+def _capability_enforcement(orbit, route_mt, post_route, work):
+    """Require real, completed stage owners on substantial work in a strict project."""
+    try:
+        cfg = json.loads((orbit / "loop.config.json").read_text())
+        contract = cfg.get("capability_enforcement") or {}
+        if contract.get("enabled") is not True or str(contract.get("mode", "")).lower() != "strict":
+            return
+        if len(work) < int(contract.get("work_event_threshold", _WORK_MIN)):
+            return
+        required = list(contract.get("required_for_substantial") or [])
+        if _ui_project(orbit):
+            required += list(contract.get("required_for_ui") or [])
+        required = list(dict.fromkeys(str(role) for role in required if str(role).strip()))
+        completed = {
+            str(event.get("role")) for event in post_route
+            if isinstance(event, dict) and event.get("status") == "done"
+        }
+        missing = [role for role in required if role not in completed]
+        if not missing:
+            return
+        warned = orbit / ".capability-stop-warned"
+        if warned.exists() and warned.read_text().strip() == repr(route_mt):
+            return
+        try:
+            warned.write_text(repr(route_mt))
+            with (orbit / "activity.jsonl").open("a") as f:
+                f.write(json.dumps({
+                    "schema": 2,
+                    "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "role": "orchestrator",
+                    "phase": "evaluate",
+                    "status": "blocked",
+                    "msg": "mandatory capability stages missing: " + ", ".join(missing),
+                }) + "\n")
+        except Exception:
+            pass
+        print(json.dumps({"decision": "block", "reason": (
+            "[orbit] STRICT CAPABILITY CONTRACT — this run cannot finish because mandatory stage "
+            "owners were skipped: " + ", ".join(missing) + ". Dispatch each named role as an actual "
+            "specialist and let it complete with evidence. A role mentioned in prose, silently used "
+            "as a lens, or merely listed as available does NOT count. Discovery frames the bet; "
+            "Business Analysis writes testable requirements; Market Research checks prior art; "
+            "Planner sets the proof bar; Designer is mandatory for UI; Safety, Reviewer, and QA "
+            "return verdicts; CPO writes its commit-bound verdict; Reporter closes with proof. "
+            "Keep the visible board updated while these stages run."
+        )}))
+        sys.exit(0)
+    except SystemExit:
+        raise
+    except Exception:
+        return                                              # malformed local state never bricks Claude
+
+
 def main():
     try:
         data = json.load(sys.stdin)
@@ -139,10 +208,21 @@ def main():
             r = i
     if r < 0:
         return
-    work = [e for e in events[r + 1:]
+    post_route = events[r + 1:]
+    work = [e for e in post_route
             if isinstance(e, dict) and e.get("phase") not in ("route", "observability")]
-    if len(work) < _WORK_MIN:
+    try:
+        cfg = json.loads((orbit / "loop.config.json").read_text())
+        work_min = int((cfg.get("capability_enforcement") or {}).get(
+            "work_event_threshold", _WORK_MIN))
+    except Exception:
+        work_min = _WORK_MIN
+    if len(work) < work_min:
         return                                              # not enough real work to warrant a board
+
+    # Strict capability ownership is independent of presentation. Check it even when the board is
+    # absent so the hook's single continuation demands the complete repair, not only a checklist.
+    _capability_enforcement(orbit, route_mt, post_route, work)
 
     # (3) was the board updated after the route?
     if _mtime(orbit / "tasks.json") > route_mt or _mtime(orbit / "agents.json") > route_mt:
