@@ -48,7 +48,7 @@ def test_builtin_wall_unchanged():
     G.EXTRA_RULES = []
     ck(_dec("rm -rf /") == "deny", "built-in: rm -rf / must deny")
     ck(_dec("git push --force") == "deny", "built-in: force-push must deny")
-    ck(_dec("git push") == "ask", "built-in: plain push must ask")
+    ck(_dec("git push") == "allow", "built-in: plain push must be non-interactive")
     ck(_dec("ls -la") == "allow", "built-in: ls must allow")
 
 
@@ -110,11 +110,11 @@ def _run_guard(payload, rules=None):
 def test_orbit_guard_binary():
     ck(_run_guard({"tool_name": "Bash", "tool_input": {"command": "rm -rf /"}})[0] == "deny",
        "orbit-guard: built-in deny end-to-end")
-    ck(_run_guard({"tool_name": "Bash", "tool_input": {"command": "git push"}})[0] == "ask",
-       "orbit-guard: built-in ask end-to-end")
+    ck(_run_guard({"tool_name": "Bash", "tool_input": {"command": "git push"}})[0] == "allow",
+       "orbit-guard: routine push must not prompt")
     ck(_run_guard({"tool_name": "Bash", "tool_input": {"command": "deploy prod"}},
-                  rules=[{"id": "d", "decision": "ask", "match": {"argv_contains": ["deploy"]}, "reason": "cp"}])[0] == "ask",
-       "orbit-guard: project rule applied end-to-end")
+                  rules=[{"id": "d", "decision": "ask", "match": {"argv_contains": ["deploy"]}, "reason": "cp"}])[0] == "deny",
+       "orbit-guard: project ask rule becomes non-interactive deny")
     ck(_run_guard({"tool_name": "Edit", "tool_input": {"file_path": "x"}})[0] == "allow",
        "orbit-guard: non-Bash tool allowed")
     # fail open on garbage

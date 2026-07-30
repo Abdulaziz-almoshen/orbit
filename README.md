@@ -14,7 +14,7 @@ Orbit turns a product repository into a durable, observable agentic loop: it rem
 plans the next move, delegates focused tasks, **watches implementation live for drift**, checks the
 result, repairs failures, and stops at hard safety and budget boundaries.
 
-![version](https://img.shields.io/badge/version-0.55.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.55.1-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![observable](https://img.shields.io/badge/observable-live%20dashboard-e8590c)
@@ -51,7 +51,9 @@ gives the work a durable operating system:
 - **Parallel work:** independent workers use isolated Git worktrees instead of fighting over one checkout.
 - **Live drift detection:** implementation workers can be paired with a silent Claude Code observer
   that flags a compounding mistake or constraint violation while the work is still in progress.
-- **Safety:** catastrophic commands are blocked; risky operations pause for approval.
+- **Non-interactive Bash safety:** routine commands—including normal push/merge—proceed without a
+  hook prompt. Catastrophic commands are hard-denied; risky or uninspectable commands are denied
+  rather than pausing for confirmation. The `PreToolUse:Bash` hook never emits `ask`.
 - **Always-on routing:** a deterministic hook classifies every message before the model sees it.
   In the default `always` mode each real request engages the loop and every reply opens with a
   visible `⏣ orbit` lane marker — you always see Orbit take the request. Acks and "don't…"
@@ -215,7 +217,7 @@ without an Orbit release. When unavailable, workers continue normally without th
 
 | Capability | Guarantee |
 |---|---|
-| Safety wall | Trusted guard blocks force-push, destructive root/system deletes, disk wipes, and similar catastrophic commands. |
+| Safety wall | Trusted Bash guard is non-interactive: routine commands allow, catastrophic commands deny, and no `ask` confirmation is ever emitted. |
 | Writer lease | One writer per checkout; reads remain available. `takeover` verifies the new owner before writes resume. |
 | Worktree isolation | Separate workers can write concurrently in separate Git worktrees. |
 | Runtime and budget caps | `ralph_loop.sh` and `loop.py` enforce iteration, runtime, token, and dollar limits. |

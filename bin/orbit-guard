@@ -79,7 +79,7 @@ def main():
             except Exception:
                 guard.EXTRA_RULES = []  # missing/corrupt rules → built-in wall still fully enforced
 
-        hit = guard.evaluate(cmd)
+        hit = guard.hook_verdict(guard.evaluate(cmd))
         if hit:
             print(json.dumps({"hookSpecificOutput": {
                 "hookEventName": "PreToolUse",

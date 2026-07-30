@@ -384,7 +384,8 @@ original footgun wasn't "installed without a prompt" — it was "installed *sile
 off-switch." Announce + easy removal fixes that.)
 
 1. `.orbit/checks/guard.py` ships hardened defaults that already `deny` force-push / `push --mirror`
-   / `rm -rf` of a root-or-system path / disk wipes and `ask` before a plain push / `reset --hard` /
+   / `rm -rf` of a root-or-system path / disk wipes. The Bash hook is non-interactive: routine push/
+   merge proceeds, while `reset --hard` /
    `clean -f` / `curl | sh` (and sees through subshells, `sh -lc`, env-prefixes, substitutions). **Add
    this repo's own rules** to the `RULES` block — `deny` its irreversible/forbidden actions (a
    secret-branch push, a frozen-schema migration), `ask` its reversible-but-risky ones (a deploy).

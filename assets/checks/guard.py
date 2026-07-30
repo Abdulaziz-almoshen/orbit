@@ -8,9 +8,11 @@ suggestion: prose in CLAUDE.md is advisory and can be silently skipped; this hoo
 
 Protocol (Claude Code ≥ 2.1): read the PreToolUse JSON on stdin; print NOTHING to allow, or
     {"hookSpecificOutput": {"hookEventName": "PreToolUse",
-                            "permissionDecision": "deny"|"ask",
+                            "permissionDecision": "deny",
                             "permissionDecisionReason": "..."}}
-to block ("deny") or pause for a human ("ask"). Confirmed against the current hooks reference
+to block. Orbit's Bash hook is deliberately NON-INTERACTIVE: it never emits `ask`. Routine pushes
+and merges proceed; dangerous or uninspectable operations are denied instead of pausing for confirmation.
+Confirmed against the current hooks reference
 (hookSpecificOutput.permissionDecision + permissionDecisionReason; the old top-level shape is
 ignored). Fail OPEN: any error allows the command, because a guard must never brick your shell.
 
@@ -248,9 +250,9 @@ RULES = [
     ("ask",  "deleting a remote branch (`push --delete` / `push :branch`) — confirm the target.",
      lambda t: _push(t) and not _dry_run(t)
         and ("--delete" in t or "-d" in t or any(x.startswith(":") and len(x) > 1 for x in t))),
-    ("ask",  "git push is a human-approval checkpoint here — confirm before pushing.",
+    ("allow", "routine git push is non-interactive.",
      lambda t: _push(t) and not _dry_run(t)),
-    ("ask",  "merging into the default branch is a human-approval checkpoint.",
+    ("allow", "routine merge into the default branch is non-interactive.",
      lambda t: is_git(t) and t[1:2] == ["merge"]
         and any(b in t for b in ("master", "main", "origin/master", "origin/main"))),
     ("ask",  "`git reset --hard` discards uncommitted work irreversibly — confirm.",
@@ -309,7 +311,7 @@ def compile_rules(rules):
     return out
 
 
-_SEVERITY = {"deny": 2, "ask": 1}
+_SEVERITY = {"deny": 2, "ask": 1, "allow": 0}
 
 
 def _max(a, b):
@@ -318,6 +320,20 @@ def _max(a, b):
     if a is None:
         return b
     return a if _SEVERITY[a[0]] >= _SEVERITY[b[0]] else b
+
+
+def hook_verdict(hit):
+    """Translate analyzer detail into the non-interactive PreToolUse contract.
+
+    `allow`/None emits nothing. `deny` remains deny. `ask` is useful inside the analyzer to mean
+    "risky or unresolved", but the hook must never pause for confirmation, so it becomes a hard deny.
+    This also turns project declarative `ask` rules into deterministic denies.
+    """
+    if not hit or hit[0] == "allow":
+        return None
+    if hit[0] == "deny":
+        return hit
+    return ("deny", f"non-interactive safety policy: {hit[1]}")
 
 
 def _strip_flags(t, value_flags):
@@ -863,7 +879,7 @@ def main():
         if not isinstance(data, dict) or data.get("tool_name") != "Bash":
             return  # allow (print nothing)
         cmd = (data.get("tool_input") or {}).get("command", "") or ""
-        hit = evaluate(cmd)
+        hit = hook_verdict(evaluate(cmd))
         if hit:
             print(json.dumps({"hookSpecificOutput": {
                 "hookEventName": "PreToolUse",

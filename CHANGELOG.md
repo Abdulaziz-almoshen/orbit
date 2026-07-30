@@ -3,6 +3,17 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.55.1
+
+**The Bash safety hook is non-interactive — it never pauses for confirmation.**
+
+- `PreToolUse:Bash` now emits only `deny` or nothing. It can never return `ask`.
+- Routine `git push` and merges into the default branch proceed without a hook prompt.
+- Catastrophic commands remain denied. Risky or uninspectable commands that previously requested
+  confirmation now hard-deny, keeping unattended runs safe without leaving them waiting.
+- Project declarative `ask` rules remain accepted for compatibility but normalize to `deny` at
+  runtime. Tests cover the trusted and legacy hook paths end to end.
+
 ## 0.55.0
 
 **Strict capability enforcement: installed Orbit projects must use the team they ship.**

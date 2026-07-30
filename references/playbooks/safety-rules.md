@@ -7,7 +7,8 @@ cycle's output before it's allowed to count. Veto power — nothing ships past a
 
 ## The two enforcement layers (know which is which)
 - **Binding (mechanical):** `.orbit/checks/guard.py` (PreToolUse hook) — denies force-push,
-  `push --mirror`, `rm -rf` of a root/system path, and disk wipes; asks before a plain push,
+  `push --mirror`, `rm -rf` of a root/system path, and disk wipes. The Bash hook never asks:
+  a routine push/merge proceeds; risky or ambiguous commands deny rather than prompting,
   `reset --hard`, `curl | sh`, and other irreversible-but-recoverable commands — before *any* tool
   runs, model has no say (a repo adds its own deploy/migration/secret-branch rules). And
   `loop.config.json` → `approval_checkpoints` (`move_money: FORBIDDEN`, etc.) enforced by the runner.

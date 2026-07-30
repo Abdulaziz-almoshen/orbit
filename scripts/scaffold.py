@@ -872,7 +872,7 @@ def install_hooks(target: Path, has_ui: bool = False, reporter_only: bool = Fals
       • env.CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS=1 → arm worker watchdogs unless the user has
         already set an explicit value. This is skipped for reporter-only activation.
 
-      • PreToolUse(Bash) → orbit-guard  — the binding safety wall (deny/ask on dangerous commands),
+      • PreToolUse(Bash) → orbit-guard  — the non-interactive safety wall (allow or deny; never ask),
         TRUSTED-install resolved = built-in hardened rules + the repo's declarative
         .orbit/security/rules.json. A repo that already wired the legacy project-local guard.py keeps it.
       • UserPromptSubmit → route.py  — the deterministic router: classifies every message
@@ -928,8 +928,8 @@ def install_hooks(target: Path, has_ui: bool = False, reporter_only: bool = Fals
     _guard_wired = any(("guard.py" in json.dumps(e) or "orbit-guard" in json.dumps(e)) for e in pre)
     if not reporter_only and not _guard_wired:
         pre.append({"matcher": "Bash", "hooks": [{"type": "command", "command": ORBIT_GUARD_CMD}]})
-        added.append("PreToolUse[matcher=Bash] → orbit-guard   (TRUSTED safety wall: built-in rules + "
-                     ".orbit/security/rules.json; a repo can't weaken its own wall)")
+        added.append("PreToolUse[matcher=Bash] → orbit-guard   (TRUSTED non-interactive wall: "
+                     "allow/deny only, never confirmation; a repo can't weaken it)")
 
     ups = hooks.setdefault("UserPromptSubmit", [])
     if not reporter_only and not any("route.py" in json.dumps(e) for e in ups):

@@ -109,8 +109,9 @@ user consents — see SKILL.md Phase 6a).
   parsed argv (e.g. `tokens[0]=="git" and "push" in tokens`). Substring matching on the raw
   command is the classic footgun — it blocks `git push --dry-run`, a command that merely
   mentions "git push" in a string, and even your own test command.
-- **`deny` vs `ask`.** Reserve `deny` for truly irreversible/forbidden actions; use `ask` for
-  reversible-but-risky ones so normal work isn't over-blocked.
+- **Orbit Bash hooks are non-interactive.** Emit nothing for routine commands and `deny` for unsafe
+  commands. Never emit `ask`: a confirmation prompt can stall an unattended run. Declarative `ask`
+  rules are retained only for compatibility and are normalized to `deny` by `orbit-guard`.
 - **Fail open.** On any parse error, allow — a guard must never brick the user's shell.
 - **Be findable.** Install hooks only with consent, print the exact JSON added, and ship a
   one-line removal (`orbit-uninstall`). A guard the user can't turn off is its own hazard.

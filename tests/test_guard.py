@@ -7,8 +7,9 @@ Verifies (a) the decision logic across the rule set — including the wrap/hide 
 variable indirection, flagged wrappers like `sudo -E`/`env -i`/`xargs -I{}`, and home-relative
 sensitive paths like `~/.ssh`) and the non-git destructive defaults (rm -rf, reset --hard, clean,
 dd-to-device, curl|sh) — and (b) that the OUTPUT VALIDATES against the schema Claude Code
-actually reads: hookSpecificOutput.{hookEventName=PreToolUse, permissionDecision in
-{deny,ask}, permissionDecisionReason}.
+actually reads: hookSpecificOutput.{hookEventName=PreToolUse, permissionDecision=deny,
+permissionDecisionReason}. The runtime hook is non-interactive: analyzer `ask` becomes deny, while
+routine push/merge analyzer `allow` emits nothing.
 
 Manual smoke (not automatable here): wire guard.py as a PreToolUse[Bash] hook in a temp repo's
 .claude/settings.json, then `claude -p "run: git push --force"` and confirm the block appears.
@@ -36,7 +37,7 @@ def decision_of(out):
     obj = json.loads(out)                                  # must be valid JSON
     hso = obj["hookSpecificOutput"]                        # must use the correct envelope
     assert hso["hookEventName"] == "PreToolUse", hso
-    assert hso["permissionDecision"] in ("deny", "ask"), hso
+    assert hso["permissionDecision"] == "deny", hso
     assert hso.get("permissionDecisionReason"), "reason required"
     assert "permissionDecision" not in obj, "must NOT be top-level (Claude Code ignores that)"
     return hso["permissionDecision"]
@@ -224,8 +225,15 @@ def main():
         except Exception as e:
             failures.append(f"bad output schema for {cmd!r}: {e} | out={out!r}")
             continue
-        if got != expected:
-            failures.append(f"MISROUTE {cmd!r}: expected {expected}, got {got}")
+        # CASES retain the analyzer's risk taxonomy. The hook contract is stricter and contains no
+        # confirmation state: asks hard-deny; routine push/merge rules now evaluate to explicit allow.
+        want = "deny" if expected == "ask" else expected
+        routine_push = ("git push" in cmd and "--force-with-lease" not in cmd
+                        and "--delete" not in cmd and " :" not in cmd)
+        if (routine_push or cmd.startswith("git merge ")) and expected == "ask":
+            want = None
+        if got != want:
+            failures.append(f"MISROUTE {cmd!r}: expected hook decision {want}, got {got}")
 
     for stdin_text, expected in ROBUSTNESS:
         try:
@@ -237,8 +245,10 @@ def main():
             failures.append(f"nonzero exit on robustness input {stdin_text!r}")
             continue
         got = decision_of(out) if out else None
-        if got != expected:
-            failures.append(f"robustness {stdin_text!r}: expected {expected}, got {got}")
+        want = None if stdin_text == bash("git push $(printf origin)") else (
+            "deny" if expected == "ask" else expected)
+        if got != want:
+            failures.append(f"robustness {stdin_text!r}: expected {want}, got {got}")
 
     total = len(CASES) + len(ROBUSTNESS)
     if failures:
