@@ -25,10 +25,16 @@ done
 HERE="$(cd "$(dirname "$0")" && pwd -P)"
 SKILLS_DIR="$(dirname "$HERE")"          # parent of the orbit dir = ~/.claude/skills
 
-# 1. make the helpers executable (clone doesn't always preserve the +x bit)
-chmod +x "$HERE"/bin/* 2>/dev/null || true
-chmod +x "$HERE"/scripts/*.py 2>/dev/null || true
-chmod +x "$HERE"/assets/checks/*.py 2>/dev/null || true
+# 1. Restore only the executable bits declared by Git. Broad chmod globs also mark Python libraries
+# executable, dirty the installed checkout, and force the next updater to stash meaningless mode
+# changes. A clone preserves these modes; this is a defensive repair for unusual filesystems.
+if git -C "$HERE" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  git -C "$HERE" ls-files -s | awk '$1 == "100755" {print $4}' | while IFS= read -r _exec; do
+    [ -n "$_exec" ] && chmod +x "$HERE/$_exec" 2>/dev/null || true
+  done
+else
+  chmod +x "$HERE/setup" "$HERE/bin/orbit-uninstall" 2>/dev/null || true
+fi
 
 VER="$(tr -d '[:space:]' < "$HERE/VERSION" 2>/dev/null || echo '?')"
 SHA="$(git -C "$HERE" rev-parse --short HEAD 2>/dev/null || echo 'not a git checkout')"
