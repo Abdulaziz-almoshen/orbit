@@ -3,6 +3,24 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.56.0
+
+**Full-loop Claude observation and autonomous goal-to-commit delivery.**
+
+- The real Claude watchdog now attaches to every operational role—not only builders—and explicitly
+  propagates through descendant subagents. Discovery, BA, Research, Planning, Design, Safety,
+  Reviewer, QA, CPO, and Reporting are all supervised.
+- Observer lifecycle and interventions are visible in `.orbit/observer.json`, `orbit-status`, and the
+  dashboard without displacing the active worker. Updates additively repair missing observer
+  frontmatter while preserving custom role bodies and alternate observers.
+- Discovery now diverges across at least five distinct concepts, rejects generic/copycat output,
+  scores the shortlist, and commits to a signature bet, quick win, and surprise dividend.
+- `autonomous-delivery.md` makes zero noncritical questions the default. Orbit chooses reversible
+  product and engineering decisions, runs every mandatory quality stage, repairs failures, and
+  returns a scoped local commit. Only missing access, human-authority actions, or expensive
+  uninferable product forks interrupt the user.
+- README and the loop visual now make the full-loop observer and committed-delivery contract explicit.
+
 ## 0.55.1
 
 **The Bash safety hook is non-interactive — it never pauses for confirmation.**

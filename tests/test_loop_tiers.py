@@ -58,8 +58,8 @@ def main():
         fails.append("[A] loop-tiers.md missing the risk-floor rule")
     if "tools per worker" not in gl and "role-scoped tool" not in gl:
         fails.append("[A] loop-tiers.md missing the OWASP per-worker tool-scoping guardrail")
-    if "confirm" not in gl:
-        fails.append("[A] loop-tiers.md missing the always-confirm-before-fan-out rule")
+    if "configured caps" not in gl and "hard cap" not in gl:
+        fails.append("[A] loop-tiers.md missing autonomous hard-cap fan-out governance")
     # the critique barrier + merge-logging + Gear-Card emission are load-bearing rules
     if "after a draft" not in gl and "barrier before critique" not in gl:
         fails.append("[A] loop-tiers.md missing the 'critique only after a draft' / barrier rule")
@@ -138,8 +138,8 @@ def main():
               "token_budget", "confirm_before_fanout"):
         if k not in deep:
             fails.append(f"[D] loop.config.json gears.deep missing {k!r}")
-    if deep.get("confirm_before_fanout") is not True:
-        fails.append("[D] gears.deep.confirm_before_fanout must be true (always confirm on T3)")
+    if deep.get("confirm_before_fanout") is not False:
+        fails.append("[D] gears.deep.confirm_before_fanout must be false under autonomous delivery")
     if not isinstance(deep.get("agent_max"), int) or deep.get("agent_max") > 4:
         fails.append(f"[D] gears.deep.agent_max should default to <=4 in Cost Mode, got {deep.get('agent_max')}")
     if deep.get("require_context_doctor") is not True:

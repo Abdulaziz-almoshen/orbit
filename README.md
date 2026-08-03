@@ -8,17 +8,17 @@
 
 ### Stop prompting your agent. Build a system that prompts itself.
 
-#### The installed system now has a completion contract: every required specialist must actually run.
+#### Give Orbit the goal. It runs every specialist, watches every role, proves the result, and commits it.
 
 Orbit turns a product repository into a durable, observable agentic loop: it remembers the work,
-plans the next move, delegates focused tasks, **watches implementation live for drift**, checks the
-result, repairs failures, and stops at hard safety and budget boundaries.
+plans the next move, delegates focused tasks, **watches the full role tree live for drift**, checks the
+result, repairs failures, and returns a proven local commit—interrupting only for true blockers.
 
-![version](https://img.shields.io/badge/version-0.55.1-2b6cb0)
+![version](https://img.shields.io/badge/version-0.56.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![observable](https://img.shields.io/badge/observable-live%20dashboard-e8590c)
-![live observer](https://img.shields.io/badge/live%20observer-worker%20watchdog-e8590c)
+![live observer](https://img.shields.io/badge/live%20observer-full%20role%20tree-e8590c)
 
 </div>
 
@@ -49,8 +49,13 @@ gives the work a durable operating system:
   expensive decisions.
 - **Cost control:** token, dollar, runtime, context, iteration, and fan-out limits are explicit.
 - **Parallel work:** independent workers use isolated Git worktrees instead of fighting over one checkout.
-- **Live drift detection:** implementation workers can be paired with a silent Claude Code observer
-  that flags a compounding mistake or constraint violation while the work is still in progress.
+- **Full-loop Claude observer:** every operational role and propagated descendant—Discovery, BA,
+  Research, Planner, Design, Build, Safety, Reviewer, QA, CPO, and Reporter—is paired with the silent
+  watchdog. Its state is visible as `armed`, `watching`, `intervention`, or `clean` without replacing
+  the active owner.
+- **Autonomous delivery:** reversible product and engineering decisions are Orbit's job. It asks only
+  for missing access, human authority over irreversible/external actions, or an expensive product fork
+  that evidence cannot resolve. Green work is returned as a scoped local commit with proof.
 - **Non-interactive Bash safety:** routine commands—including normal push/merge—proceed without a
   hook prompt. Catastrophic commands are hard-denied; risky or uninspectable commands are denied
   rather than pausing for confirmation. The `PreToolUse:Bash` hook never emits `ask`.
@@ -62,12 +67,13 @@ gives the work a durable operating system:
 ## The loop
 
 <picture>
-  <img src="assets/orbit-loop-observer.svg" alt="The Orbit loop: a Builder works at the center while a silent Watchdog observes every turn and sends a rare advisory only when drift matters; Safety, Reviewer, QA, and the CPO remain the final gates." width="100%">
+  <img src="assets/orbit-loop-observer.svg" alt="The Orbit loop: one goal flows through every enforced specialist while a real Claude watchdog surrounds and observes the full role tree; green work ends in a proven commit." width="100%">
 </picture>
 
-> **New in Orbit 0.49:** the orange watchdog runs beside every implementation worker. It watches
-> *how* the work is being done and can warn before a bad shortcut compounds. It does not edit,
-> approve, block, or replace the final gates.
+> **New in Orbit 0.56:** the orange watchdog is no longer builder-only or hidden. Claude’s real
+> observer attaches to every operational role, propagates through descendants, and exposes a separate
+> supervision state on Orbit’s status and dashboard. Orbit also defaults to autonomous delivery:
+> no spec, taste, or budget-reassurance questions inside configured limits; green work is committed.
 
 > **New in Orbit 0.50:** the **CPO** closes the loop's last gap. The gate chain is now
 > Safety → Reviewer → QA Engineer → Independent QA (opt-in) → **CPO acceptance** → done. Every
@@ -87,16 +93,17 @@ Three controls make the loop meaningfully safer and iterative:
 
 1. **Counterfactual preflight:** identify the riskiest assumption, run the cheapest useful probe,
    and backtrack to discovery or planning when evidence disagrees.
-2. **Live observer:** inspect each implementation turn for scope drift, weakened tests, bypassed
-   gates, or proof that the observed results do not support. Healthy work produces no message.
+2. **Full-loop observer:** inspect discovery quality, analysis, planning, implementation, every gate,
+   and reporting for drift, stalled/repetitive work, rubber-stamping, or unsupported proof. Healthy
+   work produces no advisory, but its watcher state remains visible.
 3. **Bounded repair:** capture the failure, owner, root cause, required change, and regression test;
    repair it and return to the original gate. Repeated failure escalates to Advisor or a human.
 
 ### Why the observer matters
 
-| Without live observation | With Orbit 0.49 |
+| Without live observation | With Orbit 0.56 |
 |---|---|
-| A wrong approach may reach Reviewer after many edits. | The watchdog can flag the drift while the worker is still implementing. |
+| Weak discovery or a wrong approach may travel through the loop. | The watchdog can flag generic ideas, missing evidence, or delivery drift at the role where it begins. |
 | The worker must remember every constraint while optimizing for completion. | A separate Haiku observer has one narrow job: notice compounding mistakes. |
 | Test weakening may only appear in the finished diff. | Attempts to skip, weaken, delete, or reverse-engineer tests can be challenged immediately. |
 | More code and tokens accumulate before repair begins. | One early advisory can avoid an expensive downstream repair cycle. |
@@ -185,33 +192,36 @@ Orbit  |  Build  |  3/8 complete  |  1 active  |  budget $0.42/$1.25
 In Claude Code, the native checklist is the primary surface. In headless or portable runs, use
 `scripts/orbit-status --follow` or the read-only dashboard.
 
-## Observer agents (experimental)
+## Observer agents: real, full-loop, and visible (experimental Claude capability)
 
-Orbit's Claude Code adapter automatically pairs each Builder/surface engineer with
+Orbit's Claude Code adapter automatically pairs every operational role and descendant with
 `.claude/agents/watchdog.md`:
 
 ```text
-Builder / Engineer ── read-only turn digest ──▶ Watchdog (Haiku)
-        ▲                                         │
-        └──── rare advisory when drift matters ───┘
+Discovery → BA → Research → Plan → Design → Build → Safety → Review → QA → CPO → Report
+    │               each role + propagated descendants: read-only activity digest              │
+    └──────────────────────────────▶ Watchdog (Haiku) ───────────────────────────────────────────┘
 
 No finding = no message. The worker continues uninterrupted.
 ```
 
 The watcher sees Claude Code's truncated, read-only activity digest and stays silent unless a short
-advisory can prevent scope drift, weakened tests, bypassed gates, or unsupported proof. It cannot edit,
+advisory can prevent shallow discovery, stalled work, scope drift, weakened tests, rubber-stamped
+gates, or unsupported proof. It cannot edit,
 block the worker, or grant user authority, and it does not replace the final Reviewer or QA gates.
 
 Every scaffold and safe update enables the project-scoped experiment, installs a missing watchdog,
-and additively wires existing Orbit workers without replacing customized role bodies. Explicit env
+and additively wires every existing Orbit role without replacing customized role bodies. Explicit env
 values and existing alternate observers are preserved. To enable it manually, launch Claude Code with:
 
 ```bash
 CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS=1 claude
 ```
 
-This is an undocumented, remotely gated Claude Code capability and may be unavailable or change
-without an Orbit release. When unavailable, workers continue normally without the observer.
+This Claude capability remains undocumented, experimental, and remotely gated; Orbit cannot honestly
+guarantee that Anthropic's server enables it. Orbit does guarantee the project setting, agent
+frontmatter, descendant propagation, additive update repair, visible `observer.json` state, and
+regression tests. When Claude withholds the capability, roles continue and the final gates still bind.
 
 ## What binds
 

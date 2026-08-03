@@ -146,7 +146,7 @@ read `CLAUDE.md` + `STATE.md` → plan next action → act via sub-agent(s) → 
 ## 10. Request Routing — the Gearbox: size the loop before you move  (read on EVERY user message)
 The loop picks a **gear** before doing work — the **smallest gear that can still PROVE the result**.
 Most requests don't need ceremony, so don't pay for it. **Cost Mode is Lite by default:** before any
-T2/T3/T4 loop, run `scripts/orbit-context doctor` if present; if it reports FAIL, compact or ask before
+T2/T3/T4 loop, run `scripts/orbit-context doctor` if present; if it reports FAIL, compact before
 fan-out. Size it on a scorecard (ambiguity · blast radius · # surfaces · research need ·
 compliance/security · reversibility · runtime/cost), **highest risk-trigger wins** (never a sum), then
 **declare the gear out loud** (a *Gear Card*) before moving. Full rubric + fan-out math:
@@ -155,14 +155,14 @@ compliance/security · reversibility · runtime/cost), **highest risk-trigger wi
 **Mandatory stage owners, sequential by default.** For substantial work, run Product Discovery →
 Business Analyst → Market Researcher → Planner → [Designer for UI] → Build → Safety → Reviewer →
 QA Engineer → CPO → Reporter as actual roles. A private lens does not count. Keep concurrency at one
-unless the user approves wider fan-out
-that it uniquely resolves.
+unless configured caps safely permit wider independent fan-out. Approval is only for human-authority
+actions, not reassurance about routine execution.
 
 **Model switching:** ordinary loop work stays on the Executor lane (`model_policy.executor`, normally
 Sonnet 5). Use the Advisor lane (`model_policy.advisor`, Opus 4.8) only on demand for architecture
 forks, safety/compliance uncertainty, repeated gate failure, expensive-if-wrong decisions, or explicit
 user request. Put `advisor` on the board while active, log the `advisor_reason`, send a tiny packet, and
-keep it to one call per cycle unless the user approves a wider budget.
+keep it to one call per cycle unless configuration already grants a wider budget.
 
 - **T0 · Direct** — a QUESTION (status / explanation: "is it live?", "what does X do?") or a trivial
   patch → answer / patch directly. No loop, no roles. Read `.orbit/STATE.md` if it helps.
@@ -172,15 +172,15 @@ keep it to one call per cycle unless the user approves a wider budget.
   small/clear/reversible UI edits never route to the Designer, so they can't trigger a prototype gate —
   that fires only on work the Designer classifies HEAVY; see `design-methodology.md`.)
 - **T2 · Standard** — a real change, ~1 workstream → plan/build with the main agent first, then use at
-  one active specialist at a time without explicit approval. Approval changes concurrency, not the
-  mandatory stage coverage. A spawned
+  one active specialist at a time by default. Configured caps may widen concurrency without user
+  interruption; mandatory stage coverage never changes. A spawned
   specialist gets a tiny packet:
   exact question, 3-8 relevant files max, constraints, and a short expected output (normally <=500
   words). Never send full STATE, full activity logs, or broad repo context.
 - **T3 · Deep** — broad · ambiguous · research-heavy · multi-surface · compliance-risk (≥3 surfaces or
   real unknowns, AND ambiguity or compliance) → **Map → Research → Plan → Critique → Synthesize →
-  Build**, with a *dynamic* fleet of workers sized to the request, **capped tightly** and **confirmed
-  with the user before fan-out** (`context_budget`, `cost_mode`, and `gears.deep` in `loop.config.json`).
+  Build**, with a *dynamic* fleet of workers sized to the request and **capped tightly** by
+  `context_budget`, `cost_mode`, and `gears.deep` in `loop.config.json`.
 - **T4 · Mission** — spans repos / days / a production migration / money at scale → T3 on the **durable
   runner** (`loop.py` / `durable-execution.md`): checkpoints, resume, a **human-approval gate per
   irreversible step**, an artifact bundle.
@@ -192,7 +192,7 @@ background runner** — it's a black-box job that bypasses the checklist, the vi
 `.orbit/` telemetry; a task isn't "running through Orbit" unless the user can see who owns each step and
 what's done / in progress. **Guardrails scale with the gear** (OWASP LLM06): higher gear → minimal tools
 per worker, cost/fan-out caps, and human approval for every irreversible / outward / money step. Never
-free-edit a source-of-truth file outside the loop. Parallel fan-out is approval-gated; default to one
+free-edit a source-of-truth file outside the loop. Parallel fan-out is cap-gated; default to one
 sharp owner plus proof. This is where the system is *smarter*, not louder.
 
   You pick the lane by **judgment, not a command**. When genuinely unsure, take the heavier
@@ -200,11 +200,11 @@ sharp owner plus proof. This is where the system is *smarter*, not louder.
 - **AMBIGUOUS** → infer from the repo first; if a real blocker remains, ask the few questions
   that matter in **one** batched ask (never one-at-a-time), then proceed.
 
-**How to ask (every question, every role):** use the **`AskUserQuestion` tool** — 2–4 selectable
+**How to ask (critical blockers only):** use the **`AskUserQuestion` tool** — 2–4 selectable
 options, **your recommendation FIRST labeled "(Recommended)"**, a one-line trade-off per option.
 Never bury a question in prose: a question that doesn't look like a question gets no answer. This
-covers clarifications, decision briefs, spec approval, the taste batch, style picks, and visual-diff
-accept/reject. (Headless fallback: a set-off `❓ DECISION NEEDED` block with lettered options.)
+covers missing access, human authority for irreversible/external actions, and expensive product forks
+that evidence cannot resolve. Specs, taste, and routine budget are decided internally.
 
 **Never silently edit a source-of-truth file**; if you act outside the loop, say so and add a
 `[decision]` line to `.orbit/STATE.md`.

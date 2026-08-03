@@ -240,7 +240,8 @@ FILE_PLAN = [
 ]
 
 # Reusable skill-library playbooks copied into .orbit/skills/ (the provisioning step).
-PLAYBOOKS_ALWAYS = ["clarify-and-challenge.md", "planning-and-decision-briefs.md",
+PLAYBOOKS_ALWAYS = ["clarify-and-challenge.md", "autonomous-delivery.md",
+                    "planning-and-decision-briefs.md",
                     "technical-review.md", "active-learning.md",
                     "product-discovery.md", "business-analysis.md", "market-and-competitive-research.md",
                     "qa-validation.md", "goal-pipeline.md", "architecture-decisions.md",
@@ -271,12 +272,14 @@ ROLES_CORE = ["dispatcher", "orchestrator", "advisor", "product-discovery", "bus
 # portable runtime has no ObserverReport/digest primitive, and presenting a watchdog as a normal
 # role would invite the orchestrator to dispatch it as a worker.
 CLAUDE_OBSERVERS = ["watchdog"]
-WORKER_AGENT_NAMES = ("builder", "frontend-engineer", "backend-engineer", "mobile-developer",
-                      "data-engineer", "cli-engineer")
+OBSERVED_AGENT_NAMES = tuple(ROLES_CORE) + (
+    "builder", "frontend-engineer", "backend-engineer", "mobile-developer",
+    "data-engineer", "cli-engineer", "designer",
+)
 OBSERVER_MESSAGE = (
-    "  Watch this implementation for scope drift, weakened or skipped tests, bypassed Orbit gates,\n"
-    "  unsupported claims of proof, and edits to permissions or governing config. Report only when a\n"
-    "  concise warning can prevent a mistake from compounding."
+    "  Watch this role and its descendants for shallow discovery, missing alternatives, untested\n"
+    "  assumptions, stalled or repetitive work, scope drift, weakened tests, rubber-stamped gates,\n"
+    "  and unsupported proof. Report precise observed evidence only when intervention prevents drift."
 )
 
 # The PROJECT-SPECIFIC specialists — provisioned from the detected surfaces, NOT a fixed template.
@@ -401,15 +404,15 @@ def _engineer_text(builder: str, name: str, display: str, scope: str) -> str:
     return t
 
 
-def _ensure_worker_observers(target: Path, changed: list, warnings: list) -> None:
-    """Add the observer keys to existing Orbit workers without replacing their customized bodies.
+def _ensure_agent_observers(target: Path, changed: list, warnings: list) -> None:
+    """Attach the watchdog to every operational Orbit role without replacing customized bodies.
 
     Existing `observer:` declarations are user intent and always win. Malformed/non-frontmatter
     files are preserved with a warning. This narrow additive migration is what makes a project
     refresh activate the watchdog instead of limiting it to newly scaffolded repositories.
     """
     agents = target / ".claude/agents"
-    for name in WORKER_AGENT_NAMES:
+    for name in OBSERVED_AGENT_NAMES:
         path = agents / f"{name}.md"
         if not path.exists():
             continue
@@ -420,14 +423,19 @@ def _ensure_worker_observers(target: Path, changed: list, warnings: list) -> Non
                 warnings.append(f"{path.relative_to(target)} has malformed frontmatter — observer not added")
                 continue
             front = match.group("front")
-            if re.search(r"(?m)^observer\s*:", front):
-                continue                              # preserve another observer or an explicit local choice
-            addition = "\nobserver: watchdog"
-            if not re.search(r"(?m)^observerMessage\s*:", front):
-                addition += "\nobserverMessage: >-\n" + OBSERVER_MESSAGE
+            has_observer = bool(re.search(r"(?m)^observer\s*:", front))
+            addition = ""
+            if not has_observer:
+                addition += "\nobserver: watchdog"
+                if not re.search(r"(?m)^observerMessage\s*:", front):
+                    addition += "\nobserverMessage: >-\n" + OBSERVER_MESSAGE
+            if not re.search(r"(?m)^observeSubagents\s*:", front):
+                addition += "\nobserveSubagents: true"
+            if not addition:
+                continue
             updated = original[:match.end("front")] + addition + original[match.end("front"):]
             path.write_text(updated)
-            changed.append(f"{path.relative_to(target)}  (added observer watchdog; body preserved)")
+            changed.append(f"{path.relative_to(target)}  (enabled full-loop watchdog; body preserved)")
         except Exception as exc:
             warnings.append(f"Could not add observer to {path.relative_to(target)}: {exc}")
 
@@ -446,14 +454,25 @@ def _ensure_observer_setting(target: Path, changed: list, warnings: list) -> Non
     if not isinstance(env, dict):
         warnings.append(f"{path.relative_to(target)} env is not an object; observer flag not added")
         return
-    if "CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS" in env:
-        return                                          # preserve explicit enable OR opt-out
-    env["CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS"] = "1"
+    explicit = "CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS" in env
+    if not explicit:
+        env["CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS"] = "1"
     path.parent.mkdir(parents=True, exist_ok=True)
-    if path.exists():
+    if path.exists() and not explicit:
         path.with_suffix(f".json.bak.{int(time.time())}").write_text(path.read_text())
-    path.write_text(json.dumps(data, indent=2) + "\n")
-    changed.append(".claude/settings.json  (enabled experimental observer agents; explicit values preserved)")
+    if not explicit:
+        path.write_text(json.dumps(data, indent=2) + "\n")
+        changed.append(".claude/settings.json  (enabled experimental observer agents; explicit values preserved)")
+    state_path = target / ".orbit/observer.json"
+    if not state_path.exists():
+        enabled = str(env.get("CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS", "1")) != "0"
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(json.dumps({
+            "schema": 1, "enabled": enabled, "observer": "watchdog",
+            "state": "armed" if enabled else "disabled", "scope": "full-loop",
+            "message": "Waiting to supervise the next Orbit role tree",
+        }, indent=2) + "\n")
+        changed.append(".orbit/observer.json  (visible full-loop observer state)")
 
 
 def resolve_engineers(surfaces):
@@ -850,7 +869,7 @@ def _auto_heal(target: Path) -> str:
 
     for observer in CLAUDE_OBSERVERS:
         _place(AGENTS / f"{observer}.md", target / ".claude/agents" / f"{observer}.md", created, skipped)
-    _ensure_worker_observers(target, created, warnings)
+    _ensure_agent_observers(target, created, warnings)
     _ensure_observer_setting(target, created, warnings)
 
     migrate_hooks(target, created, warnings)
@@ -869,7 +888,7 @@ def _auto_heal(target: Path) -> str:
 def install_hooks(target: Path, has_ui: bool = False, reporter_only: bool = False) -> None:
     """Activate Orbit in .claude/settings.json (default-on + announced):
 
-      • env.CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS=1 → arm worker watchdogs unless the user has
+      • env.CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS=1 → arm full-loop watchdogs unless the user has
         already set an explicit value. This is skipped for reporter-only activation.
 
       • PreToolUse(Bash) → orbit-guard  — the non-interactive safety wall (allow or deny; never ask),
@@ -916,7 +935,7 @@ def install_hooks(target: Path, has_ui: bool = False, reporter_only: bool = Fals
         if isinstance(env, dict) and "CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS" not in env:
             env["CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS"] = "1"
             added.append("env.CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS=1   "
-                         "(experimental: silent watchdog for implementation workers)")
+                         "(experimental: visible watchdog across the full Orbit role tree)")
         elif not isinstance(env, dict):
             print("  Note: .claude/settings.json env is not an object — observer flag left untouched.")
 
@@ -1144,7 +1163,7 @@ def main():
             _emit(target / ".orbit/roles" / f"{fn}.md", _strip_frontmatter(adapter), created, skipped)
 
     # Refresh existing generated workers additively; customized role bodies remain byte-for-byte.
-    _ensure_worker_observers(target, created, warnings)
+    _ensure_agent_observers(target, created, warnings)
     _ensure_observer_setting(target, created, warnings)
 
     # 5. record what we placed (for precise 'unmodified' migration) + stamp the version deterministically

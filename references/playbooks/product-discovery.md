@@ -30,7 +30,10 @@ Teams over-index on feasibility and under-invest in value + viability. Force att
 1. **Outcome (root):** ONE measurable target ("issuance < 15s", "activation 22%→25%") — never a feature.
 2. **Opportunities:** real user needs/pains/desires, from evidence, not speculation. Test: "I don't
    have time to cook" is an opportunity; "I want takeout" is a disguised solution. Pick **one** target.
-3. **Solutions:** 2–3 *competing* ways to address the target opportunity (minimal / ideal / scalable) — never single-track.
+3. **Solutions:** diverge to at least five genuinely different concepts before narrowing to three.
+   Explore removal, automation, inversion, reuse, premium/concierge, and system leverage. Reject
+   restatements, generic AI, copycats, and feature soup. Score value, distinctiveness, coherence,
+   feasibility, leverage, reversibility, and evidence; name one signature/10× bet and one quick win.
 4. **Assumption tests:** the smallest experiments that validate the riskiest assumptions before committing.
 
 ## JTBD + the riskiest-assumption test
@@ -45,10 +48,11 @@ Teams over-index on feasibility and under-invest in value + viability. Force att
 ## Deliverable — the discovery brief
 Write `.orbit/artifacts/<cycle>/discovery-brief.md`, tight, with: **Outcome** (one measurable) ·
 **Who + Job** (JTBD story) · **Opportunity map** (2–4, each with its evidence source; the chosen one +
-why) · **Candidate solutions** (2–3, with a completeness score) · **Four-risk read** (value/usability/
+why) · **Concept field** (five+, scored) · **Candidate solutions** (three, including signature bet + quick win) · **Four-risk read** (value/usability/
 feasibility/viability, who de-risks each) · **Riskiest assumption + smallest test** (with a pass/fail
 bar) · **Open questions / premises for the user** · **Recommendation** (the bet, and what evidence would
-change it). Hand to the Planner; the Orchestrator folds decisions into STATE.md.
+change it) · **Surprise dividend** (one evidence-backed enhancement the user would value). Recommend
+the strongest bet and proceed; do not hand ordinary judgment back to the user.
 
 ## Honesty + escalation
 Every opportunity carries a **real evidence source** — never fabricate "users said…"; "inferred from

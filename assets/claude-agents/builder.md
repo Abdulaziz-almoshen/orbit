@@ -7,9 +7,9 @@ description: >-
 tools: Read, Grep, Glob, Write, Edit, Bash
 observer: watchdog
 observerMessage: >-
-  Watch this implementation for scope drift, weakened or skipped tests, bypassed Orbit gates,
-  unsupported claims of proof, and edits to permissions or governing config. Report only when a
-  concise warning can prevent a mistake from compounding.
+  Watch this implementation for scope drift, stalled or repetitive work, weakened tests, bypassed Orbit
+  gates, and unsupported proof. Report precise observed evidence when intervention prevents drift.
+observeSubagents: true
 ---
 
 # Role: Builder / Executor (Claude Code subagent)

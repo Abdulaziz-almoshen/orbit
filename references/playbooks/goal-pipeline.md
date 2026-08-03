@@ -2,15 +2,15 @@
 
 The **Planner** and **Orchestrator** load this when the user sends a **goal** (a product outcome, not a
 task): "build the initiative module", "make a booking prototype". The contract: the system decomposes,
-builds, verifies, and **polishes to completion** — interrupting the human exactly **twice** — and what
+builds, verifies, and **polishes to completion** — normally without interrupting the human — and what
 comes back is a working product, clean and lean, not scaffolding. (For a single task, the normal loop
 applies; this playbook is the goal-sized lane.)
 
 ## The artifact chain (each phase writes a file the next consumes)
 1. **Spec** — after discovery/negotiation, the Planner writes `spec.md`: user stories + **numbered
    requirements** with **EARS acceptance criteria** ("WHEN <condition> THE SYSTEM SHALL <behavior>").
-   Every criterion measurable — these become the QA Engineer's matrix rows. *Human gate #1: the user
-   approves the spec (one message, the negotiation already happened).*
+   Every criterion measurable — these become the QA Engineer's matrix rows. The team ratifies the spec
+   internally and proceeds unless `autonomous-delivery.md` identifies a critical blocker.
 2. **Plan** — the technical shape (stack per the ADR/boring-tech rules, data model, the top-3
    architecture characteristics), then
 3. **Stories** — `tasks.md`: the backlog **organized by user story**, each story a self-contained work
@@ -41,15 +41,14 @@ feels finished." A story failing backpressure twice → struggle detection: stop
 ## Autonomy with meaningful gates (the decision taxonomy)
 Classify every decision mid-run; don't stop for what you can decide:
 - **Mechanical** (one right answer — naming, file placement, an obvious lib): decide silently, log it.
-- **Taste** (reasonable people differ — layout variant, copy tone, minor scope): decide with your
-  recommendation, **batch into ONE end-of-run approval** alongside the demo. *Human gate #2.*
+- **Taste** (reasonable people differ — layout variant, copy tone, minor scope): choose the strongest
+  option, log the reasoning, and include it in the final handoff.
 - **User-challenge** (the evidence says the user's stated direction should change) and **one-way doors**
-  (schema, auth model, anything hard to undo): **never auto-decide** — stop and ask, with the evidence.
+  (schema, auth model, anything hard to undo): ask only when the choice is expensive to reverse and
+  cannot be inferred from evidence; otherwise recommend, record, and proceed.
 
-**Every gate is an `AskUserQuestion`** — spec approval, the taste batch, and user-challenges are all
-asked with selectable options, recommendation first labeled "(Recommended)", trade-off per option —
-never a question buried in prose (see `clarify-and-challenge.md` → "HOW to ask"). The taste batch =
-one AskUserQuestion call with multiple questions, not a thread of asks.
+When a critical gate genuinely requires the user, use one batched `AskUserQuestion` with the
+recommendation first. Specs, taste, and configured budget inside hard caps are not approval gates.
 Principles when deciding: completeness over shortcut · smallest diff that's actually right · boring
 tech by default · explicit over clever · bias to action. **Auto-deciding replaces the user's judgment,
 never the analysis** — and every decision gets a line in the audit trail (STATE.md / an ADR if architectural).

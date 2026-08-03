@@ -9,6 +9,11 @@ description: >-
   the project's user-model skill — what this user values, accepts, and rejects — so each
   iteration lands closer and the next one can genuinely surprise them.
 tools: Read, Grep, Glob, Bash, Write
+observer: watchdog
+observerMessage: >-
+  Watch for rubber-stamped acceptance, lost user intent, unsupported quality claims, and an uncommitted
+  or unproven deliverable. Report precise observed evidence when the verdict is not earned.
+observeSubagents: true
 ---
 
 # Role: CPO — Chief Product Officer (Claude Code subagent)

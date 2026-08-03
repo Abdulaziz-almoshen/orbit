@@ -82,6 +82,7 @@ ROLE_INFO = {
     "qa-engineer": ("QA Engineer", "validates the product vs the requirements (RTM)"),
     "safety-gate": ("Safety", "confirms no unsafe/outward action without approval"),
     "reporter": ("Reporter", "summarizes proof + remaining risk"),
+    "watchdog": ("Observer Watchdog", "silently supervises every role and its descendants"),
     "human": ("You", "decisions the loop pauses for"),
     "subagent": ("Sub-agent", "a spawned worker"),
 }
@@ -183,10 +184,11 @@ def _update_snapshot(ev: dict) -> None:
     snap["last_ts"] = ev.get("ts", _now())
     if ev.get("cycle") is not None:
         snap["cycle"] = ev.get("cycle")
-    if ev.get("phase"):
-        snap["phase"] = ev["phase"]
     role, status = ev.get("role", ""), ev.get("status", "")
-    if role and status in ("start", "info"):
+    is_observer = role == "watchdog"
+    if ev.get("phase") and not is_observer:
+        snap["phase"] = ev["phase"]
+    if role and status in ("start", "info") and not is_observer:
         snap["active_role"] = role
     if ev.get("task_id") and status in ("start", "info"):
         snap["active_task"] = ev["task_id"]
@@ -376,7 +378,7 @@ def emit(role: str, phase: str = "", status: str = "info", msg: str = "",
         _rotate_activity()                             # keep the live log bounded (telemetry ≠ memory)
         _update_snapshot(ev)
         # keep the team roster live off the same signal (so orbit-hook's emits feed it for free)
-        if role and role != "?":
+        if role and role not in ("?", "watchdog"):
             agent_update(role, status=_EMIT_TO_AGENT.get(status), task=task_id, message=msg or None)
         tag = f"[{role}]" + (f" ({phase})" if phase else "")
         print(f"{tag} {msg}".rstrip(), flush=True)

@@ -104,6 +104,10 @@ def main():
               "message": "Claude is \x1b[31mwaiting\x1b[0m for your input",
               "title": "Input needed", "notification_type": "elicitation_dialog",
               "session_id": "session-abc123", "cwd": d}, d)
+        fire({"hook_event_name": "SubagentStart", "agent_type": "watchdog", "cwd": d}, d)
+        fire({"hook_event_name": "PostToolUse", "tool_name": "ObserverReport",
+              "tool_input": {"report": "QA verdict is unsupported by the observed test failure"},
+              "cwd": d}, d)
 
         events = [json.loads(l) for l in open(act).read().splitlines()]
         roles_status = [(e["role"], e["status"], e["msg"]) for e in events]
@@ -118,6 +122,14 @@ def main():
             fails.append("PostToolUse(Read) should be filtered out (too noisy)")
         if not any(s == "failed" for _, s, _ in roles_status):
             fails.append("PostToolUseFailure not recorded as failed")
+        if not any(r == "watchdog" and "unsupported" in m for r, _, m in roles_status):
+            fails.append("ObserverReport intervention not recorded")
+        observer = json.loads(open(os.path.join(d, ".orbit", "observer.json")).read())
+        if observer.get("state") != "intervention" or observer.get("scope") != "full-loop":
+            fails.append(f"observer state not exposed: {observer}")
+        run_now = json.loads(open(os.path.join(d, ".orbit", "run.json")).read())
+        if run_now.get("active_role") == "watchdog":
+            fails.append("watchdog displaced the active worker in run.json")
         # redaction: the notification's ANSI escapes must be gone
         notif = [m for r, s, m in roles_status if r == "human"]
         if not notif or "\x1b" in notif[0]:

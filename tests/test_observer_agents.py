@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Observer-agent contract: workers are watched; the watcher stays Claude-only and low-trust."""
+"""Observer-agent contract: every operational role is watched, visible, and low-trust."""
 import importlib.util
 import json
 import os
@@ -23,13 +23,18 @@ def frontmatter(text):
 
 def main():
     fails = []
-    builder = read("assets", "claude-agents", "builder.md")
     watchdog = read("assets", "claude-agents", "watchdog.md")
-
-    if not re.search(r"(?m)^observer:\s*watchdog\s*$", frontmatter(builder)):
-        fails.append("builder does not declare observer: watchdog")
-    if not re.search(r"(?m)^observerMessage:\s*>-\s*$", frontmatter(builder)):
-        fails.append("builder does not provide a focused observerMessage")
+    observed = ("dispatcher", "orchestrator", "advisor", "product-discovery", "business-analyst",
+                "market-researcher", "planner", "builder", "designer", "safety-gate", "reviewer",
+                "qa-engineer", "cpo", "reporter")
+    for name in observed:
+        fm = frontmatter(read("assets", "claude-agents", f"{name}.md"))
+        if not re.search(r"(?m)^observer:\s*watchdog\s*$", fm):
+            fails.append(f"{name} does not declare observer: watchdog")
+        if not re.search(r"(?m)^observerMessage:\s*>-\s*$", fm):
+            fails.append(f"{name} does not provide an observerMessage")
+        if not re.search(r"(?m)^observeSubagents:\s*true\s*$", fm):
+            fails.append(f"{name} does not propagate observation to descendants")
     if re.search(r"(?m)^observer:", frontmatter(watchdog)):
         fails.append("watchdog declares an observer (observer chaining must stay impossible)")
     if re.search(r"(?m)^tools:", frontmatter(watchdog)):
@@ -42,7 +47,9 @@ def main():
         subprocess.run(["git", "init", "-q", d], check=True)
         subprocess.run([sys.executable, SCAFFOLD, "--surfaces", "web,api", "--install-hooks",
                         "--target", d], check=True, capture_output=True, text=True)
-        for name in ("frontend-engineer", "backend-engineer"):
+        for name in ("dispatcher", "orchestrator", "product-discovery", "business-analyst",
+                     "market-researcher", "planner", "frontend-engineer", "backend-engineer",
+                     "designer", "safety-gate", "reviewer", "qa-engineer", "cpo", "reporter"):
             text = open(os.path.join(d, ".claude", "agents", f"{name}.md"), encoding="utf-8").read()
             if "observer: watchdog" not in frontmatter(text):
                 fails.append(f"generated {name} lost the observer pairing")
@@ -61,6 +68,9 @@ def main():
         agents = json.load(open(agents_path)) if os.path.isfile(agents_path) else {}
         if "watchdog" in agents:
             fails.append("observer sidecar displaced the worker on Orbit's visible team board")
+        state = json.load(open(os.path.join(d, ".orbit", "observer.json"), encoding="utf-8"))
+        if state.get("state") != "watching" or state.get("scope") != "full-loop":
+            fails.append(f"observer lifecycle is not visibly evidenced: {state}")
 
     # Existing scaffold refresh: add keys without replacing a customized worker body, and honor an
     # existing alternate observer declaration on another worker.
@@ -70,7 +80,7 @@ def main():
                        check=True, capture_output=True, text=True)
         backend = os.path.join(d, ".claude", "agents", "backend-engineer.md")
         text = open(backend, encoding="utf-8").read()
-        text = re.sub(r"(?m)^observer: watchdog\nobserverMessage: >-\n(?:  [^\n]*\n){3}", "", text)
+        text = re.sub(r"(?ms)^observer: watchdog\nobserverMessage: >-\n(?:  [^\n]*\n)+observeSubagents: true\n", "", text)
         text += "\nCUSTOMIZED WORKER BODY\n"
         open(backend, "w", encoding="utf-8").write(text)
         frontend = os.path.join(d, ".claude", "agents", "frontend-engineer.md")
@@ -102,7 +112,7 @@ def main():
         for failure in fails:
             print("  -", failure)
         sys.exit(1)
-    print("PASS: observer-agents (worker pairing + silent low-trust watcher + scaffold + opt-out)")
+    print("PASS: observer-agents (full-loop pairing + propagation + visible low-trust watcher + opt-out)")
 
 
 if __name__ == "__main__":

@@ -78,10 +78,10 @@ TASK_CTX = (
     "deliverable against that goal (the run is not done on your feeling; it is done on the CPO's "
     "commit-bound ACCEPT).**COST MODE IS LITE "
     "BY DEFAULT:** before any T2/T3/T4 loop, run `scripts/orbit-context doctor` when available; if it "
-    "reports FAIL, compact or ask before fan-out. **SIZE THE GEAR FIRST** (the Gearbox — "
+    "reports FAIL, compact and continue inside hard caps. **SIZE THE GEAR FIRST** (the Gearbox — "
     "`.orbit/skills/loop-tiers.md`): score effort/risk/uncertainty and pick the smallest gear that can "
     "still prove the result — T0 Direct · T1 Quick · T2 Standard · T3 Deep · T4 Mission — then DECLARE "
-    "the Gear Card (Gear/Why/Budget/Exit) before moving; on T3/T4 confirm the budget before fanning out. "
+    "the Gear Card (Gear/Why/Budget/Exit) before moving; configured hard caps authorize T3/T4 fan-out. "
     "**MODEL SWITCHING:** stay on the Executor lane for ordinary work; call the Advisor (Opus 4.8) "
     "only on-demand for architecture forks, safety/compliance uncertainty, repeated gate failure, "
     "expensive-if-wrong decisions, or explicit user request — max one Advisor call per cycle, tiny packet, "
@@ -96,20 +96,22 @@ TASK_CTX = (
     "acceptance criteria?; prior-art/market: does it already exist, or is there a better/reusable way?; "
     "technical judgment: risks, blast radius, a simpler path). **If that knowledge reveals something "
     "material — a wrong premise, a better/more scalable approach, a real risk, a reuse-over-build, or "
-    "a missing requirement — you MUST surface it to the user, backed by evidence (the 'surprise': be "
-    "smarter than the ask), as an AskUserQuestion with selectable options, your recommendation first "
-    "labeled '(Recommended)' — never a question buried in prose.** If the goal and the plan are genuinely sound and you have nothing "
+    "a missing requirement — you MUST act on it, backed by evidence (the 'surprise': be smarter than "
+    "the ask), choose the strongest recommendation, record it, and continue. AskUserQuestion is reserved "
+    "for missing access, irreversible/external authority, or an expensive uninferable product fork.** "
+    "If the goal and the plan are genuinely sound and you have nothing "
     "material to add, say so in ONE line and proceed — never manufacture friction, never rubber-stamp "
     "when you do have a better read. Then run read→plan→act→evaluate→update→decide via the roles in "
-    ".claude/agents/. Run mandatory stage owners sequentially in Lite mode; user approval is required "
-    "for wider concurrency, not for the required stages themselves. Send each specialist a "
+    ".claude/agents/. Run mandatory stage owners sequentially in Lite mode; widen concurrency within "
+    "configured caps without asking for reassurance. Send each specialist a "
     "tiny packet (exact question, relevant files only, constraints, expected output limit), not full "
     "STATE/activity/repo context. Trivial/no-work T0 questions stay direct; real project work is governed. Drive the "
     "TaskCreate/TaskUpdate checklist + write .orbit/tasks.json + "
     ".orbit/activity.jsonl — make the board visible FIRST, before spawning specialists. Do NOT run "
     "the task through the native Workflow(...) background runner (it bypasses the checklist, the "
     "visible owner, and .orbit/ telemetry — the user must see who owns each step). Do NOT free-edit a "
-    "source-of-truth file outside the loop."
+    "source-of-truth file outside the loop. Once gates pass, make a scoped local commit of task-owned "
+    "changes, verify that exact snapshot, and report its SHA."
 )
 QUESTION_CTX = (
     "[orbit] ROUTING — default lane: QUESTION. Answer it directly: no loop, no roles, no ceremony "
@@ -153,7 +155,7 @@ def gear_hint(prompt: str) -> str:
     if breadth or research:
         why = " + ".join([w for w, on in (("breadth", breadth), ("research-need", research)) if on])
         return (f"[orbit] GEAR HINT: {why} signals — consider T3 Deep "
-                "(Map→Research→Plan→Critique→Synthesize→Build, confirm the fan-out); size + declare the gear.")
+                "(Map→Research→Plan→Critique→Synthesize→Build within hard caps); size + declare the gear.")
     return ""
 
 

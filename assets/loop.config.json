@@ -62,7 +62,7 @@
 
   "_gears_help": "The Gearbox (.orbit/skills/loop-tiers.md). Cheap mode is the default: the ORCHESTRATOR sizes the smallest gear that proves the result, runs orbit-context doctor before T2+, and asks before any wider fan-out. 'deep' caps T3 dynamic fan-out; 'mission' flags T4 durability. Consumed by the model at sizing time, not by the runners.",
   "gears": {
-    "deep":    { "agent_max": 4, "map_max": 1, "research_max": 2, "plan_max": 1, "critics": 1, "concurrency": 2, "token_budget": 80000, "confirm_before_fanout": true, "require_context_doctor": true },
+    "deep":    { "agent_max": 4, "map_max": 1, "research_max": 2, "plan_max": 1, "critics": 1, "concurrency": 2, "token_budget": 80000, "confirm_before_fanout": false, "require_context_doctor": true },
     "mission": { "durable": true, "resumable": true, "human_gate_per_irreversible_step": true, "artifact_bundle": true }
   },
 
@@ -72,7 +72,7 @@
     "activation_model": "mandatory_stage_owners",
     "max_concurrent_subagents_without_approval": 1,
     "max_concurrent_subagents_with_approval": 4,
-    "fanout_requires_approval": true,
+    "fanout_requires_approval": false,
     "packet_file_limit": 8,
     "packet_output_word_limit": 500,
     "require_context_doctor_for_t2_plus": true,
@@ -140,6 +140,15 @@
   "_router_help": "How every user message is routed. mode 'always' (default): each real request engages the loop — ambiguous phrasing and short imperatives route as TASK, questions are answered directly, and every reply starts with a visible '⏣ orbit' lane marker. mode 'smart': conservative — only clear task verbs force the loop, ambiguous gets a soft directive, no markers. Acks, negations, and slash-commands never trigger either way.",
   "router": {
     "mode": "always"
+  },
+
+  "interaction_policy": {
+    "default": "autonomous_delivery",
+    "max_noncritical_questions": 0,
+    "infer_reversible_decisions": true,
+    "require_spec_approval": false,
+    "commit_when_green": true,
+    "ask_only": ["missing_access", "irreversible_or_external_authority", "expensive_uninferable_product_fork", "user_requested_gate"]
   },
 
   "_cpo_acceptance_help": "The CPO gate AFTER QA: the run cannot finish until the cpo subagent judges the deliverable against the user's ORIGINAL goal and writes a commit-bound ACCEPT envelope to .orbit/cpo/. ITERATE/REDEVELOP verdicts return the work with change orders. Runs entirely in-model (no external export). See .orbit/skills/product-acceptance.md.",

@@ -7,6 +7,11 @@ description: >-
   Report-only (never fixes); builds a Requirements Traceability Matrix with a PASS/CONCERNS/FAIL/
   WAIVED verdict per requirement. Gate power: any P0 FAIL or score <85 means the run is not done.
 tools: Read, Grep, Glob, Bash, Write
+observer: watchdog
+observerMessage: >-
+  Watch for rubber-stamped QA, skipped requirements, weak evidence, untested edge cases, and verdicts not
+  supported by observed results. Report precise evidence when the quality gate is not real.
+observeSubagents: true
 ---
 
 # Role: QA Engineer (Claude Code subagent)

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="760" viewBox="0 0 1600 760" role="img" aria-labelledby="title desc">
   <title id="title">Orbit strict capability loop with a live observer watchdog</title>
-  <desc id="desc">A strict specialist spine travels from discovery and business analysis through design, implementation, Safety, Reviewer, QA, CPO, and reporting. During implementation, a silent watchdog circles the worker.</desc>
+  <desc id="desc">A strict specialist spine travels from discovery and business analysis through design, implementation, Safety, Reviewer, QA, CPO, reporting, and a committed result. A real Claude observer surrounds and watches every role and its descendants.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#07090d"/>
@@ -46,6 +46,7 @@
   </defs>
 
   <rect width="1600" height="760" rx="28" fill="url(#bg)"/>
+  <rect x="54" y="174" width="1492" height="390" rx="195" fill="none" stroke="#e8590c" stroke-width="2.5" stroke-dasharray="8 11" opacity=".72"/>
   <path d="M0 1H1600" stroke="#27313d"/>
   <circle cx="800" cy="390" r="310" fill="none" stroke="#14202d" stroke-width="1"/>
   <circle cx="800" cy="390" r="250" fill="none" stroke="#101a25" stroke-width="1" stroke-dasharray="3 12"/>
@@ -54,15 +55,22 @@
 
   <g class="sans">
     <text x="76" y="72" class="eyebrow" fill="#75b7ff">THE ORBIT LOOP · STRICT CAPABILITY CONTRACT</text>
-    <text x="76" y="116" font-size="34" font-weight="720" fill="#f7f9fc">Every required specialist. No silent shortcuts.</text>
-    <text x="76" y="150" font-size="16" fill="#8c98a8">Actual completed owners are required. A role mentioned in prose does not pass.</text>
+    <text x="76" y="116" font-size="34" font-weight="720" fill="#f7f9fc">One goal in. Every role watched. Committed proof out.</text>
+    <text x="76" y="150" font-size="16" fill="#8c98a8">Claude’s watchdog supervises discovery → delivery → every gate. Missing owners cannot pass.</text>
     <g transform="translate(1320 62)">
       <circle cx="18" cy="18" r="16" fill="none" stroke="#f7f9fc" stroke-width="3"/>
       <circle cx="18" cy="18" r="9" fill="none" stroke="#f7f9fc" stroke-width="2"/>
       <path d="M3 26L33 9" stroke="#f7f9fc" stroke-width="3"/>
-      <text x="48" y="15" font-size="12" font-weight="700" letter-spacing="2" fill="#8c98a8">ORBIT 0.55</text>
+      <text x="48" y="15" font-size="12" font-weight="700" letter-spacing="2" fill="#8c98a8">ORBIT 0.56</text>
       <text x="48" y="36" font-size="15" font-weight="650" fill="#f7f9fc">Enforced team</text>
     </g>
+  </g>
+
+  <g class="sans" transform="translate(1090 190)">
+    <rect width="405" height="42" rx="21" fill="#18100c" stroke="#e8590c"/>
+    <circle cx="23" cy="21" r="8" fill="none" stroke="#ffb067" stroke-width="2"/>
+    <circle cx="23" cy="21" r="2.5" fill="#ffb067"/>
+    <text x="43" y="26" class="tiny" fill="#ff9a50">REAL CLAUDE OBSERVER · FULL ROLE TREE</text>
   </g>
 
   <!-- Main lifecycle rail -->
@@ -112,7 +120,7 @@
       <circle r="3" fill="#ffb067"/>
     </g>
     <g class="sans" transform="translate(140 -158)" text-anchor="end">
-      <text class="tiny" fill="#ff8a3d">WATCHDOG</text>
+      <text class="tiny" fill="#ff8a3d">WATCHDOG · HERE TOO</text>
       <text y="24" font-size="13" fill="#b2bbc7">Haiku · silent sidecar</text>
     </g>
 
@@ -157,8 +165,8 @@
     <g transform="translate(92 514)">
       <circle cx="10" cy="10" r="5" fill="#ff8a3d"/>
       <text x="28" y="14" class="tiny" fill="#ff8a3d">STOP HOOK ENFORCED</text>
-      <text x="28" y="40" font-size="19" font-weight="680" fill="#f7f9fc">Missing owner? The run stays open.</text>
-      <text x="28" y="66" font-size="14" fill="#8c98a8">Sequential by default. Complete by design.</text>
+      <text x="28" y="40" font-size="19" font-weight="680" fill="#f7f9fc">Missing owner or weak gate? Keep working.</text>
+      <text x="28" y="66" font-size="14" fill="#8c98a8">Ask only for a true blocker. Commit when green.</text>
     </g>
 
     <g transform="translate(1200 514)">

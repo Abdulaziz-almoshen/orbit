@@ -7,6 +7,11 @@ description: >-
   Has gate power: nothing reaches "done" without passing. The Orchestrator routes finished work
   here after the Builder and before the Reporter. Reviews, never lands.
 tools: Read, Grep, Glob, Bash
+observer: watchdog
+observerMessage: >-
+  Watch for rubber-stamped review, missed regressions, unexamined security or performance risks, and proof
+  claims not supported by commands. Report precise evidence when the gate is not earned.
+observeSubagents: true
 ---
 
 # Role: Reviewer / Evaluator (Claude Code subagent)

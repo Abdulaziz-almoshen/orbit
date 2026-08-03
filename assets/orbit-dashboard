@@ -380,6 +380,7 @@ def snapshot() -> dict:
                            and (_age(lock.get("heartbeat_at")) or 0) > int(lock.get("ttl_seconds") or 1800)),
         "decisions": decisions,
         "confidence": run.get("confidence") if isinstance(run, dict) else None,
+        "observer": _json("observer.json", {}) or {},
         "qa": _qa_state(),
         "cpo": _cpo_state(),
     }
@@ -454,10 +455,12 @@ function rows(pairs){const d=E('div');for(const[k,v,cls]of pairs){const r=E('div
 function render(s){
  const app=document.getElementById('app');app.innerHTML='';
  document.getElementById('gen').textContent=' · updated '+ (s.generated_at||'').replace('T',' ').replace('Z','');
- const run=s.run||{};
+ const run=s.run||{}, obs=s.observer||{};
  // Run summary
  app.appendChild(card('Run',rows([
-   ['phase',esc(run.phase||run.mode||'—')],['active actors',esc((s.active_actors||[]).join(', ')||'—')],
+   ['phase',esc(run.phase||run.mode||'—')],
+   ['observer',obs.enabled?('👁 watchdog '+esc(obs.state||'armed')+' · full loop'):'not evidenced'],
+   ['active actors',esc((s.active_actors||[]).join(', ')||'—')],
    ['cycle',esc(run.cycle==null?'—':run.cycle)],
    ['confidence',(s.confidence==null?'—':s.confidence+'%'),s.confidence==null?'muted':(s.confidence>=70?'ok':s.confidence>=40?'warn':'bad')],
  ])));

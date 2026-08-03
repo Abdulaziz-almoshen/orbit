@@ -99,17 +99,24 @@ def _permission_text(data):
 def _map(event, data):
     """Map a Claude Code hook event to activity.emit() kwargs, or None to ignore this event."""
     agent = _redact(data.get("agent_type") or data.get("agent") or "subagent", 24) or "subagent"
-    # Claude's observer is a silent sidecar, not an Orbit worker. Letting its background lifecycle
-    # become the active role would hide the implementer it watches and corrupt elapsed-time/status
-    # reporting. ObserverReport delivery stays in-band with the worker and needs no telemetry mirror.
-    if agent == "watchdog" and event in ("SubagentStart", "SubagentStop"):
-        return None
+    # The observer is visible evidence, but activity.py deliberately keeps it out of active ownership.
+    if agent == "watchdog" and event == "SubagentStart":
+        return {"role": "watchdog", "phase": "observe", "status": "start",
+                "msg": "watchdog attached to the active role tree"}
+    if agent == "watchdog" and event == "SubagentStop":
+        return {"role": "watchdog", "phase": "observe", "status": "done",
+                "msg": "watchdog completed observation"}
     if event == "SubagentStart":
         return {"role": agent, "phase": "act", "status": "start", "msg": f"{agent} started"}
     if event == "SubagentStop":
         return {"role": agent, "phase": "act", "status": "done", "msg": f"{agent} finished"}
     if event == "PostToolUse":
         tool = _tool_name(data)
+        if tool == "ObserverReport":
+            ti = data.get("tool_input") if isinstance(data.get("tool_input"), dict) else {}
+            report = ti.get("report") or ti.get("message") or ti.get("content") or "observer intervention"
+            return {"role": "watchdog", "phase": "observe", "status": "failed",
+                    "msg": _redact(report, 240), "confidence_delta": -10}
         if tool not in _FILE_TOOLS:
             return None                                     # skip Read/Grep/Bash/etc. — too noisy
         fp = _file_path(data)
@@ -136,6 +143,30 @@ def _map(event, data):
                 "msg": _permission_text(data)}
     # TaskCreated / TaskCompleted are handled separately (they mirror the native checklist).
     return None
+
+
+def _observer_state(orbit_dir: Path, event: str, data: dict) -> None:
+    """Expose Claude's real observer lifecycle without pretending the sidecar owns the task."""
+    agent = _redact(data.get("agent_type") or data.get("agent") or "", 24)
+    tool = _tool_name(data)
+    if agent != "watchdog" and tool != "ObserverReport":
+        return
+    if tool == "ObserverReport":
+        state = "intervention"
+        ti = data.get("tool_input") if isinstance(data.get("tool_input"), dict) else {}
+        message = _redact(ti.get("report") or ti.get("message") or ti.get("content") or
+                          "observer intervention", 300)
+    elif event == "SubagentStart":
+        state, message = "watching", "Supervising the active Orbit role tree"
+    else:
+        state, message = "clean", "Observation completed with no unresolved intervention"
+    value = {"schema": 1, "enabled": True, "observer": "watchdog", "state": state,
+             "scope": "full-loop", "message": message,
+             "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    path = orbit_dir / "observer.json"
+    tmp = orbit_dir / ".observer.json.tmp"
+    tmp.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n")
+    os.replace(tmp, path)
 
 
 def _attention(orbit_dir: Path, data: dict) -> None:
@@ -214,6 +245,7 @@ def main():
         return
 
     try:
+        _observer_state(orbit_dir, event, data)
         if event == "PermissionRequest":
             _attention(orbit_dir, data)
         elif event == "Notification":
@@ -231,7 +263,7 @@ def main():
         if rec is not None:
             # A tool edit/failure has no sub-agent identity — attribute it to whoever's ACTIVE
             # (from run.json) so we update that agent's line instead of a phantom "builder".
-            if event in ("PostToolUse", "PostToolUseFailure"):
+            if event in ("PostToolUse", "PostToolUseFailure") and _tool_name(data) != "ObserverReport":
                 try:
                     active = json.loads((orbit_dir / "run.json").read_text()).get("active_role")
                     if active:

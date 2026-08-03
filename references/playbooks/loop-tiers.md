@@ -16,8 +16,8 @@ is the point: the user sees Orbit's operating mode *before* it moves.
 |---|---|---|---|---|---|
 | **T0 · Direct** | question · explanation · trivial patch | answer / patch directly; a one-line STATE note if useful | 0 (main loop) | read-only-ish; nothing to gate | the `route.py` QUESTION lane |
 | **T1 · Quick** | small · clear · reversible · low-stakes | **Plan → Do → Verify** — one owner, one proof bar, self-check | 1 | guard hook + self-check | the fast lane (§10) |
-| **T2 · Standard** | a real product/dev change · ~1 workstream | Main agent plans/builds; optional single Reviewer/QA on the board | 0–1 unless approved | Safety veto → Reviewer/QA only when needed · proof per requirement · context doctor first | the substantial lane, but **Lite by default** |
-| **T3 · Deep** | (≥3 distinct surfaces **or** high research need) **and** (high ambiguity **or** compliance/security risk) | **Map → Research → Plan → Critique → Synthesize → Build** | dynamic, sized to breadth, capped (≤4 by default) | + adversarial **Critique gate** · fan-out + token caps · **context doctor + always confirm before fan-out** · role-scoped tools per worker | discovery **made dynamic** (Product-Discovery/Market-Researcher roles) + plan-review's lenses **as the critics** (Reviewer/Safety); its Build phase hands to T2 (which uses goal-pipeline only if the plan is goal-sized) |
+| **T2 · Standard** | a real product/dev change · ~1 workstream | Main agent plans/builds; optional single Reviewer/QA on the board | 0–1 by default | Safety veto → Reviewer/QA only when needed · proof per requirement · context doctor first | the substantial lane, but **Lite by default** |
+| **T3 · Deep** | (≥3 distinct surfaces **or** high research need) **and** (high ambiguity **or** compliance/security risk) | **Map → Research → Plan → Critique → Synthesize → Build** | dynamic, sized to breadth, capped (≤4 by default) | + adversarial **Critique gate** · fan-out + token caps · **context doctor + hard-cap enforcement** · role-scoped tools per worker | discovery **made dynamic** (Product-Discovery/Market-Researcher roles) + plan-review's lenses **as the critics** (Reviewer/Safety); its Build phase hands to T2 (which uses goal-pipeline only if the plan is goal-sized) |
 | **T4 · Mission** | spans multiple repos · multiple days · a production migration · money/customer-facing at scale | T3 **wrapped in durable state** — checkpoints, resumable runs, a human-approval gate per irreversible step, an external artifact bundle | dynamic, across sessions | + **mandatory human gates** · durable audit log · tool minimization · artifact bundle for review | the portable `loop.py` runner + `durable-execution.md` + approval checkpoints |
 
 Every gear runs through Orbit's **visible board** — `set_team` + `.orbit/tasks.json` + `.orbit/activity.jsonl`,
@@ -26,9 +26,9 @@ sub-agents dispatched with the **Task tool**. **Never** the native `Workflow(...
 always on.
 
 **Cost mode is Lite by default.** Before T2/T3/T4, run `scripts/orbit-context doctor` when available.
-If it returns FAIL, compact or ask before continuing. Without explicit approval: max **one** sub-agent,
-no red-team fleet, no background workflow, no repeated long status narration. Intelligence should come
-from sharper selection, not more agents.
+If it returns FAIL, compact before continuing. Default to max **one** active sub-agent, widening only
+inside configured caps when independent work benefits. No budget-reassurance question is required;
+no background workflow or repeated long status narration.
 That means one sub-agent maximum by default.
 
 ## Model switching — Executor + Advisor
@@ -43,8 +43,8 @@ The Advisor is **not** the default reviewer and not a hidden fleet. Use it only 
 safety/compliance uncertainty, repeated gate failure, a decision that is expensive to get wrong, or an
 explicit user request for deep judgment. One Advisor call per cycle by default; log the `advisor_reason`,
 put `advisor` on the visible board while it is active, send a tiny packet, and keep the answer under the
-configured word limit. If you would ask the Advisor twice, stop and ask the user to approve the wider
-budget first.
+configured word limit. If a second Advisor call exceeds the configured cap, use the executor or record
+a hard-limit blocker.
 
 ## Agent Activation — catalog, not payroll
 Orbit can provision many specialists. That is inventory, not an instruction to wake them. The default
@@ -58,7 +58,7 @@ run has one owner: the main agent. Use role **lenses** internally before spawnin
 | HEAVY UI decision | 1 Designer or Reviewer, depending on the gap |
 | Deploy / payment / privacy / destructive operation | 1 Safety gate |
 | External uncertainty that changes the decision | 1 Market Researcher or Product Discovery worker |
-| 2+ independent unknowns / broad strategy | Ask before 2-4 agents |
+| 2+ independent unknowns / broad strategy | Use 2-4 agents within configured caps |
 
 Any spawned worker gets a **tiny specialist packet**:
 - exact question / verdict needed;
@@ -114,9 +114,9 @@ Open every T2+ run (and announce T1) with a Gear Card: `emit` it to `.orbit/acti
     Exit:   plan-of-record + a proof bar per slice
 ```
 
-`Why` names the *triggers* that chose the gear; `Budget` is the cap it will run under; `Exit` is the
-proof that ends the run. On **T3/T4, always confirm** the budget with the user (one `AskUserQuestion`)
-before spawning the fleet — an expensive fan-out is a human decision.
+`Why` names the *triggers* that chose the gear; `Budget` is the hard cap it will run under; `Exit` is
+the proof that ends the run. On **T3/T4, proceed inside those configured caps**; ask only when a true
+human-authority action or unavoidable hard-limit expansion is required.
 
 ## Guardrails scale with autonomy (OWASP LLM06 — Excessive Agency)
 More agents / more tools / more reach ⇒ **more control**, never less:
@@ -138,8 +138,7 @@ More agents / more tools / more reach ⇒ **more control**, never less:
 Six phases; agents sized to the request's real structure, capped:
 
 These are **existing roles run in a phased fan-out — no new role types are introduced.** All of it
-runs on the visible board (set_team the approved active/queued workers, not the whole catalog) and only
-after the user approves the budget:
+runs on the visible board (set_team the capped active/queued workers, not the whole catalog):
 
 1. **Map** — the **Product-Discovery** role (read-only) run once per codebase *surface* (data model ·
    UI/nav · integration seams). Answers "what actually exists?" before anyone plans.
@@ -160,7 +159,7 @@ after the user approves the budget:
 5. **Synthesize** — the **Planner** (or the Orchestrator) — the **same role that already owns the plan;
    there is no separate "Synthesizer" role.** It converges the critic-passed slices into a *single
    plan-of-record* — sequenced quick-wins-first, a proof bar + gates + owner decisions per slice.
-   **Not a pile of reports.** This is what the user approves.
+   **Not a pile of reports.** This is the internally ratified plan-of-record.
 6. **Build** — hand the plan-of-record to the **T2 Standard** loop (Builder → Reviewer → QA/Safety). If
    the plan is *goal-sized*, T2 runs `goal-pipeline.md` inside this phase; otherwise it's a normal build.
 
@@ -168,7 +167,7 @@ Fan-out sizing:
 `agents = Map(surfaces, ≤map_max) + Research(unknowns, ≤research_max) + Plan(clusters, ≤plan_max) + critics`,
 clamped by `gears.deep.agent_max`. Within a phase, run in parallel (bounded by `concurrency`); pipeline
 where safe, but **barrier before Critique** (it needs the whole draft). Announce the sized budget in the
-Gear Card and **confirm before spawning**.
+Gear Card and proceed without a reassurance gate.
 
 ## The Mission loop (T4) — durable, resumable, human-gated
 When work spans repos / days / a production migration / money at scale, run T3's shape **on the durable
@@ -192,7 +191,7 @@ substantial work must record actual completed owners for:
 `Product Discovery → Business Analyst → Market Researcher → Planner → [Designer for UI] → Build →
 Safety → Reviewer → QA Engineer → CPO → Reporter`
 
-Lite mode runs this spine sequentially with bounded packets. T3/T4 may fan out only after approval.
+Lite mode runs this spine sequentially with bounded packets. T3/T4 may fan out inside configured caps.
 A role used as an internal “lens,” mentioned in prose, or shown as dormant on the board does not
 satisfy the contract. The Stop hook reads post-route completion events and blocks missing stages.
 T0 remains direct only when no substantive project work occurs.

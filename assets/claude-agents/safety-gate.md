@@ -7,6 +7,11 @@ description: >-
   every candidate output/action through this role; it holds veto power and its rejection
   cannot be overridden by the loop.
 tools: Read, Grep, Glob, Bash
+observer: watchdog
+observerMessage: >-
+  Watch for bypassed authority, unreviewed side effects, unsafe assumptions, and approval granted without
+  evidence. Report precise evidence immediately; the observer cannot grant permission itself.
+observeSubagents: true
 ---
 
 # Role: Safety / Compliance (Claude Code subagent)

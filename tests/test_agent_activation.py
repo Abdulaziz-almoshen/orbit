@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Agent activation policy (v0.55): substantial work has mandatory stage owners, run sequentially by
-default. Approval widens concurrency; it never turns required capabilities into optional lenses.
+Agent activation policy (v0.56): substantial work has mandatory stage owners and autonomous delivery.
+Configured caps govern concurrency; approval is reserved for actions requiring human authority.
 
 Run: python3 tests/test_agent_activation.py   (exit 0 = pass)
 """
@@ -25,8 +25,19 @@ def main():
         fails.append("[config] activation_model must be mandatory_stage_owners")
     if cm.get("max_concurrent_subagents_without_approval") != 1:
         fails.append("[config] default concurrency must be one")
-    if cm.get("fanout_requires_approval") is not True:
-        fails.append("[config] fanout_requires_approval must be true")
+    if cm.get("fanout_requires_approval") is not False:
+        fails.append("[config] fanout_requires_approval must be false under autonomous delivery")
+    ip = cfg.get("interaction_policy", {})
+    if ip.get("default") != "autonomous_delivery" or ip.get("max_noncritical_questions") != 0:
+        fails.append("[config] autonomous delivery must default to zero noncritical questions")
+    if ip.get("commit_when_green") is not True:
+        fails.append("[config] green work must be committed")
+    if "autonomous-delivery.md" not in _read("scripts", "scaffold.py"):
+        fails.append("[scaffold] autonomous-delivery playbook must be provisioned on every install/update")
+    autonomous = _read("references", "playbooks", "autonomous-delivery.md").lower()
+    for phrase in ("only reasons to interrupt", "scoped local commit", "ordinary professional judgment"):
+        if phrase not in autonomous:
+            fails.append(f"[autonomy] playbook missing {phrase!r}")
     if cm.get("packet_file_limit") != 8:
         fails.append("[config] packet_file_limit must be 8")
     if cm.get("packet_output_word_limit") != 500:
@@ -55,8 +66,8 @@ def main():
             fails.append(f"[docs] {name} must describe mandatory stage ownership")
         if "sequential" not in low and "one active" not in low:
             fails.append(f"[docs] {name} must preserve single-worker default concurrency")
-        if "approval" not in low:
-            fails.append(f"[docs] {name} must require approval before wider fanout")
+        if "cap" not in low:
+            fails.append(f"[docs] {name} must constrain fanout with configured caps")
 
     packet_sources = ("orchestrator.md", "loop-tiers.md", "claude-md-template.md", "roles.md")
     for name in packet_sources:

@@ -55,6 +55,7 @@ RUN = ORBIT_DIR / "run.json"
 PENDING = ORBIT_DIR / "pending-question.json"
 AGENTS = ORBIT_DIR / "agents.json"
 WRITER_LOCK = ORBIT_DIR / "locks" / "active-writer.json"
+OBSERVER = ORBIT_DIR / "observer.json"
 
 _NO_COLOR = bool(os.environ.get("NO_COLOR")) or "--no-ansi" in sys.argv
 DIM = "" if _NO_COLOR else "\033[2m"
@@ -324,6 +325,11 @@ def render_full(run, tasks, events, tail, agents=None):
     out.append(header)
     if run:
         out.append(f"{B}Lifecycle{RST}  {_lifecycle_strip(run)}")
+    observer = _load(OBSERVER, {})
+    if isinstance(observer, dict) and observer.get("enabled"):
+        state = safe(observer.get("state") or "armed")
+        color = c("red") if state == "intervention" else c("grn")
+        out.append(f"{B}Observer{RST}   {color}👁 watchdog {state}{RST}  {DIM}· full-loop supervision{RST}")
     _lock = _writer_lock_line()
     if _lock:
         out.append(_lock)
@@ -427,9 +433,11 @@ def render(mode, tail):
     events_all = load_events(max(tail, 400))
     events = [e for e in events_all if e.get("run_id", rid) == rid] if rid else events_all
     agents = load_agents()
+    observer = _load(OBSERVER, {})
     if mode == "json":
         return json.dumps({"run": _snapshot(run, events), "agents": agents,
-                           "tasks": tasks if isinstance(tasks, list) else []}, indent=2)
+                           "tasks": tasks if isinstance(tasks, list) else [],
+                           "observer": observer if isinstance(observer, dict) else {}}, indent=2)
     if mode == "team":
         return render_team_board(run, agents, events)
     if mode == "compact":

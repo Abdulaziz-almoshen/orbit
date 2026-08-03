@@ -12,8 +12,8 @@ defaults are the enemy of that.
 ## The style palette (67 ready-made styles)
 You have a catalog of **67 selectable style token-systems** in `design-styles.md` (full specs in
 `design-styles/<name>.md`) — minimal, brutalist, glassmorphism, editorial, luxury, retro, neon,
-and more. These are the *menu*; this methodology is the *how*. The user picks the style from real
-prototypes (gates below); you then apply it with the rigor here (grounding, signature, anti-AI
+and more. These are the *menu*; this methodology is the *how*. The Designer compares real
+prototypes and selects the strongest fit (gates below), then applies it with the rigor here (grounding, signature, anti-AI
 checklist, quality floor) so it's distinctive, not a templated drop-in.
 
 ## First, determine impact — heavy or trivial? (every design-related request)
@@ -51,11 +51,11 @@ or when the user explicitly asks to re-pick the whole product's look:
    CSS, **the same component with real content from the brief** so they're directly comparable),
    using that style's tokens from `design-styles/<name>.md`. Write them to
    `.orbit/artifacts/<cycle>/previews/<style>.html`.
-3. **Open them for the user** to compare side by side (`open` each file, or serve the folder), with a
+3. **Render them for evidence** side by side, with a
    one-line pitch per style ("Brutalist — raw, high-contrast, unmissable"; "Clean — calm, trustworthy").
-4. **The user picks one — via `AskUserQuestion`.** One option per style (its one-line pitch as the
-   description, **your best fit for the brief first, labeled "(Recommended)"**) plus an
-   "Other / remix" escape. Never a prose question — the selection must be one click.
+4. **Score and select one.** Use brief fidelity, distinctiveness, usability, accessibility,
+   responsiveness, and implementation coherence. Record the winning rationale; do not interrupt for
+   taste unless the choice is an expensive brand one-way door the repo cannot resolve.
 
 This sets the product's visual language for everything after it (see Handoff — `DESIGN.md`).
 
@@ -65,17 +65,16 @@ it generates variations *within* it:
 1. **Build 2–5 HTML prototypes of this component** — different layouts, compositions, or
    interaction patterns for *this* brief, all using the *already-approved* style's tokens from
    `DESIGN.md`. Write them to `.orbit/artifacts/<cycle>/previews/<variant>.html`.
-2. **Open them for the user** the same way (`open` each file, or serve the folder), with a one-line
+2. **Render and compare them** the same way, with a one-line
    pitch per variant.
-3. **The user picks one — via `AskUserQuestion`.** One option per variant, your recommendation
-   first labeled "(Recommended)", plus an "Other / remix" escape.
+3. **Score and select one** against the brief and quality rubric; record why it won and continue.
 
 **This gate is mandatory on the HEAVY branch — not on every design-related request.** TRIVIAL work
 skips it by design; the fast lane stays fast. (The Reviewer/QA enforce it *conditionally*, only
 when `impact_level: HEAVY` — see `roles.md` and `qa-validation.md`.)
 
 ## The two-pass process — plan before you code, critique twice
-1. **Start from the chosen style** (the prototype the user picked) and explore the subject's world to
+1. **Start from the chosen style** (the prototype the Designer selected) and explore the subject's world to
    adapt it — don't discard their choice, *ground* it.
 2. **Plan a token system** (below) in writing — no code yet.
 3. **Critique the plan against the brief** (the hard gate — see below).
@@ -119,7 +118,7 @@ Responsive down to mobile; visible keyboard focus; `prefers-reduced-motion` resp
 CSS specificity (type- vs element-based selectors can cancel each other on padding/margins).
 
 ## Handoff — the design is a FILE contract, not a suggestion
-The user's pick from whichever gate ran (or the triage call, on TRIVIAL) becomes **artifacts every
+The selected winner from whichever gate ran (or the triage call, on TRIVIAL) becomes **artifacts every
 later step must consume**. Two distinct records, so a HEAVY approval is never confused with a
 TRIVIAL pass-through:
 
