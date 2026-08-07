@@ -16,6 +16,7 @@ Usage:  python .orbit/loop.py --config .orbit/loop.config.json
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -253,6 +254,31 @@ def evaluate_independent_qa(cycle_output: dict, cfg: dict) -> dict:
     return status
 
 
+def evaluate_delivery_quality(cycle_output: dict, cfg: dict) -> dict:
+    """Hard pre-release evidence gate: scenarios + dependency regression + UI pixel comparisons."""
+    contract = cfg.get("delivery_quality", {}) or {}
+    if contract.get("enabled") is not True:
+        return {"passed": True, "status": "disabled", "reason": "delivery-quality gate is disabled"}
+    root = Path.cwd()
+    gate = Path(cfg.get("paths", {}).get(
+        "delivery_quality_gate", ".orbit/checks/delivery-quality-gate.py"))
+    evidence = cycle_output.get("delivery_evidence") or contract.get(
+        "evidence_path", ".orbit/qa/delivery-evidence.json")
+    cmd = [sys.executable, str(gate), "--root", str(root), "--evidence", str(evidence)]
+    if cycle_output.get("commit"):
+        cmd += ["--commit", str(cycle_output["commit"])]
+    try:
+        proc = subprocess.run(cmd, text=True, capture_output=True, timeout=30)
+        raw = proc.stdout or proc.stderr
+        result = json.loads(raw)
+    except Exception as exc:
+        return {"passed": False, "status": "gate_error", "reason": f"delivery-quality gate failed: {exc}"}
+    result["passed"] = bool(proc.returncode == 0 and result.get("passed"))
+    result["reason"] = ("scenario, dependency-regression, and pixel evidence passed" if result["passed"]
+                        else "delivery evidence blocked: " + " · ".join(result.get("errors", [])[:4]))
+    return result
+
+
 def evaluate_cpo_acceptance(cycle_output: dict, cfg: dict) -> dict:
     """The CPO gate AFTER QA: the run is not done until a commit-bound verdict envelope in
     .orbit/cpo/ says ACCEPT. QA proves the work was built right; the CPO verdict is the recorded
@@ -282,6 +308,32 @@ def evaluate_cpo_acceptance(cycle_output: dict, cfg: dict) -> dict:
                           f"not the cycle's {str(commit)[:8]!r} — re-run the cpo subagent"}
     v = str(verdict.get("verdict", "")).upper()
     if v == "ACCEPT":
+        if cpo.get("require_delivery_evidence", True):
+            if (cfg.get("delivery_quality") or {}).get("enabled") is True:
+                qa_gate = evaluate_delivery_quality({
+                    "commit": commit,
+                    "delivery_evidence": cfg.get("paths", {}).get(
+                        "delivery_evidence", ".orbit/qa/delivery-evidence.json"),
+                }, cfg)
+                if not qa_gate.get("passed"):
+                    return {"passed": False, "status": "qa_evidence_failed",
+                            "reason": "CPO cannot ACCEPT because pre-CPO delivery evidence failed: "
+                                      + str(qa_gate.get("reason", "quality gate blocked"))}
+            evidence_path = Path(cfg.get("paths", {}).get(
+                "delivery_evidence", ".orbit/qa/delivery-evidence.json"))
+            try:
+                evidence = json.loads(evidence_path.read_text())
+                digest = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+            except Exception:
+                return {"passed": False, "status": "qa_evidence_missing",
+                        "reason": "CPO cannot ACCEPT without readable pre-CPO delivery evidence"}
+            cited_qa = verdict.get("qa_evidence") if isinstance(verdict.get("qa_evidence"), dict) else {}
+            if (str(evidence.get("commit")) != str(commit) or
+                    str(cited_qa.get("commit")) != str(commit) or
+                    str(cited_qa.get("sha256")) != digest or
+                    str(evidence.get("verdict", "")).upper() != "PASS"):
+                return {"passed": False, "status": "qa_evidence_unbound",
+                        "reason": "CPO ACCEPT is not bound to the exact PASS delivery-evidence artifact"}
         # A grounded gate, not a mood: ACCEPT must cite the accumulated skills it rests on —
         # or, on a brand-new project with empty skills, show the first signals being written.
         basis = verdict.get("basis") if isinstance(verdict.get("basis"), dict) else {}
@@ -358,7 +410,7 @@ def update_state(cfg: dict, cycle: int, action: str, eval_result: dict, decision
 
 
 def _g(ev: dict) -> str:
-    return "gates[" + ",".join(k for k in ("input", "quality", "safety", "independent_qa", "cpo") if ev.get(k)) + "]"
+    return "gates[" + ",".join(k for k in ("input", "quality", "safety", "delivery_quality", "independent_qa", "cpo") if ev.get(k)) + "]"
 
 
 # ----------------------------------------------------------------- stop conditions
@@ -496,6 +548,17 @@ def run(cfg: dict, resume: bool = False):
         ev = steps.run(f"c{cycle}:evaluate", lambda: evaluate_gates(result, cfg))
         passed = ev["input"] and ev["quality"] and ev["safety"]
         goal_met = _goal_met(result, cfg)
+        if passed and goal_met:
+            emit("qa-engineer", "evaluate", "start",
+                 "validating scenario, dependency-regression, and pixel evidence", cycle=cycle)
+            delivery_status = steps.run(f"c{cycle}:delivery-quality",
+                                        lambda: evaluate_delivery_quality(result, cfg))
+            ev["delivery_quality"] = bool(delivery_status.get("passed"))
+            ev.setdefault("reasons", {})["delivery_quality"] = delivery_status.get(
+                "reason", delivery_status.get("status", ""))
+            passed = passed and ev["delivery_quality"]
+            emit("qa-engineer", "evaluate", "done" if ev["delivery_quality"] else "blocked",
+                 ev["reasons"]["delivery_quality"], cycle=cycle)
         if passed and goal_met:
             emit("independent-qa", "evaluate", "start", "reviewing exact committed snapshot", cycle=cycle)
             qa_status = steps.run(f"c{cycle}:independent-qa", lambda: evaluate_independent_qa(result, cfg))

@@ -66,6 +66,10 @@ world, never a templated default. Scoped so trivial work never pays for ceremony
    `.orbit/design/TRIVIAL` marker on TRIVIAL, **`DESIGN.md`** (the persistent token authority;
    future runs read it first, its tokens override new inventions), and
    `.orbit/artifacts/<cycle>/design-plan.md` (naming the chosen style/variant).
+5. For **every UI change, including TRIVIAL**, identify the pixel baseline QA will compare against.
+   HEAVY uses the selected prototype; TRIVIAL uses the approved current-state/pre-change capture plus
+   DESIGN.md tokens. Record the baseline routes and all three required viewports in the handoff. A UI
+   plan without a reproducible baseline is incomplete and must not reach Builder.
 
 ## Outputs
 - `design/approved.json` + `DESIGN.md` + `design-plan.md` (tokens + layout + signature + rationale)

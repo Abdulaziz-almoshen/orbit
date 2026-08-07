@@ -11,6 +11,10 @@ every requirement traced, and the user still says "this is not what I wanted." U
 against artifacts the system wrote for itself (spec, matrix, design baseline). The CPO is the only
 gate that re-anchors on the artifact the system did NOT write: the user's ask.
 
+The CPO is also the final auditor of QA—not a substitute QA pass. Before applying product judgment,
+run the deterministic delivery-quality gate and inspect its raw artifacts. No scenario matrix,
+dependency-impact regression, or pixel comparison bundle means there is no acceptance case.
+
 ## The rubric (score each 0–10; evidence per row, like QA's matrix)
 | Dimension | The question |
 |---|---|
@@ -74,6 +78,11 @@ commit says ACCEPT:
   "commit": "<the exact commit reviewed — must equal the cycle's result.commit>",
   "goal": "<one line: the user's intent as you reconstructed it>",
   "verdict": "ACCEPT | ITERATE | REDEVELOP",
+  "qa_evidence": {
+    "path": ".orbit/qa/delivery-evidence.json",
+    "commit": "<same exact commit>",
+    "sha256": "<sha256 of the evidence file after the gate passed>"
+  },
   "basis": {
     "skills": ["user-model R1: prefers honest states over alarms", "user-reporting #2: task name first"],
     "research": ["walked the flow as the user: dismiss works, re-ping works", "goal record spec.md §2 satisfied"],
@@ -97,6 +106,9 @@ commit says ACCEPT:
 }
 ```
 Verdict rules:
+- **Precondition for ACCEPT** — `.orbit/checks/delivery-quality-gate.py --root . --commit <sha>` exits
+  0, and the envelope's `qa_evidence` path/commit/SHA-256 binds that exact PASS artifact. The CPO opens
+  scenario outputs and UI diff images; it never relies only on QA prose.
 - **ACCEPT** — intent fidelity AND completeness ≥ 8, nothing `must` outstanding. Taste alone never
   blocks a goal-meeting deliverable (file taste items as `nice` orders + user-model entries).
 - **ITERATE** — the goal is reachable from here; every change order specific enough that the

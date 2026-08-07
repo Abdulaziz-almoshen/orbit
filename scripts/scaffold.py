@@ -50,6 +50,7 @@ MANAGED_CHECKS = {
     ".orbit/checks/route.py":           ("checks/route.py",           b"UserPromptSubmit hook"),
     ".orbit/checks/learn.py":           ("checks/learn.py",           b"active-learning"),
     ".orbit/checks/orbit-stop-check.py":("checks/orbit-stop-check.py", b"observability backstop"),
+    ".orbit/checks/delivery-quality-gate.py":("checks/delivery-quality-gate.py", b"delivery-quality gate"),
     "scripts/orbit-dashboard":          ("orbit-dashboard",            b"orbit-dashboard"),
     "scripts/orbit-statusline":         ("orbit-statusline.py",        b"orbit-statusline"),
 }
@@ -233,10 +234,12 @@ FILE_PLAN = [
     ("checks/guard.py",  ".orbit/checks/guard.py",    0o755),  # built-in ruleset reference (the wired wall is the trusted orbit-guard)
     ("checks/route.py",  ".orbit/checks/route.py",    0o755),  # the UserPromptSubmit router (Phase 6a)
     ("checks/orbit-stop-check.py", ".orbit/checks/orbit-stop-check.py", 0o755),  # Stop: observability backstop
+    ("checks/delivery-quality-gate.py", ".orbit/checks/delivery-quality-gate.py", 0o755),
     ("checks/learn.py",  ".orbit/checks/learn.py",    0o755),  # the active-learning ledger helper
     ("qa/independent-review-request.schema.json", ".orbit/qa/independent-review-request.schema.json", None),
     ("qa/independent-review-result.schema.json", ".orbit/qa/independent-review-result.schema.json", None),
     ("qa/review-request.template.json", ".orbit/review-requests/TEMPLATE.json", None),
+    ("qa/delivery-evidence.template.json", ".orbit/qa/delivery-evidence.template.json", None),
 ]
 
 # Reusable skill-library playbooks copied into .orbit/skills/ (the provisioning step).
@@ -560,7 +563,8 @@ def _merge_loop_config_defaults(target: Path, created: list, warnings: list) -> 
         defaults = json.loads(src.read_text())
         changed = []
         for key in ("_independent_qa_help", "independent_qa",
-                    "_capability_enforcement_help", "capability_enforcement"):
+                    "_capability_enforcement_help", "capability_enforcement",
+                    "delivery_quality"):
             if key not in current:
                 current[key] = defaults[key]
                 changed.append(key)
@@ -578,10 +582,15 @@ def _merge_loop_config_defaults(target: Path, created: list, warnings: list) -> 
             qa.setdefault("arabic_content_qa", defaults["independent_qa"]["arabic_content_qa"])
             changed.append("independent_qa.provider(v0.41→v0.42)")
         paths = current.setdefault("paths", {})
-        for key in ("independent_reviews", "independent_qa_runner"):
+        for key in ("independent_reviews", "independent_qa_runner", "delivery_evidence",
+                    "delivery_quality_gate"):
             if key not in paths:
                 paths[key] = defaults["paths"][key]
                 changed.append(f"paths.{key}")
+        cpo = current.get("cpo_acceptance")
+        if isinstance(cpo, dict) and "require_delivery_evidence" not in cpo:
+            cpo["require_delivery_evidence"] = True
+            changed.append("cpo_acceptance.require_delivery_evidence")
         if changed:
             dst.write_text(json.dumps(current, indent=2) + "\n")
             created.append(f".orbit/loop.config.json  (added defaults: {', '.join(changed)}; existing values preserved)")

@@ -46,7 +46,8 @@ Status: DONE | DONE_WITH_CONCERNS(…) | BLOCKED(…)
 ### Design
 ```
 🎨 <Screen/component> — <the chosen direction, grounded in the product>
-Proof: user picked <variant> from <N> prototypes · pixel pass <score> vs the approved design ·
+Proof: <six-kind scenario matrix score> · related dependency regression <commands/coverage> ·
+pixel pass <score at 375/768/1440> vs the approved design · evidence <path + SHA-256> ·
        tokens match DESIGN.md
 Confidence: <N%>: <reason>
 Risks: <accessibility / responsive gaps / un-approved deltas>

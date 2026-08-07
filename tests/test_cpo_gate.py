@@ -7,6 +7,7 @@ Run: python3 tests/test_cpo_gate.py   (exit 0 = pass)
 """
 import importlib.machinery
 import importlib.util
+import hashlib
 import json
 import os
 import subprocess
@@ -37,7 +38,8 @@ def test_evaluator_paths():
     m = _loop()
     with tempfile.TemporaryDirectory() as d:
         vdir = Path(d) / ".orbit" / "cpo"
-        cfg = {"cpo_acceptance": {"enabled": True}, "paths": {"cpo_verdicts": str(vdir)}}
+        cfg = {"cpo_acceptance": {"enabled": True, "require_delivery_evidence": False},
+               "paths": {"cpo_verdicts": str(vdir)}}
         out = {"commit": "abc12345", "summary": "x"}
 
         r = m.evaluate_cpo_acceptance(out, {"cpo_acceptance": {"enabled": False}})
@@ -141,7 +143,35 @@ def test_gate_is_wired_after_qa():
     cfg = json.loads((ROOT / "assets" / "loop.config.json").read_text())
     ck(cfg.get("cpo_acceptance", {}).get("enabled") is True,
        "the shipped config template must install the CPO gate enabled (it is in-model; no export)")
+    ck(cfg.get("cpo_acceptance", {}).get("require_delivery_evidence") is True,
+       "CPO ACCEPT must require the exact pre-CPO delivery evidence")
+    delivery_at = src.find('steps.run(f"c{cycle}:delivery-quality"')
+    ck(delivery_at != -1 and qa_at != -1 and delivery_at < qa_at < cpo_at,
+       "delivery-quality must run before independent QA and CPO")
     ck(cfg.get("paths", {}).get("cpo_verdicts") == ".orbit/cpo", "paths.cpo_verdicts must ship")
+
+
+def test_cpo_binds_delivery_evidence():
+    m = _loop()
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d); vdir = root / "cpo"; vdir.mkdir()
+        evidence = root / "delivery-evidence.json"
+        cfg = {"cpo_acceptance": {"enabled": True, "require_delivery_evidence": True},
+               "paths": {"cpo_verdicts": str(vdir), "delivery_evidence": str(evidence)}}
+        grill = [{"lens": l, "verdict": "clean", "evidence": f"checked {l}"}
+                 for l in ("domain", "policy", "product", "design_ux", "system_design", "slop")]
+        verdict = {"commit": "abc", "verdict": "ACCEPT", "basis": {"skills": ["user-model R1"]},
+                   "grill": grill}
+        (vdir / "round-1.json").write_text(json.dumps(verdict))
+        result = m.evaluate_cpo_acceptance({"commit": "abc"}, cfg)
+        ck(result.get("status") == "qa_evidence_missing", "CPO must reject ACCEPT with no QA evidence")
+        evidence.write_text(json.dumps({"commit": "abc", "verdict": "PASS"}))
+        verdict["qa_evidence"] = {"path": str(evidence), "commit": "abc",
+                                  "sha256": hashlib.sha256(evidence.read_bytes()).hexdigest()}
+        time.sleep(0.02)
+        (vdir / "round-2.json").write_text(json.dumps(verdict))
+        result = m.evaluate_cpo_acceptance({"commit": "abc"}, cfg)
+        ck(result.get("passed") is True, f"CPO must accept exact hashed PASS evidence: {result}")
 
 
 def test_scaffold_provisions_cpo():
@@ -156,6 +186,10 @@ def test_scaffold_provisions_cpo():
         ck((target / ".orbit/skills/product-acceptance.md").is_file(),
            "scaffold must provision the product-acceptance playbook")
         ck((target / ".orbit/cpo").is_dir(), "scaffold must create the verdicts dir")
+        ck((target / ".orbit/checks/delivery-quality-gate.py").is_file(),
+           "scaffold must install the deterministic pre-CPO delivery-quality gate")
+        ck((target / ".orbit/qa/delivery-evidence.template.json").is_file(),
+           "scaffold must install the delivery evidence template")
         seed = target / ".orbit/skills/user-model.md"
         ck(seed.is_file() and "Owned by the CPO" in seed.read_text(),
            "scaffold must seed the user-model skill")
@@ -207,7 +241,8 @@ def test_stop_vigilance():
 
 
 def main():
-    for fn in (test_evaluator_paths, test_gate_is_wired_after_qa, test_scaffold_provisions_cpo,
+    for fn in (test_evaluator_paths, test_gate_is_wired_after_qa, test_cpo_binds_delivery_evidence,
+               test_scaffold_provisions_cpo,
                test_stop_vigilance):
         try:
             fn()

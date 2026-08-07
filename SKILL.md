@@ -503,7 +503,10 @@ matches the dashboard they'll watch). Use the real colors:
 - 🟢 **&lt;Frontend / Backend / Data&gt; Engineer** *(green)* — builds the work. *Skill: &lt;the domain skill&gt;.*
 - 🟪 **Designer** *(violet — frontend only)* — distinctive, on-brand UI, not templated slop. *Skills: design-methodology, anti-ai-aesthetics, design-styles, taste-preflight.*
 - 🟡 **Reviewer** *(yellow)* — proves the *diff* (runs tests, quotes the line, enforces ADRs) before it counts. *Skill: technical-review.*
-- 🧪 **QA Engineer** *(bright yellow)* — validates the *product* against the requirements, story by story; pixel-checks the UI vs your approved design. *Skill: qa-validation.*
+- 🧪 **QA Engineer** *(bright yellow)* — executes six kinds of end-to-end functional scenarios,
+  maps and tests direct/transitive dependencies and related flows, and compares every UI delivery
+  pixel-by-pixel at mobile/tablet/desktop. Its exact-commit evidence is machine-gated before CPO.
+  *Skill: qa-validation.*
 - 🔴 **Safety** *(red)* — can veto or stop a dangerous action. The hard wall.
 - ⚪ **Reporter** *(grey)* — turns results into clear, decision-ready updates.
 
@@ -566,7 +569,7 @@ done. Make the user feel they just hired a team, and it's eager to start.
   `taste-preflight.md` (Designer),
   `planning-and-decision-briefs.md` (Orchestrator), `clarify-and-challenge.md` (Dispatcher/Orchestrator),
   `technical-review.md` (Reviewer — the technical quality gate), `qa-validation.md` (QA Engineer —
-  requirements-traceability + pixel fidelity), `active-learning.md` (the Orchestrator's silent
+  requirements + scenario + dependency-regression + pixel fidelity), `active-learning.md` (the Orchestrator's silent
   learn-gate in the UPDATE phase), `product-discovery.md` + `market-and-competitive-research.md`
   (the planning-phase **discovery team**), `goal-pipeline.md` (goal → story DAG → run-until-green →
   polish), `architecture-decisions.md` (the CTO hat — ADRs, boring-tech, fitness functions),

@@ -137,6 +137,20 @@
     "repeat_failure_action": "advisor_or_human"
   },
 
+  "delivery_quality": {
+    "enabled": true,
+    "stage": "after_internal_qa_before_independent_qa_and_cpo",
+    "evidence_path": ".orbit/qa/delivery-evidence.json",
+    "required_scenario_kinds": ["happy", "alternate", "negative", "boundary", "authorization", "failure_recovery"],
+    "require_dependency_impact": true,
+    "require_transitive_regression": true,
+    "require_visual_for_ui": true,
+    "required_viewports": ["375x812", "768x1024", "1440x900"],
+    "max_pixel_mismatch_ratio": 0.01,
+    "require_zero_console_errors": true,
+    "require_accessibility_pass": true
+  },
+
   "_router_help": "How every user message is routed. mode 'always' (default): each real request engages the loop — ambiguous phrasing and short imperatives route as TASK, questions are answered directly, and every reply starts with a visible '⏣ orbit' lane marker. mode 'smart': conservative — only clear task verbs force the loop, ambiguous gets a soft directive, no markers. Acks, negations, and slash-commands never trigger either way.",
   "router": {
     "mode": "always"
@@ -155,6 +169,7 @@
   "cpo_acceptance": {
     "enabled": true,
     "stage": "after_independent_qa_before_done",
+    "require_delivery_evidence": true,
     "max_rounds": 5,
     "basis_weights": {
       "skills": 0.4,
@@ -224,7 +239,7 @@
     }
   },
 
-  "done_when": "STATE.md run_goal satisfied AND mandatory capability stages completed AND internal Safety/Reviewer/QA gates passed AND the independent QA gate passed when enabled AND CPO wrote a commit-bound ACCEPT",
+  "done_when": "STATE.md run_goal satisfied AND mandatory capability stages completed AND scenario/dependency/pixel delivery evidence passed for the exact commit AND internal Safety/Reviewer/QA gates passed AND the independent QA gate passed when enabled AND CPO wrote a commit-bound ACCEPT",
 
   "_proof_help": "First-class verification: the CONCRETE evidence a cycle actually worked, not just 'looks done'. kind: command (run it, expect exit 0) | metric (read a number, compare) | checklist (all items true) | review (Reviewer rubric >= threshold). The loop must produce this proof before calling a task done.",
   "proof": { "kind": "review", "expect": "reviewer_score >= eval_gates.quality.min_reviewer_score", "command": "" },
@@ -245,6 +260,8 @@
     "independent_qa_runner": "scripts/orbit-independent-qa",
     "independent_reviews": ".orbit/reviews",
     "cpo_verdicts": ".orbit/cpo",
+    "delivery_evidence": ".orbit/qa/delivery-evidence.json",
+    "delivery_quality_gate": ".orbit/checks/delivery-quality-gate.py",
     "stop_sentinel": ".orbit/STOP"
   }
 }

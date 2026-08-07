@@ -14,7 +14,7 @@ Orbit turns a product repository into a durable, observable agentic loop: it rem
 plans the next move, delegates focused tasks, **watches the full role tree live for drift**, checks the
 result, repairs failures, and returns a proven local commit—interrupting only for true blockers.
 
-![version](https://img.shields.io/badge/version-0.56.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.57.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![observable](https://img.shields.io/badge/observable-live%20dashboard-e8590c)
@@ -34,6 +34,15 @@ gives the work a durable operating system:
   Design. The Stop hook blocks missing owners. Mentioning a role or using it as a private “lens”
   does not satisfy the contract.
 - **Iterative quality:** failures become evidence-backed repair packets and return to the loop.
+- **Scenario-complete QA:** every delivery executes happy, alternate, negative, boundary,
+  authorization, and failure/recovery journeys with observed artifacts—not only ticket assertions.
+- **Dependency regression:** QA maps changed units to direct and transitive dependents plus related
+  user flows, then captures focused, integration, and relevant wider-suite command results.
+- **Pixel evidence on every UI delivery:** every changed route/screen requires baseline, actual, and
+  computed diff images at 375×812, 768×1024, and 1440×900, together with token fidelity, accessibility, responsiveness, and
+  zero console errors. “Trivial” changes reduce design ceremony, not visual QA.
+- **Machine-gated before CPO:** `.orbit/checks/delivery-quality-gate.py` validates the exact-commit
+  evidence bundle. A `qa-engineer done` event or green narrow test is not sufficient.
 - **Independent QA:** an opt-in second provider reviews an exact commit against an armed acceptance
   manifest; code or manifest changes invalidate the approval.
 - **CPO acceptance:** after QA proves the work was built right, a CPO role judges whether the *right
@@ -75,8 +84,12 @@ gives the work a durable operating system:
 > supervision state on Orbit’s status and dashboard. Orbit also defaults to autonomous delivery:
 > no spec, taste, or budget-reassurance questions inside configured limits; green work is committed.
 
-> **New in Orbit 0.50:** the **CPO** closes the loop's last gap. The gate chain is now
-> Safety → Reviewer → QA Engineer → Independent QA (opt-in) → **CPO acceptance** → done. Every
+> **New in Orbit 0.57:** QA is evidence-enforced before CPO. The gate chain is now
+> Safety → Reviewer → QA Engineer → **Delivery Quality** (scenario matrix + dependency regression +
+> three-viewport computed pixel diffs) → Independent QA (opt-in) → **CPO acceptance** → done. CPO must
+> rerun the gate, inspect raw evidence, and bind its ACCEPT to the evidence file's exact SHA-256.
+
+> **New in Orbit 0.50:** the **CPO** closed the goal-fidelity gap. Every
 > earlier gate verifies the build against artifacts the system wrote for itself; the CPO is the
 > user's proxy — it re-anchors on the goal you actually stated, returns the deliverable
 > (`ITERATE`/`REDEVELOP`) when the goal isn't served, and records what it learns about your

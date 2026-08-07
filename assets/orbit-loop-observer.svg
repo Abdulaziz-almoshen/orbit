@@ -61,7 +61,7 @@
       <circle cx="18" cy="18" r="16" fill="none" stroke="#f7f9fc" stroke-width="3"/>
       <circle cx="18" cy="18" r="9" fill="none" stroke="#f7f9fc" stroke-width="2"/>
       <path d="M3 26L33 9" stroke="#f7f9fc" stroke-width="3"/>
-      <text x="48" y="15" font-size="12" font-weight="700" letter-spacing="2" fill="#8c98a8">ORBIT 0.56</text>
+      <text x="48" y="15" font-size="12" font-weight="700" letter-spacing="2" fill="#8c98a8">ORBIT 0.57</text>
       <text x="48" y="36" font-size="15" font-weight="650" fill="#f7f9fc">Enforced team</text>
     </g>
   </g>
@@ -138,7 +138,7 @@
     <g transform="translate(1018 248)">
       <circle cx="34" cy="84" r="7" fill="#75b7ff" filter="url(#blueGlow)"/>
       <text x="0" y="0" class="stageNo">05</text><text x="0" y="28" class="stageName">GATES</text>
-      <text x="0" y="50" class="stageNote">Safety · Reviewer · QA</text>
+      <text x="0" y="50" class="stageNote">Scenarios · deps · pixels</text>
     </g>
     <g transform="translate(1200 198)">
       <circle cx="34" cy="134" r="7" fill="#75b7ff" filter="url(#blueGlow)"/>

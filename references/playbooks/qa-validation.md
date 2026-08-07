@@ -3,7 +3,8 @@
 The **QA Engineer** loads this. Its job is different from the Reviewer's (who reviews the *diff* for
 technical defects): QA validates the *product* against the *requirements* — user story by user story,
 acceptance criterion by criterion, and on UI work pixel-by-pixel against the approved design. Nothing
-reaches the Reporter until **every requirement ID has a verdict with evidence**.
+reaches CPO until **every requirement, user scenario, related dependency path, and UI pixel comparison
+has machine-validated evidence bound to the exact commit**.
 
 ## Posture: report-only, evidence-first
 - **Never fix.** Find and document; engineers fix; you re-verify. Don't read source to "understand" —
@@ -34,13 +35,31 @@ Per requirement and rolled up for the run. **CONCERNS** ships with named caveats
 an explicit human decision; any **FAIL** on a P0 requirement = the run is not done. Score the run:
 P0 = 40pts (any failure → 0), P1 = 30 prorated, P2 = 15 prorated, visual fidelity = 15. **< 85 = not done.**
 
+## The scenario matrix (functional QA is a journey, not a checklist)
+
+For every changed capability, execute complete scenarios through the real interface/API. The matrix
+must include all six kinds: **happy · alternate · negative · boundary · authorization · failure/recovery**.
+Each case records `persona`, Given/preconditions, When/steps, Then/expected, actual observed result,
+verdict, and a durable screenshot/output/trace artifact. Include state transitions, retries,
+double-submit/idempotency where relevant, logged-out/forbidden behavior, downstream effects, and the
+next action a real user takes. A row that only clicks the newly changed control is not an end-to-end
+scenario and cannot pass.
+
+## Dependency-impact regression (test the system around the change)
+
+Read the diff and construct the impact graph before choosing commands:
+`changed units → imports/callers/consumers → transitive dependents → related user journeys`.
+Record all four layers in delivery evidence. Run focused tests, integration/contract checks, and the
+relevant wider suite for those dependents. Capture command, exit code, and complete output artifact.
+Do not declare coverage complete if only the edited module or requested scope was tested. A previously
+passing related flow that regresses is P0, even when the new acceptance criterion passes.
+
 ## The pixel pass (UI work — the design is a contract, not a suggestion)
-**Runs conditionally: only when `design/approved.json` says `impact_level: "HEAVY"`.** TRIVIAL work
-has no prototype baseline to diff against by design — confirm `.orbit/design/TRIVIAL` exists and
-move on. A legacy `approved.json` with no `impact_level` field is a **pass-with-warning**, never an
-auto-fail (it predates this gate). But if the change looks HEAVY and **neither** `approved.json` nor
-the `TRIVIAL` marker exists, that's a finding, not an exemption — the triage step was skipped
-entirely, not judged unnecessary. **Also require the `taste_preflight` record:** a HEAVY
+**Runs on every UI delivery.** HEAVY and TRIVIAL determine design ceremony, not whether pixels are
+tested. Every changed route/screen needs an approved target or pre-change baseline plus actual screenshots and
+diff images at 375x812, 768x1024, and 1440x900. Any missing baseline, actual, diff, or route×viewport pair is a blocker. A legacy
+approval may remain usable only after QA captures an explicit baseline for this commit. **Also require
+the `taste_preflight` record:** a HEAVY
 `approved.json` with **no `taste_preflight`** block (design read + dials + design-system + surface +
 `checklist_passed`) is a finding — the taste gate was skipped, not judged unneeded. On HEAVY, the
 Designer's **approved prototype** (`design/approved.json` + `DESIGN.md` tokens) is the golden baseline:
@@ -62,17 +81,19 @@ chain, in order: **(1)** an installed browser MCP tool → **(2)** gstack `/brow
 **(3)** a manual screenshot + `snapshot.py diff`. The helpers exit 2 with the install line (never a
 traceback), so a missing browser degrades the check — it never crashes the cycle.
 
-**The gate itself — `.orbit/qa/visual-gate.py` is REQUIRED on HEAVY UI, and it BLOCKS.** Run it before
+**The visual gate is required, then the delivery-quality gate binds its evidence.** Run
+`.orbit/qa/visual-gate.py` before
 you score fidelity: `python3 .orbit/qa/visual-gate.py --root . --screenshot build.png --mobile
 build-mobile.png --contract DESIGN.tokens.json` (exit 1 = BLOCKED). It enforces the non-negotiables that
 "the process ran" can't paper over: **HEAVY UI with no screenshot at all → BLOCK** (you cannot pass HEAVY
 UI on prose — produce evidence), a **blank canvas → BLOCK**, **mobile horizontal overflow → BLOCK**, and
 **sub-AA body contrast → BLOCK** (pure math from the token contract, no browser needed); token drift is a
 WARN (BLOCK with `--strict-tokens`). It degrades honestly — dimensions + contrast need no dependencies,
-and it never *silent-passes*: if evidence can't be produced it blocks rather than waving HEAVY work through.
-3. **Intentional change?** Never self-approve a visual delta — batch the diffs into **one
-   `AskUserQuestion`** (per-change options: Accept / Reject, with the diff evidence linked and your
-   recommendation labeled "(Recommended)"); accepted changes advance the baseline. Never a prose ask.
+and it never *silent-passes*: if evidence can't be produced it blocks. Then populate every viewport in
+`.orbit/qa/delivery-evidence.json`; the deterministic delivery gate checks paths, ratios, token verdict,
+accessibility, console errors, and exact-commit binding before CPO.
+3. **Intentional change?** The approved design target decides whether a delta is intended. The Designer
+   selects and records the baseline; QA never silently advances it to make a failing build pass.
 4. Quick structural checks per page: trunk test (what site/page/sections/where-am-I), states
    (empty/loading/error/overflow), responsive at 3 viewports, keyboard focus visible.
 5. **Anti-slop scan (the AI-tell pass).** Scan the *rendered* UI against the ban list in
@@ -93,6 +114,9 @@ and it never *silent-passes*: if evidence can't be produced it blocks rather tha
 No completion claims without fresh evidence in the report: "tests pass" requires the 0-failure output;
 **"requirements met" requires the line-by-line matrix** — a green test suite alone is NOT sufficient.
 Red-flag words in your own draft ("should", "probably", "seems to") mean you haven't verified.
+
+Write `.orbit/qa/delivery-evidence.json` from `.orbit/qa/delivery-evidence.template.json`, then run:
+`python3 .orbit/checks/delivery-quality-gate.py --root . --commit <exact-sha>`. Only exit 0 opens CPO.
 
 ## Report
 Lead with the roll-up: `QA: N requirements — P pass, C concerns, F fail (score X/100)` → the matrix →

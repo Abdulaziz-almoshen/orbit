@@ -32,6 +32,7 @@ Protocol: read the Stop-event JSON on stdin; print nothing to allow the stop, or
 to make the agent continue and produce the board.
 """
 import json
+import importlib.util
 import os
 import sys
 import time
@@ -119,6 +120,57 @@ def _ui_project(orbit):
     except Exception:
         pass
     return (orbit.parent / ".claude" / "agents" / "designer.md").is_file()
+
+
+def _delivery_quality_vigilance(orbit, route_mt):
+    """Block every stop until the QA evidence itself passes; a `qa-engineer done` event is not proof."""
+    try:
+        config_path = orbit / "loop.config.json"
+        if not config_path.is_file():
+            return                                           # legacy/minimal test scaffold: no contract
+        cfg = json.loads(config_path.read_text())
+        contract = cfg.get("delivery_quality") or {}
+        if contract.get("enabled") is not True:
+            return
+        gate_path = orbit / "checks" / "delivery-quality-gate.py"
+        spec = importlib.util.spec_from_file_location("orbit_delivery_quality", gate_path)
+        gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gate)
+        evidence = orbit.parent / str(contract.get(
+            "evidence_path", ".orbit/qa/delivery-evidence.json"))
+        result = gate.evaluate(orbit.parent, evidence_path=evidence, ui_project=_ui_project(orbit),
+                               contract=contract)
+        if result.get("passed") and _mtime(evidence) > route_mt:
+            return
+        errors = list(result.get("errors") or [])
+        if _mtime(evidence) <= route_mt:
+            errors.insert(0, "delivery evidence is missing or stale for this routed task")
+        try:
+            with (orbit / "activity.jsonl").open("a") as f:
+                f.write(json.dumps({
+                    "schema": 2, "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "role": "qa-engineer", "phase": "evaluate", "status": "blocked",
+                    "msg": "delivery-quality evidence blocked: " + " · ".join(errors[:3]),
+                }) + "\n")
+        except Exception:
+            pass
+        print(json.dumps({"decision": "block", "reason": (
+            "[orbit] DELIVERY QUALITY GATE — QA role completion is not enough. Before CPO, write a "
+            "fresh .orbit/qa/delivery-evidence.json bound to the exact commit and make the validator "
+            "pass. Required: executable happy/alternate/negative/boundary/authorization/failure-"
+            "recovery scenarios with artifacts; changed units plus direct/transitive dependents and "
+            "related user flows with successful regression command output; and, for UI, baseline/"
+            "actual/diff pixel comparisons at 375x812, 768x1024, and 1440x900, matching tokens, "
+            "accessibility PASS, and zero console errors. Current blockers: " + " · ".join(errors[:4])
+        )}))
+        sys.exit(0)
+    except SystemExit:
+        raise
+    except Exception as exc:
+        # A configured quality gate must not disappear silently because its validator is broken.
+        print(json.dumps({"decision": "block", "reason":
+                          f"[orbit] DELIVERY QUALITY GATE ERROR — repair the validator before release: {exc}"}))
+        sys.exit(0)
 
 
 def _capability_enforcement(orbit, route_mt, post_route, work):
@@ -226,6 +278,7 @@ def main():
 
     # (3) was the board updated after the route?
     if _mtime(orbit / "tasks.json") > route_mt or _mtime(orbit / "agents.json") > route_mt:
+        _delivery_quality_vigilance(orbit, route_mt)         # evidence before CPO, not role theater
         _cpo_vigilance(orbit, route_mt)                     # board OK — but is the CPO satisfied?
         return                                              # the board WAS made visible → all good
 

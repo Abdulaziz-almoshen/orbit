@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "commit": "<exact-git-sha>",
+  "verdict": "PASS",
+  "scenarios": {
+    "coverage_complete": true,
+    "cases": [
+      {
+        "id": "SC-1",
+        "kind": "happy",
+        "persona": "<actor>",
+        "preconditions": "Given <state>",
+        "steps": "When <actions>",
+        "expected": "Then <observable result>",
+        "actual": "<observed result>",
+        "verdict": "PASS",
+        "evidence": ".orbit/artifacts/<cycle>/qa/scenarios/SC-1.txt"
+      }
+    ]
+  },
+  "dependency_regression": {
+    "changed_units": ["<changed component>"],
+    "direct_dependents": ["<direct dependent>"],
+    "transitive_dependents": ["<transitive dependent>"],
+    "related_user_flows": ["<related flow beyond the requested scope>"],
+    "commands": [
+      {"command": "<test command>", "exit_code": 0, "verdict": "PASS", "evidence": ".orbit/artifacts/<cycle>/qa/regression.txt"}
+    ],
+    "coverage_complete": true,
+    "verdict": "PASS"
+  },
+  "visual": {
+    "applicable": true,
+    "changed_routes": ["/"],
+    "comparisons": [
+      {"route": "/", "viewport": "375x812", "baseline": "baseline.png", "actual": "actual.png", "diff": "diff.png", "mismatch_ratio": 0.0, "verdict": "PASS"}
+    ],
+    "tokens_verdict": "PASS",
+    "accessibility_verdict": "PASS",
+    "console_errors": [],
+    "verdict": "PASS"
+  }
+}

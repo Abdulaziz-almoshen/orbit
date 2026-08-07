@@ -78,8 +78,10 @@ several executors, one safety gate, one quality gate.)
 - Analyst — derive, transform, or evaluate as the domain requires.
 - Safety/Compliance — checks the output is safe and permitted; **veto power**.
 - Reviewer/Evaluator — quality gate on the *diff*; validates vs §3 + enforces ADRs before "done".
-- QA Engineer — validates the *product* vs the requirements (traceability matrix, verdict per
-  requirement; pixel pass vs the approved design on UI). Report-only; **gate power**.
+- QA Engineer — validates complete functional journeys, not only requirements: six-kind scenario
+  matrix; changed units plus direct/transitive dependents and related-flow regression; baseline/actual/
+  diff pixel comparisons at 375/768/1440 on every UI delivery. Writes exact-commit
+  `.orbit/qa/delivery-evidence.json` and runs the deterministic pre-CPO gate. Report-only; **gate power**.
 - Reporter — turns results into clear, decision-ready outputs/explanations.
 
 ## 7. Skills Index  (knowledge playbooks)
@@ -97,7 +99,8 @@ execution engine. See `references/durable-execution.md`.)
 - `.orbit/skills/active-learning.md` — how the system learns from corrections + major changes (the gate).
 - `.orbit/skills/product-discovery.md` — de-risk the bet before building (outcome, opportunity tree, four risks).
 - `.orbit/skills/market-and-competitive-research.md` — what exists / reuse-vs-build / the gap (timeboxed, cited).
-- `.orbit/skills/qa-validation.md` — the QA Engineer's requirements-traceability + pixel-fidelity gate.
+- `.orbit/skills/qa-validation.md` — requirements + scenario + dependency-regression + pixel-fidelity gate.
+- `.orbit/checks/delivery-quality-gate.py` — machine-validates QA evidence before independent QA/CPO.
 - `.orbit/skills/goal-pipeline.md` — goal → spec → story DAG → run-until-green → polish (2 human gates).
 - `.orbit/skills/architecture-decisions.md` — the CTO hat: ADRs in `.orbit/decisions/`, boring-tech bar.
 - `.orbit/skills/counterfactual-regret.md` — pre-build falsification: attack the riskiest assumption,
@@ -154,7 +157,7 @@ compliance/security · reversibility · runtime/cost), **highest risk-trigger wi
 
 **Mandatory stage owners, sequential by default.** For substantial work, run Product Discovery →
 Business Analyst → Market Researcher → Planner → [Designer for UI] → Build → Safety → Reviewer →
-QA Engineer → CPO → Reporter as actual roles. A private lens does not count. Keep concurrency at one
+QA Engineer → delivery-quality evidence gate → CPO → Reporter as actual stages. A private lens does not count. Keep concurrency at one
 unless configured caps safely permit wider independent fan-out. Approval is only for human-authority
 actions, not reassurance about routine execution.
 

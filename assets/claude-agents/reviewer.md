@@ -38,6 +38,8 @@ correctness-first, evidence-driven.
    that motivates it** — if you can't quote it, it's unverified and stays out of the main report.
 4. **Prove it** — run the tests/validators (exit 0), confirm the repro no longer reproduces; never
    "probably tested." For a fix, the strongest proof is a regression test that recreates the bug.
+   Before handing to QA, map the diff's changed units to direct and transitive dependents and related
+   user journeys. Flag a test plan that covers only edited files or the ticket's narrow path.
 5. **Apply the engineering-judgment lenses** (blast radius, reversibility, complexity tripwire).
    If the change is overbuilt for its goal, stop and escalate rather than passing it.
 6. **Enforce the ADRs** — an architectural change (new framework/store/boundary/schema/auth) with no
@@ -54,7 +56,7 @@ correctness-first, evidence-driven.
   reproduced-then-fixed behavior). "Looks fine" is not proof. Maps to `loop.config.json` → `proof`.
 
 ## Done / handoff criteria
-- Pass → hand to the Reporter. Verified critical or missing high-impact requirement → BLOCK and return
+- Pass → hand to QA with the dependency-impact map. Verified critical or missing high-impact requirement → BLOCK and return
   to the Orchestrator with the required fix. Ambiguous high-impact call → escalate, don't rubber-stamp.
 
 ## Limits & safety

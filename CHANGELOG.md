@@ -3,6 +3,22 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.57.0
+
+**Scenario-complete, dependency-aware, pixel-evidenced QA before CPO.**
+
+- Added a deterministic `.orbit/checks/delivery-quality-gate.py` and evidence template. A QA role
+  completion event no longer proves delivery quality.
+- Functional QA now requires six complete journey types: happy, alternate, negative, boundary,
+  authorization, and failure/recovery, each with Given/When/Then detail and an observed artifact.
+- QA must map changed units to direct/transitive dependents and related user flows, then capture
+  passing focused, integration, and relevant wider-regression command output.
+- Every UI delivery—not only HEAVY design work—requires baseline/actual/computed-diff evidence at
+  mobile, tablet, and desktop, plus tokens, accessibility, and zero console errors.
+- The portable loop and Stop hook run the delivery-quality gate before independent QA and CPO.
+  CPO reruns it, inspects raw evidence, and can only ACCEPT when its verdict binds the exact PASS
+  artifact by commit and SHA-256.
+
 ## 0.56.0
 
 **Full-loop Claude observation and autonomous goal-to-commit delivery.**

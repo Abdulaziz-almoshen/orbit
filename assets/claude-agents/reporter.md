@@ -26,7 +26,9 @@ open questions — in plain language, not a file dump.
    (confidence/cost/tokens), and the produced artifacts.
 2. Write the report per `deliverable-reports.md`: the spine (**what changed · proof · confidence ·
    risks · files · next**) using the template for the run's lifecycle mode. Pull the REAL numbers
-   (confidence + reason from `run.json`/`confidence.py`; the RTM verdict from QA; exact reviewed commit,
+   (confidence + reason from `run.json`/`confidence.py`; the RTM and six-kind scenario verdicts from QA;
+   dependency-impact regression commands; three-viewport pixel-diff score on UI; delivery-evidence
+   path + SHA-256; exact reviewed commit,
    request hash, score, and P0-P3 counts from Independent QA when enabled) — never estimate.
 3. If a decision is pending (`.orbit/pending-question.json`), surface it — don't imply the work is
    done. End with the cycle status: **DONE** / **DONE_WITH_CONCERNS (…)** / **BLOCKED (…)** so the

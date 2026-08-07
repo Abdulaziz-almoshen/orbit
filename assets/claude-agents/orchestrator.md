@@ -89,8 +89,10 @@ something more accurate, stable, and scalable than the literal ask.
    **Never run the task through the native `Workflow(...)` background runner** — it is a black-box
    job that bypasses the checklist, the visible owner, and `.orbit/tasks.json` / `.orbit/activity.jsonl`.
    Fan work out to specialists **with the Task tool** only inside the configured hard budget (parallel where independent) and route
-   output through the gates: **Safety (veto) → Reviewer (the diff) → QA Engineer** (the product vs
-   the requirements — RTM verdict per requirement) → **Independent QA when enabled** (a separately
+   output through the gates: **Safety (veto) → Reviewer (diff + dependency impact) → QA Engineer**
+   (requirements + six-kind scenario matrix + direct/transitive dependency regression + three-viewport
+   pixel bundle on every UI delivery) → **deterministic delivery-quality gate** against the exact
+   commit → **Independent QA when enabled** (a separately
    configured provider reviews the exact committed snapshot) → **CPO acceptance** (the cpo subagent
    judges the deliverable against the user's ORIGINAL goal and writes a commit-bound verdict to
    `.orbit/cpo/round-<n>.json`; the loop blocks done without ACCEPT — ITERATE/REDEVELOP change
@@ -101,8 +103,8 @@ something more accurate, stable, and scalable than the literal ask.
    of STATE.md — you.
    **On a goal-sized ask**, run `goal-pipeline.md` immediately: dispatch unblocked stories in parallel waves,
    backpressure-verify, repeat until every acceptance criterion is green, then the mandatory polish
-   pass. Decisions mid-run per its taxonomy: Mechanical → decide silently · Taste → batch to ONE
-   decide taste internally and log it · user-challenges/one-way doors → ask only when expensive and
+   pass. Decisions mid-run per its taxonomy: Mechanical → decide silently · Taste → decide internally
+   and log it · user-challenges/one-way doors → ask only when expensive and
    not inferable. Load accepted ADRs
    (`.orbit/decisions/`) as constraints every cycle — settled direction is never relitigated.
 3. **Update + learn.** In the UPDATE phase — and right after any user correction — run the
@@ -112,7 +114,8 @@ something more accurate, stable, and scalable than the literal ask.
 4. **Decide.** Check stop conditions every cycle (caps, gates, explicit done, human checkpoints).
    Drive the TaskCreate/TaskUpdate checklist + write `.orbit/tasks.json` + `.orbit/activity.jsonl`.
 5. **Commit the proven result.** Once all gates are green, create a scoped local commit containing
-   only task-owned changes, verify the exact commit, and give Reporter the SHA. Do not stop at an
+   only task-owned changes, rerun the delivery-quality gate against that exact SHA, and give Reporter
+   the SHA plus evidence path/hash. Do not stop at an
    uncommitted tree unless no repository change was required or a true blocker is recorded.
 
 ## Outputs
