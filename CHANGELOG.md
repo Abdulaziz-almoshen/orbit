@@ -17,6 +17,12 @@ truth — the update checker compares it against GitHub.
   reviewed checkpoint by SHA-256.
 - Fresh installs and safe updates provision the helper, architecture playbook, memory directory,
   checkpoint, ledger, and strict defaults without overwriting an existing user-model.
+- Frontend installs now vendor the complete canonical MIT-licensed TasteSkill v2 skill
+  (`design-taste-frontend`) and its license. The Designer loads it automatically, applies its full
+  anti-slop framework to landing/portfolio/editorial/redesign work, and records an explicit scope
+  decision so dashboard, data-table, and multi-step product UI do not inherit unsuitable marketing
+  layout or cinematic-motion recipes. Vendored source SHA-256:
+  `aa194351b246b8b4799099d4ed7b033d29eab6e6e3d58d8d2172978be7b3ec89`.
 
 ## 0.57.0
 

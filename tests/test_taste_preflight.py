@@ -56,10 +56,42 @@ def main():
         tp = os.path.join(ui, ".orbit", "skills", "taste-preflight.md")
         if not os.path.isfile(tp):
             fails.append("[2] UI repo: taste-preflight.md NOT copied into .orbit/skills/")
+        canonical = os.path.join(ui, ".orbit", "skills", "design-taste-frontend.md")
+        if not os.path.isfile(canonical) or "tasteskill: Anti-Slop Frontend Skill" not in _read(canonical):
+            fails.append("[2] UI repo: canonical TasteSkill v2 NOT copied into .orbit/skills/")
+        if not os.path.isfile(os.path.join(ui, ".orbit", "skills", "licenses", "taste-skill-MIT.txt")):
+            fails.append("[2] UI repo: TasteSkill MIT license was not provisioned with the vendored skill")
         styles_dir = os.path.join(ui, ".orbit", "skills", "design-styles")
         n_styles = len([f for f in os.listdir(styles_dir) if f.endswith(".md")]) if os.path.isdir(styles_dir) else 0
         if n_styles < 67:
             fails.append(f"[3] UI repo: expected the 67-style catalog, found {n_styles} styles")
+
+        # Update path: restore missing vendored assets and add the load contract to recognized old
+        # Designer roles without replacing their customized body.
+        os.remove(canonical)
+        os.remove(os.path.join(ui, ".orbit", "skills", "licenses", "taste-skill-MIT.txt"))
+        for rel in ((".claude", "agents", "designer.md"), (".orbit", "roles", "designer.md")):
+            p = os.path.join(ui, *rel)
+            old = _read(p).replace("design-taste-frontend.md", "legacy-design-skill.md")
+            with open(p, "w", encoding="utf-8") as handle:
+                handle.write(old + "\nCUSTOM-DESIGNER-BODY\n")
+        subprocess.run([sys.executable, SCAFFOLD, "--auto-heal", "--target", ui],
+                       capture_output=True, text=True, check=True)
+        if not os.path.isfile(canonical):
+            fails.append("[2] UI update: missing canonical TasteSkill was not restored")
+        if not os.path.isfile(os.path.join(ui, ".orbit", "skills", "licenses", "taste-skill-MIT.txt")):
+            fails.append("[2] UI update: missing TasteSkill license was not restored")
+        for rel in ((".claude", "agents", "designer.md"), (".orbit", "roles", "designer.md")):
+            migrated = _read(ui, *rel)
+            if "design-taste-frontend.md" not in migrated or "CUSTOM-DESIGNER-BODY" not in migrated:
+                fails.append(f"[4] UI update did not add TasteSkill while preserving {'/'.join(rel)}")
+        migrated_once = {rel: _read(ui, *rel) for rel in
+                         ((".claude", "agents", "designer.md"), (".orbit", "roles", "designer.md"))}
+        subprocess.run([sys.executable, SCAFFOLD, "--auto-heal", "--target", ui],
+                       capture_output=True, text=True, check=True)
+        for rel, before in migrated_once.items():
+            if _read(ui, *rel) != before:
+                fails.append(f"[4] UI update duplicated or rewrote TasteSkill activation in {'/'.join(rel)}")
     finally:
         subprocess.run(["rm", "-rf", ui])
 
@@ -70,6 +102,8 @@ def main():
             fails.append("[1] non-UI repo: designer.md should NOT be provisioned")
         if os.path.isfile(os.path.join(api, ".orbit", "skills", "taste-preflight.md")):
             fails.append("[1] non-UI repo: taste-preflight.md should NOT be provisioned")
+        if os.path.isfile(os.path.join(api, ".orbit", "skills", "design-taste-frontend.md")):
+            fails.append("[1] non-UI repo: canonical TasteSkill should NOT be provisioned")
     finally:
         subprocess.run(["rm", "-rf", api])
 
@@ -80,6 +114,11 @@ def main():
     designer = _read(ROOT, "assets", "claude-agents", "designer.md")
     if ".orbit/skills/taste-preflight.md" not in designer:
         fails.append("[4] designer.md does not LOAD .orbit/skills/taste-preflight.md (coherence: phantom risk)")
+    if ".orbit/skills/design-taste-frontend.md" not in designer:
+        fails.append("[4] designer.md does not LOAD canonical TasteSkill v2")
+    for scope_rule in ("landing pages", "dashboards", "taste_skill_scope"):
+        if scope_rule not in designer:
+            fails.append(f"[4] designer.md missing TasteSkill scope control: {scope_rule}")
     ti, hi = designer.find("**TRIVIAL**"), designer.find("**HEAVY**")
     s2 = designer.find("\n2.", hi if hi >= 0 else 0)          # end of procedure step 1 (the HEAVY branch)
     if ti < 0 or hi < 0 or s2 < 0 or not (ti < hi < s2):

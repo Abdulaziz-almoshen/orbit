@@ -44,6 +44,10 @@ gives the work a durable operating system:
 - **Pixel evidence on every UI delivery:** every changed route/screen requires baseline, actual, and
   computed diff images at 375×812, 768×1024, and 1440×900, together with token fidelity, accessibility, responsiveness, and
   zero console errors. “Trivial” changes reduce design ceremony, not visual QA.
+- **TasteSkill-powered Designer:** frontend installs vendor the complete canonical TasteSkill v2
+  framework into the Designer, with its MIT license. Landing pages, portfolios, editorial work, and
+  redesigns get the full anti-slop/art-direction method; dashboards and multi-step product UI retain
+  Orbit's functional design rules instead of inheriting inappropriate marketing-page recipes.
 - **Machine-gated before CPO:** `.orbit/checks/delivery-quality-gate.py` validates the exact-commit
   evidence bundle. A `qa-engineer done` event or green narrow test is not sufficient.
 - **Independent QA:** an opt-in second provider reviews an exact commit against an armed acceptance

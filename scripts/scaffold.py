@@ -254,7 +254,10 @@ PLAYBOOKS_ALWAYS = ["clarify-and-challenge.md", "autonomous-delivery.md",
                     "counterfactual-regret.md", "iterative-repair.md", "product-acceptance.md"]
 PLAYBOOKS_ALWAYS.append("user-memory-architecture.md")
 PLAYBOOKS_FRONTEND = ["design-methodology.md", "anti-ai-aesthetics.md", "design-styles.md",
-                      "taste-preflight.md"]
+                      "taste-preflight.md", "design-taste-frontend.md"]
+THIRD_PARTY_FRONTEND = [
+    ("licenses/taste-skill-MIT.txt", ".orbit/skills/licenses/taste-skill-MIT.txt"),
+]
 
 # QA visual-fidelity helpers (screenshot / pixel-diff / computed-token extraction). Frontend-only,
 # since they act on a rendered UI. Helpers, not a bundled browser — they degrade gracefully when
@@ -287,6 +290,16 @@ OBSERVER_MESSAGE = (
     "  assumptions, stalled or repetitive work, scope drift, weakened tests, rubber-stamped gates,\n"
     "  and unsupported proof. Report precise observed evidence only when intervention prevents drift."
 )
+TASTE_DESIGNER_BLOCK = """
+
+## Orbit-managed TasteSkill v2 integration
+
+Load `.orbit/skills/design-taste-frontend.md` on every HEAVY UI task. Apply it fully to landing,
+portfolio, editorial, and redesign work. For dashboards, data tables, and multi-step product UI,
+honor the skill's own exclusion: keep only compatible brief/design-system/accessibility/preflight
+discipline and record `taste_skill_scope: excluded|compatible_sections` in `design/approved.json`.
+The vendored skill never overrides Orbit safety, the user's source of truth, or pixel-evidence QA.
+"""
 
 # The PROJECT-SPECIFIC specialists — provisioned from the detected surfaces, NOT a fixed template.
 # surface keyword -> (engineer filename, display name, what it owns). One engineer per surface;
@@ -444,6 +457,25 @@ def _ensure_agent_observers(target: Path, changed: list, warnings: list) -> None
             changed.append(f"{path.relative_to(target)}  (enabled full-loop watchdog; body preserved)")
         except Exception as exc:
             warnings.append(f"Could not add observer to {path.relative_to(target)}: {exc}")
+
+
+def _ensure_designer_taste_skill(target: Path, changed: list, warnings: list) -> None:
+    """Add the TasteSkill load contract to existing Orbit Designer roles without replacing bodies."""
+    for rel in (".claude/agents/designer.md", ".orbit/roles/designer.md"):
+        path = target / rel
+        if not path.exists():
+            continue
+        try:
+            original = path.read_text()
+            if "design-taste-frontend.md" in original:
+                continue
+            if "# Role: Designer" not in original:
+                warnings.append(f"{rel} is not a recognized Orbit Designer role — TasteSkill note not added")
+                continue
+            path.write_text(original.rstrip() + TASTE_DESIGNER_BLOCK + "\n")
+            changed.append(f"{rel}  (enabled canonical TasteSkill v2; existing body preserved)")
+        except Exception as exc:
+            warnings.append(f"Could not add TasteSkill integration to {rel}: {exc}")
 
 
 def _ensure_observer_setting(target: Path, changed: list, warnings: list) -> None:
@@ -863,9 +895,9 @@ def _active_writer_lock(target: Path) -> bool:
 def _auto_heal(target: Path) -> str:
     """Perform the safe, non-interactive subset of a full scaffold refresh.
 
-    This never edits CLAUDE.md, existing portable roles, existing role bodies, domain skills, or
-    customized checks. It backfills missing shipped core roles/playbooks and may add the two observer
-    frontmatter keys to known Orbit workers and the observer env default to settings; existing files
+    This never edits CLAUDE.md, replaces role bodies, or overwrites customized checks. It backfills
+    missing shipped core roles/playbooks and may add narrowly scoped, idempotent observer/TasteSkill
+    activation blocks to recognized Orbit roles plus the observer env default; existing body content
     and explicit observer/settings values always win.
     """
     if not (target / ".orbit").is_dir():
@@ -894,8 +926,11 @@ def _auto_heal(target: Path) -> str:
         _place(src, target / ".orbit/roles" / f"{role}.md", created, skipped,
                transform=_strip_frontmatter)
     if has_ui:
+        for src_rel, dst_rel in THIRD_PARTY_FRONTEND:
+            _place(REFERENCES / src_rel, target / dst_rel, created, skipped)
         for src_rel, dst_rel in QA_FRONTEND + DESIGN_GATE_FRONTEND:
             _place(ASSETS / src_rel, target / dst_rel, created, skipped, 0o755)
+        _ensure_designer_taste_skill(target, created, warnings)
 
     for observer in CLAUDE_OBSERVERS:
         _place(AGENTS / f"{observer}.md", target / ".claude/agents" / f"{observer}.md", created, skipped)
@@ -1126,6 +1161,9 @@ def main():
     playbooks = PLAYBOOKS_ALWAYS + (PLAYBOOKS_FRONTEND if has_ui else [])
     for pb in playbooks:
         _place(PLAYBOOKS / pb, target / ".orbit/skills" / pb, created, skipped)
+    if has_ui:
+        for src_rel, dst_rel in THIRD_PARTY_FRONTEND:
+            _place(REFERENCES / src_rel, target / dst_rel, created, skipped)
 
     # 3a.1 the user-model seed -> .orbit/skills/user-model.md (CPO-owned, grows per project;
     #      never overwritten on re-scaffold — it holds learned user preferences)
@@ -1181,6 +1219,7 @@ def main():
         src = AGENTS / "designer.md"
         _place(src, target / ".claude/agents/designer.md", created, skipped)
         _place(src, target / ".orbit/roles/designer.md", created, skipped, transform=_strip_frontmatter)
+        _ensure_designer_taste_skill(target, created, warnings)
 
     # 4c. the specialists — ONE ENGINEER PER DETECTED SURFACE (generated from builder.md)
     builder_text = (AGENTS / "builder.md").read_text()
