@@ -127,6 +127,9 @@ job, a CI step):
 - `.orbit/STATE.md` — mutable working state (task queue, decisions, blockers) the
   loop writes after every cycle. Kept separate from CLAUDE.md so frequent writes
   don't churn the stable doc.
+- `.orbit/memory/user-events.jsonl` + `checkpoint.json` — project-scoped user corrections and the
+  deterministic review clock. Important signals are captured immediately; review is required at
+  least every five real requests and after the latest request before delivery.
 - `.orbit/roles/*.md` — sub-agent role specs, written so *any* model can adopt them.
 - `.orbit/skills/*.md` — domain skills (reusable knowledge the roles load).
 - `.orbit/loop.config.json` — the portable contract: stop conditions, eval gates,
@@ -574,10 +577,12 @@ done. Make the user feel they just hired a team, and it's eager to start.
   (the planning-phase **discovery team**), `goal-pipeline.md` (goal → story DAG → run-until-green →
   polish), `architecture-decisions.md` (the CTO hat — ADRs, boring-tech, fitness functions),
   `counterfactual-regret.md` (pre-build falsification and typed backtracking),
-  `iterative-repair.md` (failure packets, bounded repair, retest, and escalation).
+  `iterative-repair.md` (failure packets, bounded repair, retest, and escalation), and
+  `user-memory-architecture.md` (event intake → review checkpoint → user-model → CPO binding).
   Grow this over time.
 - `assets/` — copyable `loop.config.json`, `loop.py`, `activity.py`, `ralph_loop.sh`,
-  `orbit-status`, `checks/guard.py` (safety) + `checks/route.py` (router), `runners/inngest-loop.ts`,
+  `orbit-status`, `checks/guard.py` (safety) + `checks/route.py` (router) +
+  `checks/user_memory.py` (user-memory checkpoint gate), `runners/inngest-loop.ts`,
   example subagents (incl. designer, reviewer, safety-gate).
 - `scripts/scaffold.py` — lays down the deterministic skeleton.
 - `commands/orbit-run.md` — the `/orbit:orbit-run <task>` slash command: explicitly send a task

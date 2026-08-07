@@ -279,6 +279,28 @@ def evaluate_delivery_quality(cycle_output: dict, cfg: dict) -> dict:
     return result
 
 
+def evaluate_user_memory(cfg: dict) -> dict:
+    """Require a reviewed latest-request checkpoint before release gates."""
+    contract = cfg.get("user_memory", {}) or {}
+    if contract.get("enabled") is not True:
+        return {"passed": True, "status": "disabled", "reason": "user-memory gate is disabled"}
+    path = Path(cfg.get("paths", {}).get("user_memory_checkpoint", ".orbit/memory/checkpoint.json"))
+    try:
+        state = json.loads(path.read_text())
+        total = int(state.get("total_requests", 0))
+        reviewed = int(state.get("last_reviewed_request", 0))
+        pending = list(state.get("pending_event_ids") or [])
+        reviewed_at = str(state.get("last_reviewed_at") or "").strip()
+    except Exception as exc:
+        return {"passed": False, "status": "missing", "reason": f"user-memory checkpoint unreadable: {exc}"}
+    passed = total == reviewed and not pending and bool(reviewed_at)
+    return {"passed": passed, "status": "reviewed" if passed else "stale",
+            "total_requests": total, "last_reviewed_request": reviewed,
+            "reason": ("latest user request reviewed; no pending important events" if passed else
+                       f"user memory stale: request {reviewed}/{total} reviewed; pending={pending}; "
+                       f"reviewed_at={reviewed_at or 'missing'}")}
+
+
 def evaluate_cpo_acceptance(cycle_output: dict, cfg: dict) -> dict:
     """The CPO gate AFTER QA: the run is not done until a commit-bound verdict envelope in
     .orbit/cpo/ says ACCEPT. QA proves the work was built right; the CPO verdict is the recorded
@@ -308,6 +330,21 @@ def evaluate_cpo_acceptance(cycle_output: dict, cfg: dict) -> dict:
                           f"not the cycle's {str(commit)[:8]!r} — re-run the cpo subagent"}
     v = str(verdict.get("verdict", "")).upper()
     if v == "ACCEPT":
+        if cpo.get("require_user_memory_checkpoint", True) and (
+                cfg.get("user_memory") or {}).get("enabled") is True:
+            memory_gate = evaluate_user_memory(cfg)
+            if not memory_gate.get("passed"):
+                return {"passed": False, "status": "user_memory_stale",
+                        "reason": "CPO cannot ACCEPT: " + memory_gate.get("reason", "memory review missing")}
+            memory_path = Path(cfg.get("paths", {}).get(
+                "user_memory_checkpoint", ".orbit/memory/checkpoint.json"))
+            digest = hashlib.sha256(memory_path.read_bytes()).hexdigest()
+            cited_memory = verdict.get("user_memory") if isinstance(verdict.get("user_memory"), dict) else {}
+            if (str(cited_memory.get("sha256")) != digest or
+                    int(cited_memory.get("last_reviewed_request", -1)) !=
+                    int(memory_gate.get("last_reviewed_request", -2))):
+                return {"passed": False, "status": "user_memory_unbound",
+                        "reason": "CPO ACCEPT is not bound to the exact reviewed user-memory checkpoint"}
         if cpo.get("require_delivery_evidence", True):
             if (cfg.get("delivery_quality") or {}).get("enabled") is True:
                 qa_gate = evaluate_delivery_quality({
@@ -410,7 +447,7 @@ def update_state(cfg: dict, cycle: int, action: str, eval_result: dict, decision
 
 
 def _g(ev: dict) -> str:
-    return "gates[" + ",".join(k for k in ("input", "quality", "safety", "delivery_quality", "independent_qa", "cpo") if ev.get(k)) + "]"
+    return "gates[" + ",".join(k for k in ("input", "quality", "safety", "user_memory", "delivery_quality", "independent_qa", "cpo") if ev.get(k)) + "]"
 
 
 # ----------------------------------------------------------------- stop conditions
@@ -548,6 +585,14 @@ def run(cfg: dict, resume: bool = False):
         ev = steps.run(f"c{cycle}:evaluate", lambda: evaluate_gates(result, cfg))
         passed = ev["input"] and ev["quality"] and ev["safety"]
         goal_met = _goal_met(result, cfg)
+        if passed and goal_met:
+            memory_status = steps.run(f"c{cycle}:user-memory", lambda: evaluate_user_memory(cfg))
+            ev["user_memory"] = bool(memory_status.get("passed"))
+            ev.setdefault("reasons", {})["user_memory"] = memory_status.get(
+                "reason", memory_status.get("status", ""))
+            passed = passed and ev["user_memory"]
+            emit("cpo", "evaluate", "done" if ev["user_memory"] else "blocked",
+                 ev["reasons"]["user_memory"], cycle=cycle)
         if passed and goal_met:
             emit("qa-engineer", "evaluate", "start",
                  "validating scenario, dependency-regression, and pixel evidence", cycle=cycle)

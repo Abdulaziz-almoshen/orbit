@@ -24,6 +24,7 @@ injects text.)
 from __future__ import annotations
 
 import json
+import importlib.util
 import re
 import sys
 import time
@@ -126,6 +127,13 @@ AMBIGUOUS_CTX = (
     "question → answer directly). Do NOT force a question. Only if a genuinely blocking ambiguity "
     "stops you from proceeding, ask ONE AskUserQuestion (2-4 selectable options, your recommendation "
     "FIRST labeled '(Recommended)', a one-line trade-off each — never a question buried in prose)."
+)
+
+MEMORY_CTX = (
+    "[orbit] USER MEMORY: the deterministic intake has recorded this request. Before substantial "
+    "work, read .orbit/skills/user-model.md. Before delivery, review the latest request and clear "
+    "every pending important event with .orbit/checks/user_memory.py; a stale memory checkpoint "
+    "blocks CPO/Stop. Never invent a preference merely to satisfy the checkpoint."
 )
 
 
@@ -318,6 +326,25 @@ def _router_mode(cwd: Path) -> str:
         return "always"
 
 
+def _record_user_memory(cwd: Path, prompt: str) -> dict:
+    """Mechanically count requests and capture strong correction/insistence signals as untrusted data."""
+    try:
+        orbit = _find_orbit(cwd)
+        if orbit is None:
+            return {}
+        cfg = json.loads((orbit / "loop.config.json").read_text())
+        contract = cfg.get("user_memory") or {}
+        if contract.get("enabled") is not True:
+            return {}
+        helper = orbit / "checks" / "user_memory.py"
+        spec = importlib.util.spec_from_file_location("orbit_user_memory", helper)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.record_request(orbit, prompt, int(contract.get("max_requests_between_reviews", 5)))
+    except Exception:
+        return {}                         # routing is fail-open; delivery enforcement is fail-closed
+
+
 MARKER_TASK = ("VISIBILITY (mandatory): the FIRST LINE of your reply must be exactly "
                "'⏣ orbit — loop engaged · T<gear>' (fill in the gear you sized). The user must "
                "always SEE that Orbit took the request. ")
@@ -333,6 +360,7 @@ def main() -> None:
     prompt = str(data.get("prompt", "") or "")
     cwd = Path(data.get("cwd") or ".")
 
+    memory = _record_user_memory(cwd, prompt)
     kind = classify(prompt)
     mode = _router_mode(cwd)
     if kind == "skip":
@@ -347,6 +375,13 @@ def main() -> None:
         kind = "task"                        # every real request engages the loop — no soft lane
 
     ctx = {"task": TASK_CTX, "question": QUESTION_CTX, "ambiguous": AMBIGUOUS_CTX}[kind]
+    if memory:
+        ctx += " " + MEMORY_CTX
+        if memory.get("pending_event_ids"):
+            ctx += (" REVIEW NOW: pending user-memory event(s): "
+                    + ", ".join(memory["pending_event_ids"]) + ".")
+        elif memory.get("review_due"):
+            ctx += " REVIEW NOW: the five-request review interval has been reached."
     if mode == "always":                     # the user must SEE Orbit take every request
         ctx = (MARKER_TASK if kind == "task" else MARKER_DIRECT) + ctx
     if kind in ("task", "ambiguous"):

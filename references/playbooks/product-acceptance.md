@@ -83,6 +83,11 @@ commit says ACCEPT:
     "commit": "<same exact commit>",
     "sha256": "<sha256 of the evidence file after the gate passed>"
   },
+  "user_memory": {
+    "path": ".orbit/memory/checkpoint.json",
+    "last_reviewed_request": 17,
+    "sha256": "<sha256 of the checkpoint after the latest request was reviewed>"
+  },
   "basis": {
     "skills": ["user-model R1: prefers honest states over alarms", "user-reporting #2: task name first"],
     "research": ["walked the flow as the user: dismiss works, re-ping works", "goal record spec.md §2 satisfied"],
@@ -109,6 +114,9 @@ Verdict rules:
 - **Precondition for ACCEPT** — `.orbit/checks/delivery-quality-gate.py --root . --commit <sha>` exits
   0, and the envelope's `qa_evidence` path/commit/SHA-256 binds that exact PASS artifact. The CPO opens
   scenario outputs and UI diff images; it never relies only on QA prose.
+- **Memory precondition for ACCEPT** — `.orbit/checks/user_memory.py status --root . --require-latest`
+  exits 0, every pending correction/insistence event has a reasoned disposition, and the envelope's
+  `user_memory.sha256` binds the exact checkpoint. No stale understanding can ship.
 - **ACCEPT** — intent fidelity AND completeness ≥ 8, nothing `must` outstanding. Taste alone never
   blocks a goal-meeting deliverable (file taste items as `nice` orders + user-model entries).
 - **ITERATE** — the goal is reachable from here; every change order specific enough that the

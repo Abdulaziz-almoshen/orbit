@@ -173,6 +173,42 @@ def _delivery_quality_vigilance(orbit, route_mt):
         sys.exit(0)
 
 
+def _user_memory_vigilance(orbit, route_mt):
+    """A deliverable cannot outrun the latest user correction or an overdue memory review."""
+    if not (orbit / "loop.config.json").is_file():
+        return                                               # legacy/minimal scaffold: contract absent
+    try:
+        cfg = json.loads((orbit / "loop.config.json").read_text())
+        contract = cfg.get("user_memory") or {}
+        if contract.get("enabled") is not True or contract.get("require_review_before_delivery") is not True:
+            return
+        helper = orbit / "checks" / "user_memory.py"
+        spec = importlib.util.spec_from_file_location("orbit_user_memory_stop", helper)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        result = module.status(orbit, int(contract.get("max_requests_between_reviews", 5)),
+                               require_latest=True)
+        if result.get("passed"):
+            return
+        pending = ", ".join(result.get("pending_event_ids") or []) or "none"
+        print(json.dumps({"decision": "block", "reason": (
+            "[orbit] USER MEMORY GATE — delivery cannot proceed until Orbit reviews what the user "
+            "most recently taught or corrected. Pending important events: " + pending + ". Requests "
+            "since review: " + str(result.get("requests_since_review", 0)) + ". Read "
+            ".orbit/skills/user-model.md and .orbit/skills/user-memory-architecture.md, then run "
+            ".orbit/checks/user_memory.py review with promote/dismiss for each pending event, or "
+            "checkpoint when there is no durable new signal. Never invent a preference. Re-run "
+            "status --require-latest before QA/CPO."
+        )}))
+        sys.exit(0)
+    except SystemExit:
+        raise
+    except Exception as exc:
+        print(json.dumps({"decision": "block", "reason":
+                          f"[orbit] USER MEMORY GATE ERROR — repair the checkpoint before delivery: {exc}"}))
+        sys.exit(0)
+
+
 def _capability_enforcement(orbit, route_mt, post_route, work):
     """Require real, completed stage owners on substantial work in a strict project."""
     try:
@@ -278,6 +314,7 @@ def main():
 
     # (3) was the board updated after the route?
     if _mtime(orbit / "tasks.json") > route_mt or _mtime(orbit / "agents.json") > route_mt:
+        _user_memory_vigilance(orbit, route_mt)              # latest user intent before release proof
         _delivery_quality_vigilance(orbit, route_mt)         # evidence before CPO, not role theater
         _cpo_vigilance(orbit, route_mt)                     # board OK — but is the CPO satisfied?
         return                                              # the board WAS made visible → all good

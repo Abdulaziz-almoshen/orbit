@@ -48,6 +48,7 @@ MANAGED_CHECKS = {
     ".orbit/loop.py":                   ("loop.py",                  b"Reference self-prompting loop runner"),
     ".orbit/checks/guard.py":           ("checks/guard.py",           b"Orbit safety guard"),
     ".orbit/checks/route.py":           ("checks/route.py",           b"UserPromptSubmit hook"),
+    ".orbit/checks/user_memory.py":     ("checks/user_memory.py",     b"user-memory intake"),
     ".orbit/checks/learn.py":           ("checks/learn.py",           b"active-learning"),
     ".orbit/checks/orbit-stop-check.py":("checks/orbit-stop-check.py", b"observability backstop"),
     ".orbit/checks/delivery-quality-gate.py":("checks/delivery-quality-gate.py", b"delivery-quality gate"),
@@ -233,6 +234,7 @@ FILE_PLAN = [
     ("security/rules.json", ".orbit/security/rules.json", None),  # declarative repo rules for the trusted guard
     ("checks/guard.py",  ".orbit/checks/guard.py",    0o755),  # built-in ruleset reference (the wired wall is the trusted orbit-guard)
     ("checks/route.py",  ".orbit/checks/route.py",    0o755),  # the UserPromptSubmit router (Phase 6a)
+    ("checks/user_memory.py", ".orbit/checks/user_memory.py", 0o755),
     ("checks/orbit-stop-check.py", ".orbit/checks/orbit-stop-check.py", 0o755),  # Stop: observability backstop
     ("checks/delivery-quality-gate.py", ".orbit/checks/delivery-quality-gate.py", 0o755),
     ("checks/learn.py",  ".orbit/checks/learn.py",    0o755),  # the active-learning ledger helper
@@ -250,6 +252,7 @@ PLAYBOOKS_ALWAYS = ["clarify-and-challenge.md", "autonomous-delivery.md",
                     "qa-validation.md", "goal-pipeline.md", "architecture-decisions.md",
                     "safety-rules.md", "deliverable-reports.md", "loop-tiers.md",
                     "counterfactual-regret.md", "iterative-repair.md", "product-acceptance.md"]
+PLAYBOOKS_ALWAYS.append("user-memory-architecture.md")
 PLAYBOOKS_FRONTEND = ["design-methodology.md", "anti-ai-aesthetics.md", "design-styles.md",
                       "taste-preflight.md"]
 
@@ -307,7 +310,7 @@ UI_SURFACES = {"web", "frontend", "ui", "mobile", "ios", "android"}  # → stand
 DIRS = [
     ".orbit", ".orbit/roles", ".orbit/skills",
     ".orbit/artifacts", ".orbit/checks", ".orbit/decisions", ".orbit/locks", ".orbit/security",
-    ".orbit/qa", ".orbit/review-requests", ".orbit/reviews", ".orbit/cpo",
+    ".orbit/qa", ".orbit/review-requests", ".orbit/reviews", ".orbit/cpo", ".orbit/memory",
     ".claude/agents", "scripts",
 ]
 
@@ -564,7 +567,7 @@ def _merge_loop_config_defaults(target: Path, created: list, warnings: list) -> 
         changed = []
         for key in ("_independent_qa_help", "independent_qa",
                     "_capability_enforcement_help", "capability_enforcement",
-                    "delivery_quality"):
+                    "delivery_quality", "_user_memory_help", "user_memory"):
             if key not in current:
                 current[key] = defaults[key]
                 changed.append(key)
@@ -583,7 +586,7 @@ def _merge_loop_config_defaults(target: Path, created: list, warnings: list) -> 
             changed.append("independent_qa.provider(v0.41→v0.42)")
         paths = current.setdefault("paths", {})
         for key in ("independent_reviews", "independent_qa_runner", "delivery_evidence",
-                    "delivery_quality_gate"):
+                    "delivery_quality_gate", "user_memory_checkpoint", "user_memory_events"):
             if key not in paths:
                 paths[key] = defaults["paths"][key]
                 changed.append(f"paths.{key}")
@@ -591,11 +594,28 @@ def _merge_loop_config_defaults(target: Path, created: list, warnings: list) -> 
         if isinstance(cpo, dict) and "require_delivery_evidence" not in cpo:
             cpo["require_delivery_evidence"] = True
             changed.append("cpo_acceptance.require_delivery_evidence")
+        if isinstance(cpo, dict) and "require_user_memory_checkpoint" not in cpo:
+            cpo["require_user_memory_checkpoint"] = True
+            changed.append("cpo_acceptance.require_user_memory_checkpoint")
         if changed:
             dst.write_text(json.dumps(current, indent=2) + "\n")
             created.append(f".orbit/loop.config.json  (added defaults: {', '.join(changed)}; existing values preserved)")
     except Exception as exc:
         warnings.append(f"Could not add independent-QA defaults to .orbit/loop.config.json: {exc}")
+
+
+def _seed_user_memory(target: Path, created: list, skipped: list) -> None:
+    """Add machine memory state without ever overwriting learned project memory."""
+    checkpoint = target / ".orbit/memory/checkpoint.json"
+    if not checkpoint.exists():
+        _emit(checkpoint, json.dumps({
+            "schema_version": 1, "total_requests": 0, "last_reviewed_request": 0,
+            "requests_since_review": 0, "pending_event_ids": [], "last_reviewed_at": None,
+            "last_review_summary": "not reviewed yet", "review_required": False
+        }, indent=2) + "\n", created, skipped)
+    events = target / ".orbit/memory/user-events.jsonl"
+    if not events.exists():
+        _emit(events, "", created, skipped)
 
 
 def _detect_arabic_surface(target: Path) -> bool:
@@ -865,6 +885,7 @@ def _auto_heal(target: Path) -> str:
     playbooks = PLAYBOOKS_ALWAYS + (PLAYBOOKS_FRONTEND if has_ui else [])
     for pb in playbooks:
         _place(PLAYBOOKS / pb, target / ".orbit/skills" / pb, created, skipped)
+    _seed_user_memory(target, created, skipped)
     # Capability additions must reach already-installed projects. Missing shipped roles are safe to
     # add; existing/customized role files remain byte-for-byte untouched.
     for role in ROLES_CORE:
@@ -1120,6 +1141,8 @@ def main():
             "## Rules (durable — 3+ consistent signals each)\n\n(none yet)\n\n"
             "## Signals (dated observations, newest first)\n\n(none yet)\n\n"
             "## Vocabulary\n\n(none yet)\n"), created, skipped)
+
+    _seed_user_memory(target, created, skipped)
 
     # 3b. the 67-style design catalog (UI surfaces only) -> .orbit/skills/design-styles/
     styles_src = PLAYBOOKS / "design-styles"

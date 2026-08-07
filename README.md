@@ -14,7 +14,7 @@ Orbit turns a product repository into a durable, observable agentic loop: it rem
 plans the next move, delegates focused tasks, **watches the full role tree live for drift**, checks the
 result, repairs failures, and returns a proven local commit—interrupting only for true blockers.
 
-![version](https://img.shields.io/badge/version-0.57.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.58.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![observable](https://img.shields.io/badge/observable-live%20dashboard-e8590c)
@@ -27,7 +27,10 @@ result, repairs failures, and returns a proven local commit—interrupting only 
 Most agent sessions forget context, repeat failed work, and leave you watching a black box. Orbit
 gives the work a durable operating system:
 
-- **Memory:** project goals, decisions, conventions, and progress persist in `CLAUDE.md` and `.orbit/STATE.md`.
+- **User memory that binds delivery:** every real request advances a machine checkpoint; strong
+  corrections and “always/never/must/remember” signals enter an append-only event ledger immediately.
+  Orbit reviews memory at least every five requests and again after the latest request before shipping.
+  Pending or stale memory blocks CPO/Stop; a no-new-signal checkpoint is valid, invented preferences are not.
 - **Plan and progress:** every run has a visible checklist, owner, phase, gate, and next action.
 - **Enforced capabilities:** substantial work must complete Product Discovery, Business Analysis,
   Market Research, Planning, Safety, Reviewer, QA, CPO, and Reporting; UI work must also complete
@@ -88,6 +91,11 @@ gives the work a durable operating system:
 > Safety → Reviewer → QA Engineer → **Delivery Quality** (scenario matrix + dependency regression +
 > three-viewport computed pixel diffs) → Independent QA (opt-in) → **CPO acceptance** → done. CPO must
 > rerun the gate, inspect raw evidence, and bind its ACCEPT to the evidence file's exact SHA-256.
+
+> **New in Orbit 0.58:** user memory is an enforced architecture, not an optional note. The router
+> records requests and important corrections into `.orbit/memory/`; the five-request review clock is
+> mechanical, every delivery requires a review after the latest request, and CPO ACCEPT binds the exact
+> memory checkpoint SHA-256 alongside QA evidence.
 
 > **New in Orbit 0.50:** the **CPO** closed the goal-fidelity gap. Every
 > earlier gate verifies the build against artifacts the system wrote for itself; the CPO is the

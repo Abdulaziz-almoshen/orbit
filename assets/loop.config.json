@@ -151,6 +151,15 @@
     "require_accessibility_pass": true
   },
 
+  "_user_memory_help": "Project-scoped user memory. The router counts every real request and immediately captures strong corrections/insistence as pending evidence. Review is mandatory at least every five requests and after the latest request before any delivery. Captured text never auto-promotes.",
+  "user_memory": {
+    "enabled": true,
+    "max_requests_between_reviews": 5,
+    "capture_important_signals_immediately": true,
+    "require_review_before_delivery": true,
+    "require_no_pending_important_events": true
+  },
+
   "_router_help": "How every user message is routed. mode 'always' (default): each real request engages the loop — ambiguous phrasing and short imperatives route as TASK, questions are answered directly, and every reply starts with a visible '⏣ orbit' lane marker. mode 'smart': conservative — only clear task verbs force the loop, ambiguous gets a soft directive, no markers. Acks, negations, and slash-commands never trigger either way.",
   "router": {
     "mode": "always"
@@ -170,6 +179,7 @@
     "enabled": true,
     "stage": "after_independent_qa_before_done",
     "require_delivery_evidence": true,
+    "require_user_memory_checkpoint": true,
     "max_rounds": 5,
     "basis_weights": {
       "skills": 0.4,
@@ -239,7 +249,7 @@
     }
   },
 
-  "done_when": "STATE.md run_goal satisfied AND mandatory capability stages completed AND scenario/dependency/pixel delivery evidence passed for the exact commit AND internal Safety/Reviewer/QA gates passed AND the independent QA gate passed when enabled AND CPO wrote a commit-bound ACCEPT",
+  "done_when": "STATE.md run_goal satisfied AND latest user-memory checkpoint reviewed with no pending important events AND mandatory capability stages completed AND scenario/dependency/pixel delivery evidence passed for the exact commit AND internal Safety/Reviewer/QA gates passed AND the independent QA gate passed when enabled AND CPO wrote a commit-bound ACCEPT bound to QA and memory evidence",
 
   "_proof_help": "First-class verification: the CONCRETE evidence a cycle actually worked, not just 'looks done'. kind: command (run it, expect exit 0) | metric (read a number, compare) | checklist (all items true) | review (Reviewer rubric >= threshold). The loop must produce this proof before calling a task done.",
   "proof": { "kind": "review", "expect": "reviewer_score >= eval_gates.quality.min_reviewer_score", "command": "" },
@@ -262,6 +272,8 @@
     "cpo_verdicts": ".orbit/cpo",
     "delivery_evidence": ".orbit/qa/delivery-evidence.json",
     "delivery_quality_gate": ".orbit/checks/delivery-quality-gate.py",
+    "user_memory_checkpoint": ".orbit/memory/checkpoint.json",
+    "user_memory_events": ".orbit/memory/user-events.jsonl",
     "stop_sentinel": ".orbit/STOP"
   }
 }

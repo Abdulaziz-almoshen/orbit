@@ -3,6 +3,21 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.58.0
+
+**User-memory architecture with a hard delivery checkpoint.**
+
+- Every real request advances `.orbit/memory/checkpoint.json`; strong correction and insistence
+  signals are captured immediately in the secret-scrubbed append-only `user-events.jsonl` ledger.
+- Memory review is due no later than every fifth request. Delivery is stricter: the latest request
+  must be reviewed and no important event may remain pending.
+- Captured text is untrusted evidence and never auto-promotes. Review may promote a user-stated
+  signal, dismiss a transient/misdetected event, or honestly checkpoint “no new durable signal.”
+- The Stop hook and portable runner enforce the gate before QA/CPO. CPO ACCEPT must bind the exact
+  reviewed checkpoint by SHA-256.
+- Fresh installs and safe updates provision the helper, architecture playbook, memory directory,
+  checkpoint, ledger, and strict defaults without overwriting an existing user-model.
+
 ## 0.57.0
 
 **Scenario-complete, dependency-aware, pixel-evidenced QA before CPO.**

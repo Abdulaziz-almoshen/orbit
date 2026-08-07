@@ -61,7 +61,7 @@
       <circle cx="18" cy="18" r="16" fill="none" stroke="#f7f9fc" stroke-width="3"/>
       <circle cx="18" cy="18" r="9" fill="none" stroke="#f7f9fc" stroke-width="2"/>
       <path d="M3 26L33 9" stroke="#f7f9fc" stroke-width="3"/>
-      <text x="48" y="15" font-size="12" font-weight="700" letter-spacing="2" fill="#8c98a8">ORBIT 0.57</text>
+      <text x="48" y="15" font-size="12" font-weight="700" letter-spacing="2" fill="#8c98a8">ORBIT 0.58</text>
       <text x="48" y="36" font-size="15" font-weight="650" fill="#f7f9fc">Enforced team</text>
     </g>
   </g>
@@ -154,6 +154,12 @@
 
   <!-- Bottom outcome paths -->
   <g class="sans">
+    <g transform="translate(1095 400)">
+      <path d="M122 0V-55" stroke="#75b7ff" stroke-width="1.5" stroke-dasharray="4 5" marker-end="url(#arrowBlue)"/>
+      <rect width="292" height="72" rx="16" fill="#0c1420" stroke="#2b6cb0" stroke-width="1.5"/>
+      <text x="18" y="27" class="tiny" fill="#75b7ff">USER MEMORY · HARD GATE</text>
+      <text x="18" y="51" font-size="13" fill="#b9c5d3">events → review ≤5 → CPO-bound SHA</text>
+    </g>
     <path d="M1052 366C1052 566 949 634 818 634C688 634 584 563 584 462" fill="none" stroke="#e8590c" stroke-width="2" marker-end="url(#arrowOrange)" opacity=".9"/>
     <rect x="862" y="607" width="178" height="38" rx="19" fill="#18100c" stroke="#743414"/>
     <text x="951" y="631" text-anchor="middle" class="tiny" fill="#ff8a3d">FAIL → REPAIR → RETEST</text>
