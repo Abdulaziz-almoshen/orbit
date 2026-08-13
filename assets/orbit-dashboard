@@ -547,8 +547,8 @@ PET_PAGE = """<!doctype html><html lang=en><head><meta charset=utf-8>
 .wrap{display:flex;align-items:flex-start;gap:10px;padding:12px;justify-content:flex-end}
 .pet{flex:0 0 auto;width:92px;text-align:center;cursor:grab;order:2;filter:drop-shadow(0 8px 14px rgba(0,0,0,.45));animation:float 3s ease-in-out infinite;position:relative}
 .pet:active{cursor:grabbing}
-.hand{position:absolute;bottom:6px;right:8px;width:6px;height:6px;background:#b95d43;border-radius:50%;z-index:10}
-.whip{position:absolute;bottom:10px;right:6px;width:3px;height:48px;background:#1a1a1a;border-radius:1px;transform-origin:top center;pointer-events:none;opacity:.9}
+.hand{position:absolute;bottom:4px;right:6px;width:8px;height:8px;background:#b95d43;border-radius:50%;z-index:10;box-shadow:0 0 8px rgba(185,93,67,.6)}
+.whip{position:absolute;bottom:14px;right:3px;width:4px;height:62px;background:linear-gradient(180deg,#000 0%,#1a1a1a 50%,#000 100%);border-radius:2px;transform-origin:top center;pointer-events:none;opacity:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,.7))}
 .whip.crack{animation:whipCrack .35s cubic-bezier(.34,.74,.54,.92)}
 .pbody{width:68px;height:76px;margin:6px auto 0;position:relative;border-radius:44% 44% 40% 40%/48% 48% 38% 38%;background:linear-gradient(145deg,#d97757,#a84f39);border:2px solid rgba(255,255,255,.12);animation:swagger 2.8s ease-in-out infinite}
 .ear{position:absolute;top:-7px;width:21px;height:24px;background:#b95d43;border-radius:7px 16px 5px 15px}.ear.l{left:3px;transform:rotate(-18deg)}.ear.r{right:3px;transform:scaleX(-1) rotate(-18deg)}
@@ -586,7 +586,7 @@ body.collapsed .card{display:none}
 [data-mood=needs_action] .proj,[data-mood=needs_action] .hl,[data-mood=blocked] .hl{color:var(--amber)}
 [data-mood=stopped] .hl{color:var(--fg)}[data-mood=stopped] .proj{color:var(--dim)}
 @keyframes float{50%{transform:translateY(-5px)}}@keyframes ping{50%{transform:scale(.72);opacity:.55}}
-@keyframes swagger{0%{transform:translateX(0) rotate(0deg)}50%{transform:translateX(2px) rotate(.8deg)}100%{transform:translateX(0) rotate(0deg)}}
+@keyframes swagger{0%{transform:translateX(0) rotate(0deg)}25%{transform:translateX(3px) rotate(2.2deg)}50%{transform:translateX(-3px) rotate(-2.2deg)}75%{transform:translateX(2px) rotate(1.5deg)}100%{transform:translateX(0) rotate(0deg)}}
 @keyframes whipCrack{0%{transform:translateY(0) rotate(0deg)}20%{transform:translateY(-20px) rotate(-55deg)}40%{transform:translateY(-18px) rotate(35deg)}60%{transform:translateY(-16px) rotate(-25deg)}80%{transform:translateY(-8px) rotate(12deg)}100%{transform:translateY(0) rotate(0deg)}}
 </style></head><body class=collapsed data-mood=working>
 <div class=wrap>
