@@ -547,8 +547,8 @@ PET_PAGE = """<!doctype html><html lang=en><head><meta charset=utf-8>
 .wrap{display:flex;align-items:flex-start;gap:10px;padding:12px;justify-content:flex-end}
 .pet{flex:0 0 auto;width:92px;text-align:center;cursor:grab;order:2;filter:drop-shadow(0 8px 14px rgba(0,0,0,.45));animation:float 3s ease-in-out infinite;position:relative}
 .pet:active{cursor:grabbing}
-.whip{position:absolute;top:-2px;right:-8px;width:2px;height:38px;background:linear-gradient(180deg,#e6edf3 0%,transparent 100%);transform-origin:top center;pointer-events:none;opacity:0}
-.whip.crack{animation:whipCrack .3s ease-out;opacity:1}
+.whip{position:absolute;top:-2px;right:-8px;width:2px;height:38px;background:linear-gradient(180deg,#e6edf3 0%,transparent 100%);transform-origin:top center;pointer-events:none;opacity:.7}
+.whip.crack{animation:whipCrack .3s ease-out}
 .pbody{width:68px;height:76px;margin:6px auto 0;position:relative;border-radius:44% 44% 40% 40%/48% 48% 38% 38%;background:linear-gradient(145deg,#d97757,#a84f39);border:2px solid rgba(255,255,255,.12)}
 .ear{position:absolute;top:-7px;width:21px;height:24px;background:#b95d43;border-radius:7px 16px 5px 15px}.ear.l{left:3px;transform:rotate(-18deg)}.ear.r{right:3px;transform:scaleX(-1) rotate(-18deg)}
 .eye{position:absolute;top:26px;width:7px;height:8px;border-radius:50%;background:#111}.eye.l{left:17px}.eye.r{right:17px}
