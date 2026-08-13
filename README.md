@@ -14,7 +14,7 @@ Orbit turns a product repository into a durable, observable agentic loop: it rem
 plans the next move, delegates focused tasks, **watches the full role tree live for drift**, checks the
 result, repairs failures, and returns a proven local commit—interrupting only for true blockers.
 
-![version](https://img.shields.io/badge/version-0.58.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.59.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![observable](https://img.shields.io/badge/observable-live%20dashboard-e8590c)
