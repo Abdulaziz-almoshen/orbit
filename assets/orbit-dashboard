@@ -547,8 +547,9 @@ PET_PAGE = """<!doctype html><html lang=en><head><meta charset=utf-8>
 .wrap{display:flex;align-items:flex-start;gap:10px;padding:12px;justify-content:flex-end}
 .pet{flex:0 0 auto;width:92px;text-align:center;cursor:grab;order:2;filter:drop-shadow(0 8px 14px rgba(0,0,0,.45));animation:float 3s ease-in-out infinite;position:relative}
 .pet:active{cursor:grabbing}
-.whip{position:absolute;top:-2px;right:-8px;width:2px;height:38px;background:linear-gradient(180deg,#e6edf3 0%,transparent 100%);transform-origin:top center;pointer-events:none;opacity:.7}
-.whip.crack{animation:whipCrack .3s ease-out}
+.hand{position:absolute;bottom:6px;right:8px;width:6px;height:6px;background:#b95d43;border-radius:50%;z-index:10}
+.whip{position:absolute;bottom:10px;right:6px;width:3px;height:48px;background:#1a1a1a;border-radius:1px;transform-origin:top center;pointer-events:none;opacity:.9}
+.whip.swing{animation:whipSwing .4s ease-in-out}
 .pbody{width:68px;height:76px;margin:6px auto 0;position:relative;border-radius:44% 44% 40% 40%/48% 48% 38% 38%;background:linear-gradient(145deg,#d97757,#a84f39);border:2px solid rgba(255,255,255,.12)}
 .ear{position:absolute;top:-7px;width:21px;height:24px;background:#b95d43;border-radius:7px 16px 5px 15px}.ear.l{left:3px;transform:rotate(-18deg)}.ear.r{right:3px;transform:scaleX(-1) rotate(-18deg)}
 .eye{position:absolute;top:26px;width:7px;height:8px;border-radius:50%;background:#111}.eye.l{left:17px}.eye.r{right:17px}
@@ -585,10 +586,10 @@ body.collapsed .card{display:none}
 [data-mood=needs_action] .proj,[data-mood=needs_action] .hl,[data-mood=blocked] .hl{color:var(--amber)}
 [data-mood=stopped] .hl{color:var(--fg)}[data-mood=stopped] .proj{color:var(--dim)}
 @keyframes float{50%{transform:translateY(-5px)}}@keyframes ping{50%{transform:scale(.72);opacity:.55}}
-@keyframes whipCrack{0%{transform:rotate(0deg) scaleY(1);opacity:1}25%{transform:rotate(-65deg) scaleY(.95);opacity:1}50%{transform:rotate(45deg) scaleY(.88);opacity:1}75%{transform:rotate(-30deg) scaleY(.85);opacity:.8}100%{transform:rotate(0deg) scaleY(0);opacity:0}}
+@keyframes whipSwing{0%{transform:translateY(0)}25%{transform:translateY(-16px)}50%{transform:translateY(2px)}75%{transform:translateY(-12px)}100%{transform:translateY(0)}}
 </style></head><body class=collapsed data-mood=working>
 <div class=wrap>
- <div class=pet id=pet title="drag to move · click to open"><div class=whip id=whip></div><div class=pbody><i class="ear l"></i><i class="ear r"></i><i class="eye l"></i><i class="eye r"></i><i class=mouth></i><i class=badge></i></div><div class=plabel id=plabel>Orbit</div></div>
+ <div class=pet id=pet title="drag to move · click to open"><div class=pbody><i class="ear l"></i><i class="ear r"></i><i class="eye l"></i><i class="eye r"></i><i class=mouth></i><i class=badge></i><i class=hand></i><i class=whip id=whip></i></div><div class=plabel id=plabel>Orbit</div></div>
  <div class=card id=card>
   <div class=bar id=bar><span class=grip>drag</span><span class=proj id=proj>Orbit</span><button class=dismiss id=dismiss title="Dismiss (Esc)">&times;</button></div>
   <div class=inner>
@@ -605,8 +606,8 @@ body.collapsed .card{display:none}
 var COLL={w:132,h:150}, EXP={w:600,h:300}, lastKey='', dismissedKey='', collapsed=true;
 function post(m){try{window.webkit?.messageHandlers?.orbit?.postMessage(m)}catch(e){}}
 function whip(){
-  var w=document.getElementById('whip'); w.classList.remove('crack');
-  setTimeout(function(){w.classList.add('crack')},10);
+  var w=document.getElementById('whip'); w.classList.remove('swing');
+  setTimeout(function(){w.classList.add('swing')},10);
   var ctx=new (window.AudioContext||window.webkitAudioContext)();
   var osc=ctx.createOscillator(), env=ctx.createGain(), filter=ctx.createBiquadFilter();
   osc.type='square'; osc.frequency.setValueAtTime(400,ctx.currentTime); osc.frequency.exponentialRampToValueAtTime(80,ctx.currentTime+.15);
