@@ -21,7 +21,7 @@ def main():
     failures = []
     with tempfile.TemporaryDirectory() as td:
         target = Path(td)
-        (target / ".orbit/locks").mkdir(parents=True)
+        (target / ".orbit").mkdir(parents=True)
         (target / ".claude").mkdir()
         (target / ".claude/agents").mkdir()
         (target / ".claude/agents/backend-engineer.md").write_text(
@@ -69,22 +69,13 @@ def main():
         if "already healthy" not in second.stdout:
             failures.append(f"second run was not a no-op: {second.stdout!r}")
 
-        (target / ".orbit/locks/active-writer.json").write_text(json.dumps({
-            "heartbeat_at": "2099-01-01T00:00:00Z", "ttl_seconds": 1800
-        }))
-        locked_before = (target / ".orbit/setup.json").read_text()
-        locked = run(target)
-        if (target / ".orbit/setup.json").read_text() != locked_before:
-            failures.append("active writer lock did not prevent auto-heal writes")
-        if "active writer lock" not in locked.stdout:
-            failures.append(f"lock preservation was not reported: {locked.stdout!r}")
 
     if failures:
         print("FAIL: auto-heal")
         for failure in failures:
             print("  -", failure)
         return 1
-    print("PASS: auto-heal (safe files, metadata, idempotency, disabled hooks, active lock)")
+    print("PASS: auto-heal (safe files, metadata, idempotency, disabled hooks)")
     return 0
 
 

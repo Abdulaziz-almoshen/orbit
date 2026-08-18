@@ -220,7 +220,6 @@ FILE_PLAN = [
     ("confidence.py",    ".orbit/confidence.py",    None),   # evidence-based delivery confidence
     ("lifecycle.py",     ".orbit/lifecycle.py",     None),   # mode detection + phase strip
     ("ralph_loop.sh",    "scripts/ralph_loop.sh",     0o755),
-    ("orbit-lock",       "scripts/orbit-lock",        0o755),   # thin wrapper → trusted bin/orbit-lock
     ("orbit-worktree",   "scripts/orbit-worktree",    0o755),   # isolated worker worktree manager
     ("orbit-independent-qa", "scripts/orbit-independent-qa", 0o755),  # trusted second-provider gate
     ("orbit-qa-hook",   "scripts/orbit-qa-hook",      0o755),   # opt-in native Git post-commit QA trigger
@@ -364,16 +363,6 @@ ORBIT_HOOK_EVENTS = ["SubagentStart", "SubagentStop", "TaskCreated", "TaskComple
                      "PostToolUse", "PostToolUseFailure", "PostToolBatch", "Stop", "Notification",
                      "PermissionRequest"]
 STATUSLINE_CMD = 'python3 "$CLAUDE_PROJECT_DIR/scripts/orbit-statusline"'
-# The single-writer lock hook — trusted-install resolved (like orbit-hook), so a repo can't weaken its
-# own lock. Fails OPEN on any error (a bug never bricks the repo); disable with ORBIT_LOCK_DISABLE=1.
-ORBIT_LOCK_HOOK_CMD = (
-    "sh -c 'for p in "
-    '"${CLAUDE_PLUGIN_ROOT:-}/bin/orbit-lock-hook" '
-    '"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/orbit/bin/orbit-lock-hook" '
-    '"$HOME"/.claude/plugins/cache/*/orbit/*/bin/orbit-lock-hook '
-    '"${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/*/orbit/*/bin/orbit-lock-hook; '
-    "do [ -f \"$p\" ] && exec python3 \"$p\"; done; exit 0'"
-)
 
 
 def _strip_frontmatter(text: str) -> str:
@@ -723,7 +712,7 @@ def scaffold_drift(target: Path) -> dict:
     hook_drift = [name for name, tok in (
         ("router", "route.py"),
         ("observability Stop hook", "orbit-stop-check.py"), ("telemetry", "orbit-hook"),
-        ("writer lock", "orbit-lock-hook"), ("status line", "orbit-statusline")) if tok not in wired]
+        ("status line", "orbit-statusline")) if tok not in wired]
     if "guard.py" not in wired and "orbit-guard" not in wired:   # either wall counts as wired
         hook_drift.insert(0, "safety guard")
     guard = target / ".orbit/checks/guard.py"
@@ -873,25 +862,6 @@ def _apply_safe_refresh(target: Path) -> None:
           "  For missing playbooks/roles and the version stamp, run `/orbit` here (it merges, never clobbers).")
 
 
-def _active_writer_lock(target: Path) -> bool:
-    """Return True when a writer may still be using this project.
-
-    Automatic healing treats malformed locks as active and never breaks ownership implicitly.
-    """
-    p = target / ".orbit/locks/active-writer.json"
-    if not p.exists():
-        return False
-    try:
-        data = json.loads(p.read_text())
-        heartbeat = data.get("heartbeat_at") or data.get("started_at")
-        ttl = int(data.get("ttl_seconds") or 1800)
-        parsed = time.strptime(heartbeat, "%Y-%m-%dT%H:%M:%SZ")
-        age = time.time() - calendar.timegm(parsed)
-        return age < ttl
-    except Exception:
-        return True
-
-
 def _auto_heal(target: Path) -> str:
     """Perform the safe, non-interactive subset of a full scaffold refresh.
 
@@ -902,8 +872,6 @@ def _auto_heal(target: Path) -> str:
     """
     if not (target / ".orbit").is_dir():
         return "not an Orbit repo"
-    if _active_writer_lock(target):
-        return "preserved (active writer lock)"
 
     created, skipped, warnings = [], [], []
     prev_version = _read_json(target / ".orbit/setup.json").get("orbit_version", "")
@@ -1025,17 +993,6 @@ def install_hooks(target: Path, has_ui: bool = False, reporter_only: bool = Fals
                     "hooks": [{"type": "command", "command": DESIGN_GATE_CMD}]})
         added.append("PreToolUse[matcher=Edit|Write|MultiEdit] → design-gate.py   "
                      "(design: ask once/cycle if a UI edit has no design record)")
-
-    # Single-writer lock (v0.30.0): deny writes under a FOREIGN session's lock — many readers, one
-    # writer. Two matchers (the edit tools + Bash), added together + idempotently. Trusted-install
-    # resolved (a repo can't weaken its own lock) and FAIL-OPEN on any error (never bricks the repo).
-    if not reporter_only and not any("orbit-lock-hook" in json.dumps(e) for e in pre):
-        pre.append({"matcher": "Edit|Write|MultiEdit",
-                    "hooks": [{"type": "command", "command": ORBIT_LOCK_HOOK_CMD}]})
-        pre.append({"matcher": "Bash",
-                    "hooks": [{"type": "command", "command": ORBIT_LOCK_HOOK_CMD}]})
-        added.append("PreToolUse[Edit|Write|MultiEdit + Bash] → orbit-lock-hook   "
-                     "(single-writer lock: block writes under another session's lock)")
 
     # Stop → orbit-stop-check.py: the observability backstop. Fails loudly (blocks once) if a routed
     # task did real work but never made the board visible (no .orbit/tasks.json / set_team) — i.e. it

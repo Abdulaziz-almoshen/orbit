@@ -170,10 +170,8 @@ def build_qa_line(qa: dict) -> str:
     return "   🟠 Builder " + handoff + "  " + "  ⚔  ".join(actors)
 
 
-def build_line(claude: dict, run: dict, agents: dict = None, lock_seg: str = "") -> str:
+def build_line(claude: dict, run: dict, agents: dict = None) -> str:
     seg = []
-    if lock_seg:
-        seg.append(lock_seg)                       # 🔒 read-only — another session holds the writer lock
     blocked = run.get("blocked_question")
     if blocked:
         seg.append("⚠ needs input")
@@ -254,17 +252,8 @@ def main():
         _record_session(orbit, claude)
     except Exception:
         pass
-    lock_seg = ""
-    try:                                                    # 🔒 only when ANOTHER session holds the lock
-        lk = json.loads((orbit / "locks" / "active-writer.json").read_text()) if orbit else {}
-        me = (claude.get("session_id") or os.environ.get("ORBIT_SESSION_ID")
-              or os.environ.get("CLAUDE_SESSION_ID") or os.environ.get("TERM_SESSION_ID"))
-        if isinstance(lk, dict) and lk.get("owner_id") and lk.get("owner_id") != me:
-            lock_seg = "🔒 read-only"
-    except Exception:
-        lock_seg = ""
     try:
-        print(build_line(claude, run, agents, lock_seg))
+        print(build_line(claude, run, agents))
         qa_line = build_qa_line(_qa_state(orbit))
         if qa_line:
             print(qa_line)

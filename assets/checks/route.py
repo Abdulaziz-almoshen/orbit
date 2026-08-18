@@ -295,23 +295,6 @@ def emit_activity(cwd: Path, kind: str, prompt: str) -> None:
         pass
 
 
-def _writer_lock_banner(cwd: Path, me: str) -> str:
-    """If ANOTHER session holds the single-writer lock, tell this session it's read-only — so a second
-    window or a background loop stays useful (inspect/analyze/report) instead of racing writes into the
-    same memory spine. Best-effort + fail-safe: any hiccup (no lock, no session_id) → no banner."""
-    try:
-        lock = json.loads((_find_orbit(cwd) / "locks" / "active-writer.json").read_text())
-        owner = lock.get("owner_id")
-        if owner and me and owner != me:
-            return ("[orbit] WRITER LOCK: another session "
-                    f"({lock.get('owner_kind', '?')}) owns this repo — you are READ-ONLY. "
-                    "Allowed: inspect, analyze, report. Denied: edit, commit, push, .orbit/STATE.md writes. "
-                    "To take over (only if it's abandoned): `scripts/orbit-lock break --reason '<why>'`. ")
-    except Exception:
-        pass
-    return ""
-
-
 def _router_mode(cwd: Path) -> str:
     """'always' (default): every real request engages the loop — ambiguous phrasing and short
     imperatives route as TASK, and every reply carries a visible lane marker. 'smart': the
@@ -391,10 +374,6 @@ def main() -> None:
         emit_activity(cwd, kind, prompt)
     elif mode == "always":
         emit_activity(cwd, kind, prompt)     # questions show on the board too — full visibility
-
-    banner = _writer_lock_banner(cwd, data.get("session_id"))
-    if banner:
-        ctx = banner + ctx
 
     print(json.dumps({
         "hookSpecificOutput": {
