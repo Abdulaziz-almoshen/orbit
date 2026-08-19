@@ -165,9 +165,46 @@ def build_qa_line(qa: dict) -> str:
         summary = str(state.get("summary") or "").replace("\n", " ").strip()
         tail = (" — " + summary[:42] + ("…" if len(summary) > 42 else "")) if summary else ""
         actors.append(f"{icon} {who}: {labels.get(status, status)}{tail}")
-    moving = any((providers.get(n) or {}).get("status") == "reviewing" for n in names)
-    handoff = "──📦──▶" if int(time.time()) % 2 == 0 else "──💬──◀" if moving else "──📦──▶"
-    return "   🟠 Builder " + handoff + "  " + "  ⚔  ".join(actors)
+    # The track leads to whoever currently HOLDS the work: the first reviewer that hasn't passed.
+    # That is what makes this a relay rather than a decoration — Builder hands the box to Codex,
+    # and a changes_required verdict sends it back down the track instead of onward.
+    lead = "queued"
+    for name in names:
+        status = str((providers.get(name) or {}).get("status") or "queued")
+        if status != "pass":
+            lead = status
+            break
+    else:
+        lead = "pass"
+    return "   🟠 Builder " + _handoff(lead, int(time.time() / 2)) + "  " + "  ⚔  ".join(actors)
+
+
+_TRACK = 7          # cells between the Builder and the reviewer
+
+
+def _lay(mark: str, pos: int, back: bool) -> str:
+    cells = ["─"] * _TRACK
+    cells[max(0, min(_TRACK - 1, pos))] = mark
+    return ("◀" + "".join(cells)) if back else ("".join(cells) + "▶")
+
+
+def _handoff(status: str, tick: int) -> str:
+    """The parcel's position on the track, derived from the stage; `tick` animates within it.
+
+    The statusline refreshes every 2s and `tick` advances once per refresh, so the parcel moves a
+    cell per frame — visible motion rather than the two-glyph flicker this replaced. Motion means
+    "work is in flight", not "progress was just made"; it stops dead on a terminal verdict, which
+    is the honest signal (a spinner that never rests reads as progress that isn't happening).
+    """
+    if status == "pass":
+        return "──────✓"                       # delivered — nothing in flight
+    if status in ("blocked", "error"):
+        return "───⛔───"                       # stuck: the parcel is not moving, and says so
+    if status == "changes_required":
+        return _lay("💬", _TRACK - 1 - (tick % _TRACK), back=True)   # returning with comments
+    if status == "reviewing":
+        return _lay("📦", _TRACK - 1 - (tick % 2), back=False)       # arrived; being worked on
+    return _lay("📦", tick % _TRACK, back=False)                     # queued — still travelling out
 
 
 def build_line(claude: dict, run: dict, agents: dict = None) -> str:

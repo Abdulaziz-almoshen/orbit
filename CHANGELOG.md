@@ -3,6 +3,30 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.60.1
+
+**The QA handoff parcel actually moves.**
+
+The review-handoff scene was pinned to a single frame by operator precedence:
+
+```python
+"──📦──▶" if int(time.time()) % 2 == 0 else "──💬──◀" if moving else "──📦──▶"
+```
+
+Python reads that as `A if t else (B if moving else A)` — so whenever a reviewer was `queued`
+(the common case) both branches produced the identical glyph. Even when `moving`, it only
+alternated two glyphs in place; nothing ever traversed.
+
+It is now a real relay whose position encodes the stage: the parcel travels out from the Builder
+while a review is `queued`, sits at the reviewer while `reviewing`, and flips to 💬 and travels
+**back** on `changes_required`. A terminal verdict stops the motion (`✓` on pass, `⛔` on
+blocked/error) — a spinner that never rests reads as progress that isn't happening. With `mode:
+both` the track leads to whichever reviewer currently holds the work.
+
+The old test asserted only that `📦` *appeared*, which stayed green for the whole time the box was
+frozen. It now asserts the parcel occupies a distinct cell on every tick, that direction encodes
+the relay, and that terminal verdicts halt it.
+
 ## 0.60.0
 
 **Token budget manager — the loop now knows what a goal costs.**

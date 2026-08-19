@@ -78,6 +78,32 @@ def main():
                 fails.append(f"terminal QA scene missing '{needle}': {qa_render.stdout!r}")
         if "📦" not in qa_render.stdout and "💬" not in qa_render.stdout:
             fails.append(f"terminal QA scene missing animated handoff/comment marker: {qa_render.stdout!r}")
+
+        # The parcel must actually TRAVEL. The previous check only asserted the glyph appeared,
+        # which stayed green while an operator-precedence bug pinned the handoff to one frame:
+        #   "──📦──▶" if t % 2 == 0 else "──💬──◀" if moving else "──📦──▶"
+        # parses as A if t else (B if moving else A) — identical in both branches when not moving.
+        spec = importlib.util.spec_from_file_location("orbit_statusline", SL)
+        slm = importlib.util.module_from_spec(spec)
+        sys.modules["orbit_statusline"] = slm
+        spec.loader.exec_module(slm)
+        for status, expect in (("queued", "📦"), ("changes_required", "💬")):
+            frames = {slm._handoff(status, t) for t in range(slm._TRACK)}
+            if len(frames) < slm._TRACK:
+                fails.append(f"handoff '{status}' does not traverse: only {len(frames)} distinct "
+                             f"frame(s) across {slm._TRACK} ticks — {sorted(frames)}")
+            if any(expect not in f for f in frames):
+                fails.append(f"handoff '{status}' lost its {expect} marker on some frame")
+        # Direction encodes the relay: out to the reviewer, back to the Builder with comments.
+        if not slm._handoff("queued", 0).endswith("▶"):
+            fails.append("a queued handoff must point toward the reviewer")
+        if not slm._handoff("changes_required", 0).startswith("◀"):
+            fails.append("changes_required must send the parcel BACK toward the Builder")
+        # A terminal verdict stops the motion — a spinner that never rests reads as false progress.
+        if len({slm._handoff("pass", t) for t in range(4)}) != 1:
+            fails.append("a passed review must stop the animation")
+        if len({slm._handoff("blocked", t) for t in range(4)}) != 1:
+            fails.append("a blocked review must stop the animation")
         sessions = json.load(open(os.path.join(orbit, "sessions.json")))
         if sessions.get("session-qa-123", {}).get("model") != "Opus 4.8":
             fails.append(f"statusline did not record session/model identity: {sessions}")
