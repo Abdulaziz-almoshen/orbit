@@ -34,6 +34,7 @@ to make the agent continue and produce the board.
 import json
 import importlib.util
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -209,6 +210,23 @@ def _user_memory_vigilance(orbit, route_mt):
         sys.exit(0)
 
 
+def _declared_gear(post_route):
+    """The gear this run declared, from the LAST `phase: gear` event after the route.
+
+    Reading the last one (not the first) is what makes mid-run escalation raise the bar: a run that
+    starts T1 and discovers a landmine declares T3 and is then held to the T3 spine.
+    """
+    gear = ""
+    for event in post_route:
+        if not isinstance(event, dict) or event.get("phase") != "gear":
+            continue
+        raw = str(event.get("gear") or event.get("msg") or "")
+        found = re.search(r"\bT([0-4])\b", raw)
+        if found:
+            gear = "T" + found.group(1)
+    return gear
+
+
 def _capability_enforcement(orbit, route_mt, post_route, work):
     """Require real, completed stage owners on substantial work in a strict project."""
     try:
@@ -218,7 +236,16 @@ def _capability_enforcement(orbit, route_mt, post_route, work):
             return
         if len(work) < int(contract.get("work_event_threshold", _WORK_MIN)):
             return
-        required = list(contract.get("required_for_substantial") or [])
+        # Gear-scaled spine: a T1 change should not pay the T3 spine. An UNDECLARED gear falls back
+        # to the full list — the strict default — so skipping the Gear Card is never the cheap path.
+        required = None
+        if contract.get("gear_scaled") is True:
+            gear = _declared_gear(post_route)
+            by_gear = contract.get("required_by_gear") or {}
+            if gear and gear in by_gear:
+                required = list(by_gear[gear] or [])
+        if required is None:
+            required = list(contract.get("required_for_substantial") or [])
         if _ui_project(orbit):
             required += list(contract.get("required_for_ui") or [])
         required = list(dict.fromkeys(str(role) for role in required if str(role).strip()))
@@ -245,9 +272,15 @@ def _capability_enforcement(orbit, route_mt, post_route, work):
                 }) + "\n")
         except Exception:
             pass
+        gear_note = ""
+        if contract.get("gear_scaled") is True:
+            declared = _declared_gear(post_route)
+            gear_note = (f" (gear {declared})" if declared else
+                         " (no Gear Card was declared, so the full spine applies — declare the gear "
+                         "at kickoff and a smaller gear carries a smaller mandatory set)")
         print(json.dumps({"decision": "block", "reason": (
             "[orbit] STRICT CAPABILITY CONTRACT — this run cannot finish because mandatory stage "
-            "owners were skipped: " + ", ".join(missing) + ". Dispatch each named role as an actual "
+            "owners" + gear_note + " were skipped: " + ", ".join(missing) + ". Dispatch each named role as an actual "
             "specialist and let it complete with evidence. A role mentioned in prose, silently used "
             "as a lens, or merely listed as available does NOT count. Discovery frames the bet; "
             "Business Analysis writes testable requirements; Market Research checks prior art; "

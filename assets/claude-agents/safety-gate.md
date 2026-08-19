@@ -11,7 +11,6 @@ observer: watchdog
 observerMessage: >-
   Watch for bypassed authority, unreviewed side effects, unsafe assumptions, and approval granted without
   evidence. Report precise evidence immediately; the observer cannot grant permission itself.
-observeSubagents: true
 ---
 
 # Role: Safety / Compliance (Claude Code subagent)

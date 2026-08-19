@@ -130,9 +130,21 @@ Verdict rules:
   its way to done.
 
 ## The user-model (the system's memory of the user)
-`.orbit/skills/user-model.md` is a living skill every role loads on the substantial path. The CPO
-owns it and updates it **on every verdict** — this is how iteration N+1 lands closer than N, and
-how "surprise" becomes aimed instead of random.
+`.orbit/skills/user-model.md` is the CPO's living record of the user. The CPO owns it and updates it
+**on every verdict** — this is how iteration N+1 lands closer than N, and how "surprise" becomes
+aimed instead of random.
+
+**Read discipline (v0.60.0 — this changed).** The full file is CPO-only. Every other role reads
+`.orbit/skills/user-model-digest.md`: Rules + Vocabulary whole, plus the most recent signals, hard-
+capped at `context_budget.user_model_digest_max_tokens`. Regenerate it with
+`scripts/orbit-context digest` (also run automatically by `orbit-context compact`).
+
+Why: the file grows on every verdict and never shrinks, and sub-agents have **isolated context
+windows — there is no shared prompt cache between them**. When all ten spine roles read the whole
+file, a single substantial task paid for it ten separate times, each at a fresh cache-write rate.
+The digest is the same durable content at a fraction of the cost; the Signals log is CPO working
+evidence that no other role was acting on anyway. Better still, put the two or three rules that
+actually bear on a role's question **inline in its packet** and let it read nothing.
 
 Structure:
 ```markdown

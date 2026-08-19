@@ -27,7 +27,7 @@
     "gate_failure_streak": 2
   },
 
-  "_context_budget_help": "Cheap-mode context governor. orbit-context doctor reads these thresholds before expensive loops; orbit-context compact archives old append-only logs, keeping the last N events. Token estimates are deliberately rough (bytes / token_estimate_divisor) and used as a stoplight, not billing truth.",
+  "_context_budget_help": "Cheap-mode context governor. orbit-context doctor reads these thresholds before expensive loops; orbit-context compact archives old append-only logs, keeping the last N events. Token estimates are deliberately rough (bytes / token_estimate_divisor) and used as a stoplight, not billing truth. user_model_* and skills_* were added in v0.60.0: the user-model is read on every substantial task and appended on every CPO verdict, so it was the fastest-growing file in the project and the only one the doctor could not see.",
   "context_budget": {
     "token_estimate_divisor": 4,
     "total_warn_tokens": 50000,
@@ -38,10 +38,39 @@
     "activity_fail_tokens": 50000,
     "steps_warn_tokens": 12000,
     "steps_fail_tokens": 25000,
+    "user_model_warn_tokens": 8000,
+    "user_model_fail_tokens": 16000,
+    "skills_warn_tokens": 40000,
+    "skills_fail_tokens": 80000,
     "state_keep_recent_entries": 40,
     "activity_keep_events": 500,
     "steps_keep_events": 300,
+    "user_model_keep_signals": 40,
+    "user_model_digest_max_tokens": 2500,
     "archive_dir": ".orbit/archive"
+  },
+
+  "_token_budget_help": "The per-goal allocator (.orbit/checks/token_budget.py, CLI scripts/orbit-budget). The orchestrator opens a ledger when it declares the gear, pre-flights each dispatch, and records spend — so a run's economics are inspectable in .orbit/budget.json instead of implied. per_gear caps the whole goal; allocation splits what remains after the reserve across the roles that actually run (renormalized, so a short gear's unused shares flow to the roles that remain). T4 is null = tracked, never capped. On exhaustion the loop DEGRADES rather than throwing: trim the packet, then downgrade the model, then waive the role with a record the CPO can see. Never a silent skip.",
+  "token_budget": {
+    "enabled": true,
+    "unit": "tokens",
+    "per_gear": { "T0": 15000, "T1": 60000, "T2": 200000, "T3": 600000, "T4": null },
+    "reserve_fraction": 0.15,
+    "allocation": {
+      "product-discovery": 0.08,
+      "business-analyst": 0.05,
+      "market-researcher": 0.07,
+      "planner": 0.08,
+      "designer": 0.12,
+      "builder": 0.30,
+      "safety-gate": 0.03,
+      "reviewer": 0.08,
+      "qa-engineer": 0.09,
+      "cpo": 0.07,
+      "reporter": 0.03
+    },
+    "degrade_ladder": ["trim_packet", "downgrade_model", "waive_role_with_record"],
+    "warn_at": 0.75
   },
 
   "_eval_gates_help": "Proceed only if all pass. A single failure routes a fix task into the queue; gate_failure_streak consecutive failures trips a hard stop (the loop is thrashing). Thresholds are domain-specific; fit them to your product.",
@@ -80,12 +109,40 @@
     "status_budget_lines": 20
   },
 
-  "_capability_enforcement_help": "Strict installed-project contract. For every routed task that produces substantial work, the Stop hook requires actual completed specialist runs in activity.jsonl — merely mentioning or mentally adopting a role does not count. UI projects additionally require Designer. This is intentionally sequential under Lite mode; approval is needed for wider concurrency, not for the mandatory quality stages themselves.",
+  "_capability_enforcement_help": "Strict installed-project contract. For every routed task that produces substantial work, the Stop hook requires actual completed specialist runs in activity.jsonl — merely mentioning or mentally adopting a role does not count. UI projects additionally require Designer. This is intentionally sequential under Lite mode; approval is needed for wider concurrency, not for the mandatory quality stages themselves. v0.60.0 made the spine GEAR-SCALED: required_by_gear picks the mandatory set from the declared gear, so a T1 change no longer pays the full T3 spine. required_for_substantial remains the fallback when no gear was declared — the strict default, so an undeclared gear is never the cheap path. Escalating the gear mid-run raises the requirement; the Stop hook reads the LAST gear event.",
   "capability_enforcement": {
     "enabled": true,
     "mode": "strict",
     "work_event_threshold": 3,
     "require_actual_role_events": true,
+    "gear_scaled": true,
+    "required_by_gear": {
+      "T0": [],
+      "T1": ["planner", "reviewer", "qa-engineer", "reporter"],
+      "T2": ["planner", "safety-gate", "reviewer", "qa-engineer", "cpo", "reporter"],
+      "T3": [
+        "product-discovery",
+        "business-analyst",
+        "market-researcher",
+        "planner",
+        "safety-gate",
+        "reviewer",
+        "qa-engineer",
+        "cpo",
+        "reporter"
+      ],
+      "T4": [
+        "product-discovery",
+        "business-analyst",
+        "market-researcher",
+        "planner",
+        "safety-gate",
+        "reviewer",
+        "qa-engineer",
+        "cpo",
+        "reporter"
+      ]
+    },
     "required_for_substantial": [
       "product-discovery",
       "business-analyst",

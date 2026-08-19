@@ -131,7 +131,10 @@ AMBIGUOUS_CTX = (
 
 MEMORY_CTX = (
     "[orbit] USER MEMORY: the deterministic intake has recorded this request. Before substantial "
-    "work, read .orbit/skills/user-model.md. Before delivery, review the latest request and clear "
+    "work, read .orbit/skills/user-model-digest.md (the bounded slice — Rules, Vocabulary, recent "
+    "signals; regenerate it with `scripts/orbit-context digest`). Only the CPO reads or writes the "
+    "full .orbit/skills/user-model.md, and specialist packets carry the relevant rules inline "
+    "rather than the file. Before delivery, review the latest request and clear "
     "every pending important event with .orbit/checks/user_memory.py; a stale memory checkpoint "
     "blocks CPO/Stop. Never invent a preference merely to satisfy the checkpoint."
 )

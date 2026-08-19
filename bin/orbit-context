@@ -8,6 +8,13 @@ working-memory files, activity logs, and checkpoints until a Max plan disappears
 Commands:
   orbit-context [doctor] [PROJECT_DIR]   read-only stoplight; exits 2 when over fail thresholds
   orbit-context compact [PROJECT_DIR]    archive old append-only history; backups kept, no raw delete
+  orbit-context digest [PROJECT_DIR]     regenerate .orbit/skills/user-model-digest.md (the slice
+                                         specialists read instead of the full user-model)
+
+Why the digest exists: `.orbit/skills/user-model.md` grows without bound (the CPO appends on every
+verdict). When every specialist read the whole file, a 10-role run paid for it ten times over --
+subagents have isolated context windows, so there is no shared cache between them. The digest is the
+durable part (Rules + Vocabulary + the most recent signals); the CPO still owns the full file.
 """
 from __future__ import annotations
 
@@ -30,11 +37,20 @@ DEFAULT_BUDGET = {
     "activity_fail_tokens": 50000,
     "steps_warn_tokens": 12000,
     "steps_fail_tokens": 25000,
+    "user_model_warn_tokens": 8000,
+    "user_model_fail_tokens": 16000,
+    "skills_warn_tokens": 40000,
+    "skills_fail_tokens": 80000,
     "state_keep_recent_entries": 40,
     "activity_keep_events": 500,
     "steps_keep_events": 300,
+    "user_model_keep_signals": 40,
+    "user_model_digest_max_tokens": 2500,
     "archive_dir": ".orbit/archive",
 }
+
+USER_MODEL_REL = ".orbit/skills/user-model.md"
+USER_MODEL_DIGEST_REL = ".orbit/skills/user-model-digest.md"
 
 
 @dataclass
@@ -43,6 +59,8 @@ class Item:
     rel: str
     warn_key: str
     fail_key: str
+    kind: str = "file"          # "file" | "dir" — a dir item sums every file beneath it
+    exclude: tuple = ()         # dir items: relative names to skip (avoids double counting)
     size: int = 0
     tokens: int = 0
     status: str = "OK"
@@ -52,7 +70,27 @@ ITEMS = [
     Item("STATE", ".orbit/STATE.md", "state_warn_tokens", "state_fail_tokens"),
     Item("activity", ".orbit/activity.jsonl", "activity_warn_tokens", "activity_fail_tokens"),
     Item("steps", ".orbit/steps.jsonl", "steps_warn_tokens", "steps_fail_tokens"),
+    # The user-model is read on every substantial task and the CPO appends to it on every verdict.
+    # It was invisible to this tool until v0.60.0, which is exactly how it reached 100KB unnoticed.
+    Item("user-model", USER_MODEL_REL, "user_model_warn_tokens", "user_model_fail_tokens"),
+    # Everything else under .orbit/skills/ — playbooks and generated skills. Excludes the two files
+    # already counted above so the total stays honest.
+    Item("skills", ".orbit/skills", "skills_warn_tokens", "skills_fail_tokens", kind="dir",
+         exclude=("user-model.md", "user-model-digest.md")),
 ]
+
+
+def _dir_size(path: Path, exclude: tuple) -> int:
+    if not path.is_dir():
+        return 0
+    total = 0
+    for f in path.rglob("*"):
+        try:
+            if f.is_file() and f.name not in exclude:
+                total += f.stat().st_size
+        except Exception:
+            continue
+    return total
 
 
 def _read_json(path: Path) -> dict:
@@ -81,9 +119,13 @@ def scan(root: Path) -> tuple[list[Item], int, str, dict]:
     total = 0
     worst = "OK"
     for proto in ITEMS:
-        item = Item(proto.name, proto.rel, proto.warn_key, proto.fail_key)
+        item = Item(proto.name, proto.rel, proto.warn_key, proto.fail_key,
+                    kind=proto.kind, exclude=proto.exclude)
         path = root / item.rel
-        item.size = path.stat().st_size if path.exists() else 0
+        if item.kind == "dir":
+            item.size = _dir_size(path, item.exclude)
+        else:
+            item.size = path.stat().st_size if path.exists() else 0
         item.tokens = _estimate(item.size, divisor)
         total += item.tokens
         if item.tokens >= int(budget.get(item.fail_key, 10**12)):
@@ -188,6 +230,117 @@ def _compact_state(path: Path, keep: int, arch: Path) -> int:
     return len(remove)
 
 
+def _bullets_in(lines: list[str], start: int, end: int) -> list[list[int]]:
+    """Group a section's lines into bullet blocks (a '- ' line plus its indented continuation)."""
+    blocks: list[list[int]] = []
+    cur: list[int] | None = None
+    for i in range(start + 1, end):
+        if lines[i].startswith("- "):
+            if cur:
+                blocks.append(cur)
+            cur = [i]
+        elif cur is not None and (lines[i].startswith("  ") or not lines[i].strip()):
+            cur.append(i)
+    if cur:
+        blocks.append(cur)
+    return blocks
+
+
+def _compact_user_model(path: Path, keep: int, arch: Path) -> int:
+    """Trim the user-model's Signals log, which is the only section that grows without bound.
+
+    Rules and Vocabulary are durable and never touched. Signals are documented as 'newest first',
+    so we keep the HEAD of the section — the opposite of the JSONL compactors, which keep the tail.
+    """
+    if not path.exists():
+        return 0
+    lines = path.read_text(errors="ignore").splitlines()
+    targets = [s for s in _split_sections(lines) if "signal" in s[2]]
+    if not targets:
+        return 0
+    remove: set[int] = set()
+    archived: list[str] = []
+    for start, end, _title in targets:
+        blocks = _bullets_in(lines, start, end)
+        old_blocks = blocks[keep:]                       # newest-first → drop the tail
+        if old_blocks:
+            archived.append(lines[start])
+        for block in old_blocks:
+            archived.extend(lines[i] for i in block)
+            remove.update(block)
+    if not remove:
+        return 0
+    shutil.copy2(path, arch / "user-model.md.backup")
+    (arch / "user-model.md.archived").write_text("\n".join(archived) + "\n")
+    kept = [line for i, line in enumerate(lines) if i not in remove]
+    path.write_text("\n".join(kept).rstrip() + "\n")
+    return len(remove)
+
+
+DIGEST_HEADER = (
+    "<!-- GENERATED by `orbit-context digest` — do not edit by hand. -->\n"
+    "<!-- Source of truth: .orbit/skills/user-model.md (the CPO owns it). -->\n"
+    "<!-- Specialists read THIS file. Only the CPO reads and writes the full user-model. -->\n"
+)
+
+
+def digest(root: Path, quiet: bool = False) -> int:
+    """Write the bounded slice of the user-model that specialists load.
+
+    Rules and Vocabulary are the durable, transferable part and are kept whole. Signals are the
+    CPO's working evidence; only the newest survive, and the whole file is capped by token budget.
+    """
+    src = root / USER_MODEL_REL
+    dst = root / USER_MODEL_DIGEST_REL
+    if not src.exists():
+        if not quiet:
+            print(f"orbit-context: no {USER_MODEL_REL} yet — nothing to digest")
+        return 0
+    budget = _budget(root)
+    divisor = int(budget.get("token_estimate_divisor", 4) or 4)
+    cap = int(budget.get("user_model_digest_max_tokens", 2500))
+    keep = int(budget.get("user_model_keep_signals", 40))
+
+    lines = src.read_text(errors="ignore").splitlines()
+    sections = _split_sections(lines)
+    title = lines[0] if lines and lines[0].startswith("# ") else "# User model"
+
+    out: list[str] = [title, ""]
+    for start, end, low in sections:
+        body = lines[start:end]
+        if "rule" in low or "vocabular" in low:
+            out.extend(body)                              # durable — keep whole
+        elif "signal" in low:
+            blocks = _bullets_in(lines, start, end)[:keep]
+            out.append(lines[start])
+            for block in blocks:
+                out.extend(lines[i] for i in block)
+        # any other section is CPO working material and is deliberately dropped
+        out.append("")
+
+    text = DIGEST_HEADER + "\n".join(out).rstrip() + "\n"
+    # Hard token cap: drop trailing signal bullets until it fits, so a runaway file can never
+    # reintroduce the very problem the digest exists to solve.
+    while _estimate(len(text.encode()), divisor) > cap and any(l.startswith("- ") for l in out):
+        for i in range(len(out) - 1, -1, -1):
+            if out[i].startswith("- "):
+                del out[i]
+                break
+        text = DIGEST_HEADER + "\n".join(out).rstrip() + "\n"
+
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_text(text)
+    src_tok = _estimate(src.stat().st_size, divisor)
+    dst_tok = _estimate(len(text.encode()), divisor)
+    if not quiet:
+        saved = max(0, src_tok - dst_tok)
+        print(f"Orbit user-model digest — {dst}")
+        print(f"  full:   ~{src_tok:,} tokens  {src.stat().st_size:,} bytes")
+        print(f"  digest: ~{dst_tok:,} tokens  {len(text.encode()):,} bytes  (cap {cap:,})")
+        print(f"  saved:  ~{saved:,} tokens per specialist that reads the digest instead")
+    return 0
+
+
 def compact(root: Path) -> int:
     if not (root / ".orbit").is_dir():
         print(f"orbit-context: {root} is not an Orbit project (no .orbit/)")
@@ -203,6 +356,10 @@ def compact(root: Path) -> int:
     state_removed = _compact_state(
         root / ".orbit/STATE.md", int(budget.get("state_keep_recent_entries", 40)), arch
     )
+    um_removed = _compact_user_model(
+        root / USER_MODEL_REL, int(budget.get("user_model_keep_signals", 40)), arch
+    )
+    digest(root, quiet=True)                    # keep the specialist slice in step with the source
     after_rows, after_total, after_worst, _ = scan(root)
     print(f"Orbit context compact — archive: {arch}")
     print(f"  before: {before_worst} ~{before_total:,} tokens")
@@ -210,6 +367,7 @@ def compact(root: Path) -> int:
     print(f"  activity: archived {activity_old} old event(s), kept {activity_kept}")
     print(f"  steps:    archived {steps_old} old checkpoint(s), kept {steps_kept}")
     print(f"  STATE:    archived {state_removed} old line(s) from Decision/Cycle log sections")
+    print(f"  user-model: archived {um_removed} old signal line(s); digest regenerated")
     if after_worst == "FAIL":
         print("  Still over budget: use Orbit Lite only, or manually trim large project docs before fan-out.")
         return 2
@@ -218,11 +376,15 @@ def compact(root: Path) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Orbit context budget doctor + safe compactor")
-    ap.add_argument("command", nargs="?", default="doctor", choices=("doctor", "compact"))
+    ap.add_argument("command", nargs="?", default="doctor", choices=("doctor", "compact", "digest"))
     ap.add_argument("project_dir", nargs="?", default=".")
     args = ap.parse_args(argv)
     root = Path(args.project_dir).resolve()
-    return compact(root) if args.command == "compact" else doctor(root)
+    if args.command == "compact":
+        return compact(root)
+    if args.command == "digest":
+        return digest(root)
+    return doctor(root)
 
 
 if __name__ == "__main__":

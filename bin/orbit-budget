@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+"""
+orbit-budget — open, inspect, and debit the per-goal token ledger.
+
+The orchestrator opens a ledger when it declares the gear, checks before each dispatch, and records
+spend after. Everything lands in .orbit/budget.json so the run's economics are inspectable rather
+than implied.
+
+  orbit-budget plan --gear T2 --roles planner,builder,reviewer --goal "..."   open a ledger
+  orbit-budget check --role builder --estimate 40000                          pre-flight a dispatch
+  orbit-budget spend --role builder --tokens 38000                            record actual spend
+  orbit-budget degrade --role builder --action trim_packet --reason "..."     log a ladder rung
+  orbit-budget status                                                         show the ledger
+
+`check` exits 0 when the dispatch fits and 3 when the caller must degrade — the action to take is
+on stdout either way. It never exits non-zero for "over budget" in a way that reads as an error,
+because a degrade is a normal operating mode, not a failure.
+"""
+from __future__ import annotations
+
+import argparse
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+
+def _find_orbit(start: Path) -> Path | None:
+    cur = start.resolve()
+    for _ in range(30):
+        if (cur / ".orbit").is_dir():
+            return cur / ".orbit"
+        if cur.parent == cur:
+            break
+        cur = cur.parent
+    return None
+
+
+def _load_module(orbit: Path):
+    """Prefer the project's scaffolded copy; fall back to the one shipped beside this binary."""
+    for cand in (orbit / "checks" / "token_budget.py",
+                 Path(__file__).resolve().parent.parent / "assets" / "checks" / "token_budget.py"):
+        if cand.exists():
+            spec = importlib.util.spec_from_file_location("orbit_token_budget", cand)
+            mod = importlib.util.module_from_spec(spec)
+            sys.modules["orbit_token_budget"] = mod
+            spec.loader.exec_module(mod)
+            return mod
+    return None
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description="Orbit per-goal token budget ledger")
+    ap.add_argument("command", choices=("plan", "check", "spend", "degrade", "status"))
+    ap.add_argument("--project-dir", default=".")
+    ap.add_argument("--gear", default="T2")
+    ap.add_argument("--roles", default="")
+    ap.add_argument("--goal", default="")
+    ap.add_argument("--role", default="")
+    ap.add_argument("--estimate", type=int, default=0)
+    ap.add_argument("--tokens", type=int, default=0)
+    ap.add_argument("--action", default="")
+    ap.add_argument("--reason", default="")
+    ap.add_argument("--json", action="store_true", help="machine-readable output")
+    a = ap.parse_args(argv)
+
+    orbit = _find_orbit(Path(a.project_dir))
+    if orbit is None:
+        print("orbit-budget: not an Orbit project (no .orbit/)")
+        return 1
+    tb = _load_module(orbit)
+    if tb is None:
+        print("orbit-budget: token_budget.py not found — run the scaffolder to install it")
+        return 1
+
+    if a.command == "plan":
+        roles = [r.strip() for r in a.roles.split(",") if r.strip()]
+        if not roles:
+            print("orbit-budget: --roles is required for plan")
+            return 1
+        led = tb.plan(orbit, a.gear, roles, a.goal)
+        if a.json:
+            print(json.dumps(led, indent=2))
+        else:
+            print(f"Orbit budget opened — gear {led['gear']}, goal: {led['goal'][:70] or '(unstated)'}")
+            total = led.get("total")
+            print(f"  total:   {'uncapped' if total is None else f'{total:,} tokens'}"
+                  + ("" if total is None else f"   reserve {led['reserve']:,}"))
+            for role, alloc in led["allocations"].items():
+                print(f"  {role:<20} {'uncapped' if alloc is None else f'{alloc:>8,} tok'}")
+        return 0
+
+    if a.command == "check":
+        if not a.role:
+            print("orbit-budget: --role is required for check")
+            return 1
+        res = tb.check(orbit, a.role, a.estimate)
+        if a.json:
+            print(json.dumps(res, indent=2))
+        else:
+            print(f"{res['decision'].upper()}: {res['reason']}")
+            if res["decision"] == "degrade":
+                print(f"  action: {res['action']}")
+        return 3 if res["decision"] == "degrade" else 0
+
+    if a.command == "spend":
+        if not a.role:
+            print("orbit-budget: --role is required for spend")
+            return 1
+        led = tb.spend(orbit, a.role, a.tokens)
+        if not led:
+            print("orbit-budget: no open ledger — run `orbit-budget plan` first")
+            return 1
+        print(tb.summary(led))
+        return 0
+
+    if a.command == "degrade":
+        if not a.role or not a.action:
+            print("orbit-budget: --role and --action are required for degrade")
+            return 1
+        led = tb.record_degrade(orbit, a.role, a.action, a.reason)
+        if not led:
+            print("orbit-budget: no open ledger — run `orbit-budget plan` first")
+            return 1
+        print(f"recorded: {a.role} → {a.action}")
+        print(tb.summary(led))
+        return 0
+
+    led = tb.load(orbit)
+    if not led:
+        print("orbit-budget: no ledger for this run (none opened yet)")
+        return 0
+    if a.json:
+        print(json.dumps(led, indent=2))
+        return 0
+    print(f"Orbit budget — gear {led.get('gear')}, opened {led.get('opened_at')}")
+    print(f"  {tb.summary(led)}")
+    total = led.get("total")
+    for role, alloc in (led.get("allocations") or {}).items():
+        spent = int((led.get("spent") or {}).get(role, 0))
+        if alloc is None:
+            print(f"  {role:<20} {spent:>8,} tok spent  (uncapped)")
+        else:
+            pct = int(round(100 * spent / max(1, alloc)))
+            flag = "  ⚠" if pct >= 100 else ""
+            print(f"  {role:<20} {spent:>8,} / {alloc:>8,} tok  ({pct:>3}%){flag}")
+    if total is not None:
+        print(f"  reserve used: {led.get('reserve_used', 0):,} / {led.get('reserve', 0):,}")
+    for d in led.get("degrades") or []:
+        print(f"  degrade: {d['role']} → {d['action']} — {d['reason']}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

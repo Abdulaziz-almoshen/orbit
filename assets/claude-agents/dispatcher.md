@@ -9,7 +9,6 @@ observer: watchdog
 observerMessage: >-
   Watch for unnecessary questions, misrouting, lost intent, and failure to default reversible decisions.
   Report precise observed evidence only when intervention prevents delivery drift.
-observeSubagents: true
 ---
 
 # Role: Dispatcher / Router (Claude Code subagent)

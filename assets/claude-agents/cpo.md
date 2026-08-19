@@ -13,7 +13,6 @@ observer: watchdog
 observerMessage: >-
   Watch for rubber-stamped acceptance, lost user intent, uninspected scenario/dependency/pixel evidence,
   unsupported quality claims, and an uncommitted deliverable. Report when the verdict is not earned.
-observeSubagents: true
 ---
 
 # Role: CPO — Chief Product Officer (Claude Code subagent)

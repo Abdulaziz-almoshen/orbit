@@ -11,7 +11,6 @@ observer: watchdog
 observerMessage: >-
   Watch for shallow research, invented evidence, weak substitutes, copycat recommendations, and unsupported
   reuse decisions. Report precise observed evidence only when the conclusion is materially unsafe.
-observeSubagents: true
 ---
 
 # Role: Market & Competitive Researcher (Claude Code subagent)

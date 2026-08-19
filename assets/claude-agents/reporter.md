@@ -9,7 +9,6 @@ observer: watchdog
 observerMessage: >-
   Watch for omitted failures or risks, unsupported success claims, missing commit/test evidence, and reports
   that conceal unfinished work. Report precise evidence when the handoff is misleading.
-observeSubagents: true
 ---
 
 # Role: Reporter (Claude Code subagent)

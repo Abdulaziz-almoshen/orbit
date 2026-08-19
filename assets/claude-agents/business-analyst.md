@@ -10,7 +10,6 @@ observer: watchdog
 observerMessage: >-
   Watch for missing actors, rules, edge cases, acceptance criteria, and unjustified assumptions. Report
   precise observed evidence when the analysis is too weak to support professional delivery.
-observeSubagents: true
 ---
 
 # Role: Business Analyst (Claude Code subagent)

@@ -11,7 +11,6 @@ observer: watchdog
 observerMessage: >-
   Watch this role and its descendants for shallow reasoning, missing alternatives, unsupported proof,
   stalled work, and rubber-stamped gates. Report precise observed evidence only when intervention prevents drift.
-observeSubagents: true
 ---
 
 # Role: Advisor (Opus 4.8, on demand)

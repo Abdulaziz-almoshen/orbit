@@ -64,9 +64,20 @@ Any spawned worker gets a **tiny specialist packet**:
 - exact question / verdict needed;
 - 3-8 relevant files or artifact paths max;
 - constraints and approval gates;
+- the two or three **user-model rules that bear on this question, inline** — not a pointer to the file;
 - expected output limit, normally <=500 words;
-- no full `.orbit/activity.jsonl`, no full `STATE.md`, no open-ended repo tour.
-- Plain rule: no full STATE and no full activity context in a sub-agent packet.
+- no full `.orbit/activity.jsonl`, no full `STATE.md`, no full `user-model.md`, no open-ended repo tour.
+- Plain rule: **no full STATE, no full activity, no full user-model in a sub-agent packet.**
+
+**Why the user-model is named explicitly.** Sub-agents have **isolated context windows**, so nothing
+is shared between them — not history, and *not the prompt cache*. A file every spine role reads is
+paid for once per role, each time at a fresh cache-write rate. A 100KB user-model across ten roles
+is a quarter of a million tokens spent restating the same thing. If a role genuinely needs the
+background rather than the two relevant rules, point it at
+`.orbit/skills/user-model-digest.md` — the bounded slice — never the source file.
+
+Run `scripts/orbit-context doctor` before T2+; it now also watches the user-model and
+`.orbit/skills/` total, which is how the file grew to 100KB unnoticed in the first place.
 
 The visible board should show active owner(s) and blockers. It may show dormant specialists as
 `available`, but it must not queue the whole catalog to make the run feel bigger.
@@ -183,19 +194,52 @@ engine**: the portable `loop.py` runner (checkpointing, resume, budget) or a dur
   not just chat.
 - The same visible board, persisted across sessions.
 
-## Mandatory capability spine
+## Mandatory capability spine — scaled by gear
 
-Gear controls depth and concurrency, not whether quality roles exist. Any routed task that produces
-substantial work must record actual completed owners for:
+**This changed in v0.60.0.** The spine used to be gear-independent: a T1 one-file change paid the
+same eleven-role machinery as a T3 initiative. It no longer does. The mandatory set is a function of
+the declared gear (`capability_enforcement.required_by_gear`):
 
-`Product Discovery → Business Analyst → Market Researcher → Planner → [Designer for UI] → Build →
-Safety → Reviewer → QA Engineer → CPO → Reporter`
+| Gear | Mandatory owners | Why |
+|---|---|---|
+| **T0** | none | direct answer; no substantive project work |
+| **T1** | Planner · Reviewer · QA · Reporter | small, clear, reversible — it still needs a proof bar and a verdict, not a discovery phase |
+| **T2** | + Safety · CPO | a real change: add the veto and goal-fidelity acceptance |
+| **T3 / T4** | + Product Discovery · Business Analyst · Market Researcher | breadth and ambiguity are the actual triggers for discovery and prior-art work |
+| any UI | + Designer | unchanged |
 
-Lite mode runs this spine sequentially with bounded packets. T3/T4 may fan out inside configured caps.
-A role used as an internal “lens,” mentioned in prose, or shown as dormant on the board does not
-satisfy the contract. The Stop hook reads post-route completion events and blocks missing stages.
-T0 remains direct only when no substantive project work occurs.
+**Declaring no gear costs you the full spine.** The Stop hook falls back to
+`required_for_substantial` — the complete list — whenever no Gear Card was emitted. The cheap path
+is the *declared* path, never the silent one. Escalating mid-run raises the bar: the hook reads the
+**last** `phase: gear` event, so `T1 → T3` is held to T3.
+
+The evidence for scaling rather than dropping: AgentPrune (ICLR 2025) measured **28.1–72.8% token
+reduction with a 3.5–10.8% performance gain** from pruning redundant multi-agent communication, and
+Chen et al. (NeurIPS 2024) showed accuracy over LM-call count is **non-monotonic** — it rises and
+then falls. Extra roles past the task's actual risk are not free insurance; they cost tokens and can
+cost accuracy. What has not changed: Lite mode still runs the spine **sequentially** with bounded
+packets and one active worker by default, widening only inside configured caps; and a role used as
+an internal "lens," mentioned in prose, or shown as dormant on the board still does not satisfy the
+contract. The roles that *are* required are required absolutely.
+
+## The token budget — one ledger per goal
+
+Every non-T0 run opens a ledger (`scripts/orbit-budget plan --gear <T> --roles <a,b,c>`), which
+writes `.orbit/budget.json`. The orchestrator pre-flights each dispatch against it and records spend
+after. Defaults live in `token_budget`: T1 60k · T2 200k · T3 600k · T4 uncapped, with 15% held in
+reserve and the rest split across the roles that actually run.
+
+On exhaustion the loop **degrades, it does not throw** — a thrown budget strands a loop mid-run:
+
+1. **trim_packet** — fewer files, tighter question, smaller output limit
+2. **downgrade_model** — run the role on the cheaper lane
+3. **waive_role_with_record** — skip it and write the waiver into the ledger, where the CPO gate
+   reads it and judges the deliverable knowing the run went thin. Never a silent skip.
+
+A remaining-token note is injected into a role's packet only after it crosses `warn_at` (0.75) —
+surfacing a countdown from token zero makes models wrap up prematurely.
 
 ## The one-line summary
-T0 answers; T2+ runs the complete governed spine at the depth its risk deserves; T3 investigates
-more broadly; T4 makes the mission durable and human-gated. **Smallest depth, full accountability.**
+T0 answers; T1 proves; T2 adds the veto and acceptance; T3 investigates broadly; T4 makes the
+mission durable and human-gated. **Smallest gear that proves the result, and the spine, the budget,
+and the packet all shrink with it.**

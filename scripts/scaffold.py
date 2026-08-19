@@ -52,6 +52,7 @@ MANAGED_CHECKS = {
     ".orbit/checks/learn.py":           ("checks/learn.py",           b"active-learning"),
     ".orbit/checks/orbit-stop-check.py":("checks/orbit-stop-check.py", b"observability backstop"),
     ".orbit/checks/delivery-quality-gate.py":("checks/delivery-quality-gate.py", b"delivery-quality gate"),
+    ".orbit/checks/token_budget.py":    ("checks/token_budget.py",    b"token budget allocator"),
     "scripts/orbit-dashboard":          ("orbit-dashboard",            b"orbit-dashboard"),
     "scripts/orbit-statusline":         ("orbit-statusline.py",        b"orbit-statusline"),
 }
@@ -221,6 +222,7 @@ FILE_PLAN = [
     ("lifecycle.py",     ".orbit/lifecycle.py",     None),   # mode detection + phase strip
     ("ralph_loop.sh",    "scripts/ralph_loop.sh",     0o755),
     ("orbit-worktree",   "scripts/orbit-worktree",    0o755),   # isolated worker worktree manager
+    ("orbit-budget",     "scripts/orbit-budget",      0o755),   # per-goal token ledger CLI
     ("orbit-independent-qa", "scripts/orbit-independent-qa", 0o755),  # trusted second-provider gate
     ("orbit-qa-hook",   "scripts/orbit-qa-hook",      0o755),   # opt-in native Git post-commit QA trigger
     ("orbit-memory",     "scripts/orbit-memory",      0o755),   # review/promote/forget the learning ledger
@@ -237,6 +239,7 @@ FILE_PLAN = [
     ("checks/orbit-stop-check.py", ".orbit/checks/orbit-stop-check.py", 0o755),  # Stop: observability backstop
     ("checks/delivery-quality-gate.py", ".orbit/checks/delivery-quality-gate.py", 0o755),
     ("checks/learn.py",  ".orbit/checks/learn.py",    0o755),  # the active-learning ledger helper
+    ("checks/token_budget.py", ".orbit/checks/token_budget.py", 0o755),  # per-goal token allocator
     ("qa/independent-review-request.schema.json", ".orbit/qa/independent-review-request.schema.json", None),
     ("qa/independent-review-result.schema.json", ".orbit/qa/independent-review-result.schema.json", None),
     ("qa/review-request.template.json", ".orbit/review-requests/TEMPLATE.json", None),
@@ -283,6 +286,16 @@ CLAUDE_OBSERVERS = ["watchdog"]
 OBSERVED_AGENT_NAMES = tuple(ROLES_CORE) + (
     "builder", "frontend-engineer", "backend-engineer", "mobile-developer",
     "data-engineer", "cli-engineer", "designer",
+)
+# Descendant observation (`observeSubagents: true`) makes the watchdog read the observed agent's
+# whole sub-tree. That is worth paying for where an agent MUTATES the repo or spawns its own
+# workers — drift there is expensive and hard to see. It is not worth paying for on read-only
+# advisory roles, whose output the loop reads directly anyway. Measured before this split: the
+# watchdog was 38-44% of all logged events across two live installs.
+DESCENDANT_OBSERVED_NAMES = (
+    "orchestrator", "planner", "builder", "designer",
+    "frontend-engineer", "backend-engineer", "mobile-developer",
+    "data-engineer", "cli-engineer",
 )
 OBSERVER_MESSAGE = (
     "  Watch this role and its descendants for shallow discovery, missing alternatives, untested\n"
@@ -437,7 +450,8 @@ def _ensure_agent_observers(target: Path, changed: list, warnings: list) -> None
                 addition += "\nobserver: watchdog"
                 if not re.search(r"(?m)^observerMessage\s*:", front):
                     addition += "\nobserverMessage: >-\n" + OBSERVER_MESSAGE
-            if not re.search(r"(?m)^observeSubagents\s*:", front):
+            if name in DESCENDANT_OBSERVED_NAMES and not re.search(
+                    r"(?m)^observeSubagents\s*:", front):
                 addition += "\nobserveSubagents: true"
             if not addition:
                 continue

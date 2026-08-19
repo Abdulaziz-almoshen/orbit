@@ -27,14 +27,23 @@ def main():
     observed = ("dispatcher", "orchestrator", "advisor", "product-discovery", "business-analyst",
                 "market-researcher", "planner", "builder", "designer", "safety-gate", "reviewer",
                 "qa-engineer", "cpo", "reporter")
+    # Every role is WATCHED. Only roles that mutate the repo or spawn their own workers propagate
+    # observation to DESCENDANTS — reading a whole sub-tree is the expensive part, and on read-only
+    # advisory roles it bought nothing the loop couldn't see in their output. (v0.60.0: the watchdog
+    # was 38-44% of all logged events across two live installs before this split.)
+    descendant_observed = ("orchestrator", "planner", "builder", "designer")
     for name in observed:
         fm = frontmatter(read("assets", "claude-agents", f"{name}.md"))
         if not re.search(r"(?m)^observer:\s*watchdog\s*$", fm):
             fails.append(f"{name} does not declare observer: watchdog")
         if not re.search(r"(?m)^observerMessage:\s*>-\s*$", fm):
             fails.append(f"{name} does not provide an observerMessage")
-        if not re.search(r"(?m)^observeSubagents:\s*true\s*$", fm):
-            fails.append(f"{name} does not propagate observation to descendants")
+        has_desc = bool(re.search(r"(?m)^observeSubagents:\s*true\s*$", fm))
+        if name in descendant_observed and not has_desc:
+            fails.append(f"{name} mutates or spawns and must propagate observation to descendants")
+        if name not in descendant_observed and has_desc:
+            fails.append(f"{name} is read-only advisory — descendant observation is a token tax "
+                         f"with no signal; drop observeSubagents")
     if re.search(r"(?m)^observer:", frontmatter(watchdog)):
         fails.append("watchdog declares an observer (observer chaining must stay impossible)")
     if re.search(r"(?m)^tools:", frontmatter(watchdog)):

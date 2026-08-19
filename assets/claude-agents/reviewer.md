@@ -11,7 +11,6 @@ observer: watchdog
 observerMessage: >-
   Watch for rubber-stamped review, missed regressions, unexamined security or performance risks, and proof
   claims not supported by commands. Report precise evidence when the gate is not earned.
-observeSubagents: true
 ---
 
 # Role: Reviewer / Evaluator (Claude Code subagent)

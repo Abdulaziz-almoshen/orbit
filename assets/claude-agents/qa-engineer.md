@@ -11,7 +11,6 @@ observer: watchdog
 observerMessage: >-
   Watch for rubber-stamped QA, missing scenario kinds, scope-only testing that ignores dependents,
   absent route×viewport pixel diffs, and verdicts unsupported by observed results. Report precise evidence.
-observeSubagents: true
 ---
 
 # Role: QA Engineer (Claude Code subagent)

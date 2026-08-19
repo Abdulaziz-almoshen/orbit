@@ -3,6 +3,48 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.60.0
+
+**Token budget manager — the loop now knows what a goal costs.**
+
+Orbit had a token budget in `loop.config.json` since early on. It was read only by `loop.py`, whose
+`dispatch()` is a `NotImplementedError` stub, so it enforced nothing. Measurement of two live
+installs found the real spend was somewhere else entirely.
+
+**What the measurement found.** `.orbit/skills/user-model.md` had reached **106KB** and `STATE.md`
+**100KB** on one install — and the playbook told *every* spine role to read the user-model whole.
+Sub-agents have isolated context windows, so there is no shared prompt cache between them: ten roles
+reading two unbounded files meant paying for ~52k tokens **ten separate times**, each at a fresh
+cache-write rate. Neither file had a pruning rule, and `orbit-context` — the one live budget tool —
+could not see either of them.
+
+- **The user-model is now sliced, not broadcast.** Specialists read
+  `.orbit/skills/user-model-digest.md` — Rules + Vocabulary whole, plus the newest signals, hard-
+  capped at `context_budget.user_model_digest_max_tokens` (2,500). Only the CPO touches the full
+  file. On a 400-signal user-model the digest measured **15,923 → 1,725 tokens (−89%), per role**.
+  Better still, packets now carry the two or three relevant rules inline so the role reads nothing.
+- **`orbit-context` can see the files that were growing.** New `user_model_*` and `skills_*`
+  thresholds; the doctor reports both; `compact` prunes the Signals log (newest-first, Rules and
+  Vocabulary never touched) and regenerates the digest. New `orbit-context digest` command.
+- **The capability spine is gear-scaled.** It used to be gear-independent — a T1 one-file change
+  paid the same eleven-role machinery as a T3 initiative. Now `required_by_gear` sets the mandatory
+  owners: T1 = Planner/Reviewer/QA/Reporter, T2 adds Safety + CPO, T3/T4 add the discovery trio.
+  **An undeclared gear still gets the full spine**, so skipping the Gear Card is never the cheap
+  path, and escalating mid-run raises the bar (the hook reads the *last* gear event).
+- **Descendant observation is scoped to roles that mutate or spawn** — orchestrator, planner,
+  builder, designer. The watchdog was **38–44% of all logged events** across two installs; on
+  read-only advisory roles it read a whole sub-tree to learn what their output already said.
+- **New: the per-goal ledger.** `.orbit/checks/token_budget.py` + `scripts/orbit-budget` allocate a
+  gear budget across the roles that actually run (renormalized, 15% held in reserve), pre-flight
+  each dispatch, and record spend to `.orbit/budget.json`. On exhaustion the loop **degrades rather
+  than throwing**: trim the packet → downgrade the model → waive the role *with a record the CPO
+  gate reads*. Never a silent skip. A remaining-token note reaches the model only past `warn_at`
+  (0.75) — surfacing a countdown from zero makes models wrap up prematurely.
+
+Design notes, with sources, in `references/playbooks/loop-tiers.md`. The scaling-not-dropping
+decision follows AgentPrune (ICLR 2025: 28.1–72.8% token reduction *with* a performance gain) and
+Chen et al. (NeurIPS 2024: accuracy over LM-call count is non-monotonic — it rises, then falls).
+
 ## 0.58.0
 
 **User-memory architecture with a hard delivery checkpoint.**

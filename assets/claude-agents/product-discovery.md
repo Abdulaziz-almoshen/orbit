@@ -11,7 +11,6 @@ observer: watchdog
 observerMessage: >-
   Watch for obvious or generic ideas, premature convergence, missing evidence, untested assumptions, and
   unnecessary user questions. Report precise evidence when discovery is not producing a strong bet.
-observeSubagents: true
 ---
 
 # Role: Product Discovery Manager (Claude Code subagent)
