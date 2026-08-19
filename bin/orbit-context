@@ -305,28 +305,41 @@ def digest(root: Path, quiet: bool = False) -> int:
     sections = _split_sections(lines)
     title = lines[0] if lines and lines[0].startswith("# ") else "# User model"
 
-    out: list[str] = [title, ""]
+    # Durable content first — Rules and Vocabulary are what a specialist actually acts on.
+    durable: list[str] = [title, ""]
+    signal_head = ""
+    signal_blocks: list[list[str]] = []
     for start, end, low in sections:
-        body = lines[start:end]
         if "rule" in low or "vocabular" in low:
-            out.extend(body)                              # durable — keep whole
+            durable.extend(lines[start:end])
+            durable.append("")
         elif "signal" in low:
-            blocks = _bullets_in(lines, start, end)[:keep]
-            out.append(lines[start])
-            for block in blocks:
-                out.extend(lines[i] for i in block)
+            signal_head = lines[start]
+            # Whole blocks — a signal is a bullet plus its indented continuation. Dropping the
+            # bullet line alone would leave orphaned prose that reads as fact with no attribution.
+            for block in _bullets_in(lines, start, end)[:keep]:
+                signal_blocks.append([lines[i] for i in block])
         # any other section is CPO working material and is deliberately dropped
-        out.append("")
 
-    text = DIGEST_HEADER + "\n".join(out).rstrip() + "\n"
-    # Hard token cap: drop trailing signal bullets until it fits, so a runaway file can never
-    # reintroduce the very problem the digest exists to solve.
-    while _estimate(len(text.encode()), divisor) > cap and any(l.startswith("- ") for l in out):
-        for i in range(len(out) - 1, -1, -1):
-            if out[i].startswith("- "):
-                del out[i]
-                break
-        text = DIGEST_HEADER + "\n".join(out).rstrip() + "\n"
+    def render(blocks):
+        out = list(durable)
+        if signal_head and blocks:
+            out.append(signal_head)
+            for b in blocks:
+                out.extend(b)
+        return DIGEST_HEADER + "\n".join(out).rstrip() + "\n"
+
+    text = render(signal_blocks)
+    # Token cap: drop whole signal blocks, oldest first, until it fits.
+    while signal_blocks and _estimate(len(text.encode()), divisor) > cap:
+        signal_blocks.pop()
+        text = render(signal_blocks)
+
+    # If the durable sections ALONE blow the cap, keep them — they are the part specialists must
+    # not lose — but say so loudly. A Rules section that large is a signal the CPO should be
+    # promoting clusters into their own skill files, which is the documented escape valve.
+    durable_only = _estimate(len(text.encode()), divisor)
+    over_by_durable = not signal_blocks and durable_only > cap
 
     dst.parent.mkdir(parents=True, exist_ok=True)
     dst.write_text(text)
@@ -337,7 +350,12 @@ def digest(root: Path, quiet: bool = False) -> int:
         print(f"Orbit user-model digest — {dst}")
         print(f"  full:   ~{src_tok:,} tokens  {src.stat().st_size:,} bytes")
         print(f"  digest: ~{dst_tok:,} tokens  {len(text.encode()):,} bytes  (cap {cap:,})")
+        print(f"  kept:   {len(signal_blocks)} of the newest signals")
         print(f"  saved:  ~{saved:,} tokens per specialist that reads the digest instead")
+        if over_by_durable:
+            print(f"  OVER CAP: Rules + Vocabulary alone are ~{dst_tok:,} tokens. They are kept "
+                  f"(specialists must not lose them), but the CPO should promote rule clusters "
+                  f"into their own .orbit/skills/user-<topic>.md files — see product-acceptance.md.")
     return 0
 
 

@@ -27,7 +27,11 @@ def _fat_user_model(orbit: Path, signals: int = 400) -> None:
         "## Signals (dated observations, newest first)",
     ]
     for i in range(signals, 0, -1):                    # newest first, per the documented format
-        lines.append(f"- 2026-08-{(i % 28) + 1:02d} R{i} [accepted]: signal {i} " + "padding " * 12)
+        # Real signals are CPO verdict prose: a bullet plus indented continuation lines. The
+        # single-line version hid a bug where the cap dropped bullet heads and orphaned the prose.
+        lines.append(f"- 2026-08-{(i % 28) + 1:02d} R{i} [accepted]: signal {i} " + "padding " * 8)
+        lines.append(f"  continuation line A for R{i} " + "detail " * 10)
+        lines.append(f"  continuation line B for R{i} " + "detail " * 10)
     lines += ["", "## Vocabulary", '- "ship it" → commit, push, and deploy without asking']
     (orbit / "skills").mkdir(parents=True, exist_ok=True)
     (orbit / "skills" / "user-model.md").write_text("\n".join(lines) + "\n")
@@ -72,6 +76,16 @@ def main() -> int:
                 failures.append("digest dropped the NEWEST signal (signals are newest-first)")
             if "R1 [" in text:
                 failures.append("digest kept the oldest signal — it should be capped")
+            # No orphaned continuation prose: every kept continuation must have its bullet head.
+            kept_heads = {ln.split()[2] for ln in text.splitlines()
+                          if ln.startswith("- 2026") and len(ln.split()) > 2}
+            for ln in text.splitlines():
+                if ln.startswith("  continuation line"):
+                    rid = next((w for w in ln.split() if w.startswith("R")), "")
+                    if rid and rid not in kept_heads:
+                        failures.append(f"orphaned continuation for {rid} — its bullet was dropped "
+                                        f"but its prose survived")
+                        break
 
         # --- compaction prunes signals and preserves Rules/Vocabulary ----------------------
         before = (orbit / "skills" / "user-model.md").stat().st_size
