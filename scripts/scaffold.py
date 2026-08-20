@@ -73,6 +73,9 @@ _LEGACY_OLD = {
         "39040718046c1e57aede2eab41291c874da37392507693205f80ec880cae1584",
         "92c14909470a56f2405900cdc1a1e1a414bd96326682eecacb60f088ddca16fd",
     },
+    ".orbit/checks/design-gate.py": {
+        "2f48d6d3229cc091a012034bf861c2b2e65318ec96159791ab2eb54def4a14b0",  # 0.62.0 interactive gate
+    },
     "scripts/orbit-dashboard": {
         "93fb9084f4037b2db8a47653529b4ae64629889f5679f1f6d68af162d576457c",  # 0.42.0
         "4ed87c61f0aba95ecf39ce4ee9dd36afb6aa3d50cb4c82b6ed408851f549f9e3",  # 3344f4a scene
