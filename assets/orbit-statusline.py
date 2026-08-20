@@ -355,7 +355,8 @@ def build_now_line(claude: dict, run: dict, agents: dict = None, tasks: list = N
                 run.get("active_role") or board.get("owner") or "").strip()
     if owner:
         seconds = _age_seconds((ag or {}).get("started_at") or run.get("last_ts"))
-        elapsed = _dur(seconds) if seconds is not None and seconds >= 5 else ""
+        # <5s flickers; >24h is a stale record, not a ten-day-running agent — both stay silent
+        elapsed = _dur(seconds) if seconds is not None and 5 <= seconds < 86400 else ""
         seg.append(_c("36", (owner + (f" {elapsed}" if elapsed else ""))[:24]))
 
     envelope = board.get("token_budget") if isinstance(board.get("token_budget"), dict) else {}
