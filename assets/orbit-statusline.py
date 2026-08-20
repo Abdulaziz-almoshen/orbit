@@ -228,7 +228,7 @@ def build_handoff_line(qa: dict, now: float = None) -> str:
 
 
 def build_line(claude: dict, run: dict, agents: dict = None, qa: dict = None,
-               tasks: list = None) -> str:
+               tasks: list = None, indent: bool = False) -> str:
     seg = []
     blocked = run.get("blocked_question")
     if blocked:
@@ -268,7 +268,80 @@ def build_line(claude: dict, run: dict, agents: dict = None, qa: dict = None,
     if isinstance(cost, (int, float)):
         seg.append(f"${cost:.2f}")
 
-    return "🛰 " + " · ".join(seg) if seg else ""
+    prefix = "   " if indent else "🛰 "
+    return prefix + " · ".join(seg) if seg else ""
+
+
+def build_goal_line(run: dict, active_goal: dict = None, budget: dict = None) -> str:
+    run_goal = str(run.get("goal") or "").strip()
+    budget_goal = str((budget or {}).get("goal") or "").strip()
+    goal = str((active_goal or {}).get("goal") or run_goal or budget_goal).strip()
+    if not goal:
+        return ""
+    goal = " ".join(goal.split())
+    if len(goal) > 96:
+        goal = goal[:95] + "…"
+    gear = str((budget or {}).get("gear") or (active_goal or {}).get("gear") or "").strip()
+    drift = bool(run_goal and budget_goal and " ".join(run_goal.lower().split()) !=
+                 " ".join(budget_goal.lower().split()))
+    return f"🛰 GOAL · {goal}" + (f" · {gear}" if gear else "") + (" · ⚠ ALIGN" if drift else "")
+
+
+def build_queue_line(tasks: list, budget: dict = None) -> str:
+    open_tasks = [t for t in (tasks or []) if isinstance(t, dict) and
+                  str(t.get("status") or "").lower() not in ("done", "completed", "skipped")]
+    if not open_tasks and not budget:
+        return ""
+    parts = []
+    for index, task in enumerate(open_tasks[:2]):
+        label = " ".join(str(task.get("title") or task.get("task") or task.get("id") or "task").split())
+        if len(label) > 46:
+            label = label[:45] + "…"
+        owner = str(task.get("owner") or "").replace("-", " ")
+        parts.append(("NOW" if index == 0 else "NEXT") + f" {task.get('id', '')} {label}".rstrip()
+                     + (f" [{owner}]" if owner else ""))
+    if len(open_tasks) > 2:
+        parts.append(f"+{len(open_tasks) - 2} queued")
+    total = (budget or {}).get("total")
+    if isinstance(total, int) and total > 0:
+        spent_map = (budget or {}).get("spent") or {}
+        parent = (budget or {}).get("parent_usage") or {}
+        spent = sum(int(v or 0) for v in spent_map.values())
+        spent += sum(int(parent.get(k, 0) or 0) for k in
+                     ("input_tokens", "output_tokens", "cache_creation_input_tokens"))
+        weight = max(0.0, min(1.0, float((budget or {}).get("cache_read_weight", 0.10) or 0.0)))
+        spent += int(round(int(parent.get("cache_read_input_tokens", 0) or 0) * weight))
+        pct = round(100 * spent / total)
+        gear = str((budget or {}).get("gear") or "")
+        pressure = " → auto-resize" if pct > 100 and gear != "T4" else ""
+        parts.append(f"budget {gear + ' ' if gear else ''}{pct}%{pressure}")
+    return "   " + " · ".join(parts) if parts else ""
+
+
+def build_pipeline_line(tasks: list) -> str:
+    stages = [
+        ("PLAN", {"product-discovery", "business-analyst", "market-researcher", "planner"}),
+        ("BUILD", {"designer", "builder", "frontend-engineer", "backend-engineer",
+                   "mobile-developer", "data-engineer", "cli-engineer"}),
+        ("SAFE", {"safety-gate"}), ("REVIEW", {"reviewer"}),
+        ("QA", {"qa-engineer"}), ("CPO", {"cpo"}), ("REPORT", {"reporter"}),
+    ]
+    rendered = []
+    for label, owners in stages:
+        relevant = [t for t in (tasks or []) if isinstance(t, dict) and str(t.get("owner") or "") in owners]
+        states = {str(t.get("status") or "").lower() for t in relevant}
+        if not relevant:
+            mark = "·"
+        elif states & {"active", "in_progress"}:
+            mark = "▸"
+        elif "blocked" in states or "failed" in states:
+            mark = "!"
+        elif states <= {"done", "completed", "skipped"}:
+            mark = "✓"
+        else:
+            mark = "○"
+        rendered.append(f"{mark}{label}")
+    return "   " + "  ".join(rendered) + " · 👁 observer"
 
 
 def main():
@@ -304,13 +377,23 @@ def main():
             tasks = []
     except Exception:
         tasks = []
+    active_goal = _read_json(orbit / "active-goal.json", {}) if orbit else {}
+    budget = _read_json(orbit / "budget.json", {}) if orbit else {}
     try:
         _record_session(orbit, claude)
     except Exception:
         pass
     try:
         qa = _qa_state(orbit)
-        print(build_line(claude, run, agents, qa, tasks))
+        goal_line = build_goal_line(run, active_goal, budget)
+        if goal_line:
+            print(goal_line)
+        print(build_line(claude, run, agents, qa, tasks, indent=bool(goal_line)))
+        queue = build_queue_line(tasks, budget)
+        if queue:
+            print(queue)
+        if tasks:
+            print(build_pipeline_line(tasks))
         handoff = build_handoff_line(qa)
         if handoff:
             print(handoff)

@@ -86,6 +86,7 @@ _LEGACY_OLD = {
         "00fbea070a9633c2630fc3da20706ad621c05ee6fb0087720e887d40a40e64dd",  # 0.45.0 session identity
         "812c44c72001f4460b825a9bdb8bcc6a0059719e58f0ae74c863cca30d499cb3",  # 0.62.0 static handoff
         "623da7505f26d405e496a68eac43254ecb17f4fb370414036dc0efa52a23a80e",  # 0.65.0 compact board
+        "4f8d6ede58670484da4095b4974667c39a82082afaa17686219585901297b740",  # 0.66.2 two-line board
     },
 }
 

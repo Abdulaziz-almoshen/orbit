@@ -195,21 +195,31 @@ def main():
                          "prompt": "status?", "cwd": str(project)})
         if json.loads((orbit / "run.json").read_text()).get("blocked_question") is not None:
             fails.append("trusted hook did not clear stale user-input state")
-        if (orbit / ".last-task-route").exists():
-            fails.append("question turn retained an old task Stop-gate marker")
+        if (orbit / ".last-task-route").exists() or not (orbit / ".last-task-route.suspended").exists():
+            fails.append("question turn did not suspend the old task Stop-gate marker")
 
         # Slash maintenance emits no new route event, so the trusted hook itself must retire the
         # previous task marker. Otherwise `/orbit` refresh gets judged as a delivery against whatever
         # commit a parallel session most recently created.
+        (orbit / ".last-task-route.suspended").unlink(missing_ok=True)
         (orbit / ".last-task-route").write_text("old-task")
         before = json.loads((orbit / "budget.json").read_text())
         invoke(project, {"hook_event_name": "UserPromptSubmit", "session_id": "upgrade-session",
                          "prompt": "/orbit", "cwd": str(project)})
         after = json.loads((orbit / "budget.json").read_text())
-        if (orbit / ".last-task-route").exists():
-            fails.append("/orbit maintenance retained an old task Stop-gate marker")
+        if (orbit / ".last-task-route").exists() or not (orbit / ".last-task-route.suspended").exists():
+            fails.append("/orbit maintenance did not turn-scope the old task Stop-gate marker")
         if after.get("goal_hash") != before.get("goal_hash") or after.get("spent") != before.get("spent"):
             fails.append("/orbit maintenance reopened or mutated the product-goal ledger")
+
+        # The next real task receives a fresh marker and retires only the suspended legacy marker.
+        with (orbit / "activity.jsonl").open("a") as stream:
+            stream.write(json.dumps({"phase": "route", "status": "start", "msg": "routing: task"}) + "\n")
+        (orbit / ".last-task-route").write_text("new-task")
+        invoke(project, {"hook_event_name": "UserPromptSubmit", "session_id": "upgrade-session",
+                         "prompt": "finish the active goal", "cwd": str(project)})
+        if not (orbit / ".last-task-route").exists() or (orbit / ".last-task-route.suspended").exists():
+            fails.append("a real task did not restore continuous delivery-gate ownership")
 
     # Root model usage shares the same ceiling and repeated hooks do not double count it.
     with tempfile.TemporaryDirectory() as td:

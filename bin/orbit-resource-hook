@@ -183,8 +183,27 @@ def _latest_route(orbit: Path) -> dict:
     return {}
 
 
+def _suspend_task_route(orbit: Path) -> None:
+    """Hide a task marker from this turn's legacy Stop hook without forgetting the active goal."""
+    marker = orbit / ".last-task-route"
+    suspended = orbit / ".last-task-route.suspended"
+    if marker.exists():
+        try:
+            os.replace(marker, suspended)
+        except Exception:
+            pass
+
+
+def _resume_task_route(orbit: Path) -> None:
+    """A newly routed task owns the marker; discard any older turn-scoped suspension."""
+    marker = orbit / ".last-task-route"
+    suspended = orbit / ".last-task-route.suspended"
+    if marker.exists():
+        suspended.unlink(missing_ok=True)
+
+
 def _acknowledge_user_input(orbit: Path, maintenance: bool = False) -> None:
-    """Clear stale human-block state; question turns cannot replay an older task's Stop gates."""
+    """Clear stale INPUT while preserving the active goal across non-delivery turns."""
     run_path = orbit / "run.json"
     run = _read_json(run_path)
     if isinstance(run, dict) and run.get("blocked_question"):
@@ -195,7 +214,9 @@ def _acknowledge_user_input(orbit: Path, maintenance: bool = False) -> None:
         os.replace(tmp, run_path)
     latest = _latest_route(orbit)
     if maintenance or (latest and latest.get("status") != "start"):
-        (orbit / ".last-task-route").unlink(missing_ok=True)
+        _suspend_task_route(orbit)
+    elif latest and latest.get("status") == "start":
+        _resume_task_route(orbit)
 
 
 def _restore_context(orbit: Path) -> None:

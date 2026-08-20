@@ -49,9 +49,29 @@ def main():
     for needle in ("BUILD", "Implement checkout", "builder", "5/9", "$0.42"):
         if needle not in line:
             fails.append(f"full status line missing '{needle}': {line!r}")
-    for noise in ("ctx", "cache", "conf", "\n"):
+    for noise in ("ctx", "cache", "conf"):
         if noise in line:
-            fails.append(f"stable status line contains noisy/multiline '{noise}': {line!r}")
+            fails.append(f"stable status line contains noisy '{noise}': {line!r}")
+
+    visible, _ = render(full, {**run, "goal": "Ship the checkout safely"}, [
+        {"id": "U1", "title": "Plan checkout", "owner": "planner", "status": "done"},
+        {"id": "U2", "title": "Implement checkout", "owner": "builder", "status": "in_progress"},
+        {"id": "U3", "title": "Regression QA", "owner": "qa-engineer", "status": "pending"},
+        {"id": "U4", "title": "CPO verdict", "owner": "cpo", "status": "pending"},
+    ])
+    for needle in ("GOAL · Ship the checkout safely", "NOW U2 Implement checkout", "NEXT U3 Regression QA",
+                   "✓PLAN", "▸BUILD", "○QA", "○CPO", "observer"):
+        if needle not in visible:
+            fails.append(f"persistent goal/queue/pipeline visibility missing '{needle}': {visible!r}")
+    with tempfile.TemporaryDirectory() as d:
+        os.makedirs(os.path.join(d, ".orbit"))
+        json.dump({"goal": "Goal A"}, open(os.path.join(d, ".orbit", "run.json"), "w"))
+        json.dump({"goal": "Goal B", "gear": "T1", "total": 25000},
+                  open(os.path.join(d, ".orbit", "budget.json"), "w"))
+        drift = subprocess.run([sys.executable, SL], input=json.dumps({"cwd": d}),
+                               capture_output=True, text=True, timeout=10).stdout
+        if "⚠ ALIGN" not in drift:
+            fails.append("goal/budget drift was hidden instead of surfaced for reconciliation")
 
     blocked_run = dict(run); blocked_run["blocked_question"] = "Choose path"
     bl, _ = render(full, blocked_run)
@@ -98,7 +118,7 @@ def main():
                                    capture_output=True, text=True, timeout=10)
         rendered = qa_render.stdout.strip()
         lines = rendered.splitlines()
-        if len(lines) != 2 or "Claude" not in lines[1] or "Codex QA" not in lines[1]:
+        if len(lines) < 2 or "Claude" not in lines[-1] or "Codex QA" not in lines[-1]:
             fails.append(f"QA must render one explicit Claude/Codex handoff row: {rendered!r}")
         if "📦" not in rendered or "REVIEW" not in rendered or "5.6 Sol" not in rendered:
             fails.append(f"reviewing must show a Claude-to-Codex code/content review: {rendered!r}")
