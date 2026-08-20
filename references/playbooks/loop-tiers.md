@@ -39,6 +39,11 @@ Orbit runs as a two-lane loop:
 | **Executor** | `Sonnet 5` (`model_policy.executor.model = sonnet`) | every turn / normal loop work | plan, build, verify, update memory |
 | **Advisor** | `Opus 4.8` (`model_policy.advisor.model = opus`) | on demand only | one compact recommendation on a costly decision |
 
+Independent OpenAI QA has its own deterministic route: T1 → GPT-5.6 Luna/low, T2 → Terra/medium,
+and T3/T4 → Sol/high. The committed acceptance manifest binds the gear and risk flags; deterministic
+goal/path signals can only raise the floor. Prior failed exact-commit QA promotes the next attempt.
+Custom adapters are never rewritten, and a missing selected model blocks instead of silently falling back.
+
 The Advisor is **not** the default reviewer and not a hidden fleet. Use it only for: architecture forks,
 safety/compliance uncertainty, repeated gate failure, a decision that is expensive to get wrong, or an
 explicit user request for deep judgment. One Advisor call per cycle by default; log the `advisor_reason`,

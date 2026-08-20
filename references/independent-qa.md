@@ -15,9 +15,10 @@ Reviewer, and QA gates. This is a pipeline stage, not another implementation wor
 5. `scripts/orbit-independent-qa gate ...` is the mechanical release check. Request edits change the hash
    and invalidate earlier approval.
 
-The stock adapter uses `codex exec --model gpt-5.6-sol` at medium reasoning: Orbit chooses the OpenAI
-model explicitly instead of inheriting a mutable local default. `provider.argv` remains an argv-array
-contract and can point to another model/reviewer that writes the result schema. Orbit never uses a shell.
+The stock adapter uses an Orbit-managed `codex exec --model` route: T1 → GPT-5.6 Luna/low, T2 →
+Terra/medium, and T3/T4 → Sol/high. Risk floors can only raise that route, and a prior failed review
+promotes the next attempt. The committed request binds `orbit_gear` and `risk_flags`; legacy requests
+without them retain Sol/medium. Custom adapters are never rewritten at runtime. Orbit never uses a shell.
 
 At install, `bin/orbit-qa-configure` detects runnable Codex/Claude CLIs and stores the one-time default
 under `$ORBIT_HOME/qa.json`. Choices are `codex`, `claude`, `both`, or `later`. A project receives only

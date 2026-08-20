@@ -40,7 +40,9 @@ sliced and sequenced so the build team can execute it cleanly and prove each ste
    the market verdict? Gaps → back to discovery/research; otherwise hand off.
 5. When `loop.config.json → independent_qa.enabled` is true, create the acceptance manifest **before
    implementation** from `.orbit/review-requests/TEMPLATE.json`: record the baseline commit, measurable
-   criteria, proof expectations, and project rubric files. It is inactive until the founder/authorized
+   criteria, proof expectations, project rubric files, declared `orbit_gear`, and evidence-based
+   `risk_flags`. These fields deterministically route Codex QA; never lower the gear or omit a known
+   risk to obtain a cheaper model. It is inactive until the founder/authorized
    approver sets the `armed` record; do not let the Builder rewrite an armed manifest.
 
 ## Outputs

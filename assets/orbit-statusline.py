@@ -119,13 +119,14 @@ def _qa_state(orbit: Path) -> dict:
         control = {}
     exact = bool(head and control.get("target_commit") == head)
     adapters = pcfg.get("adapters") if isinstance(pcfg.get("adapters"), dict) else {}
+    routed = isinstance(qa.get("codex_model_router"), dict) and qa["codex_model_router"].get("enabled") is True
 
     def providers_with_models(states):
         enriched = {}
         for name, value in states.items():
             item = dict(value) if isinstance(value, dict) else {"status": "queued"}
             adapter = adapters.get(name) if isinstance(adapters.get(name), dict) else {}
-            if adapter.get("model") and not item.get("model"):
+            if adapter.get("model") and not item.get("model") and not (routed and name == "codex"):
                 item["model"] = adapter["model"]
             enriched[name] = item
         return enriched

@@ -60,6 +60,12 @@ def validate_request(request: dict) -> None:
     _safe_id(str(request["id"]))
     if not str(request["goal"]).strip():
         raise QAError("review request goal is empty")
+    gear = request.get("orbit_gear")
+    if gear is not None and not re.fullmatch(r"T[0-9]+", str(gear).upper()):
+        raise QAError("orbit_gear must be T0, T1, T2, ...")
+    risk_flags = request.get("risk_flags", [])
+    if not isinstance(risk_flags, list) or any(not isinstance(x, str) or not x.strip() for x in risk_flags):
+        raise QAError("risk_flags must be a list of non-empty strings")
     criteria = request["acceptance_criteria"]
     if not isinstance(criteria, list) or not criteria:
         raise QAError("acceptance_criteria must be a non-empty list")
@@ -225,6 +231,7 @@ def _publish_report_state(repo: Path, report: dict, gate: dict, authoritative: P
         "verdict": result.get("verdict"),
         "score": result.get("score"),
         "providers": providers,
+        "provider_routes": report.get("provider_routes", {}),
         "reason": gate.get("reason", ""),
         "authoritative_record": str(authoritative),
         "completed_at": report.get("generated_at"),
@@ -323,6 +330,131 @@ def _provider_specs(qa: dict) -> list[dict]:
     return specs
 
 
+MODEL_RANK = {"gpt-5.6-luna": 0, "gpt-5.6-terra": 1, "gpt-5.6-sol": 2}
+EFFORT_RANK = {"low": 0, "medium": 1, "high": 2, "xhigh": 3}
+
+
+def _route_floor(route: dict, floor: dict) -> dict:
+    """Raise a route to a risk floor; never lower either model or reasoning."""
+    current_model = str(route.get("model") or "")
+    floor_model = str(floor.get("model") or current_model)
+    model = floor_model if MODEL_RANK.get(floor_model, 99) > MODEL_RANK.get(current_model, -1) else current_model
+    current_effort = str(route.get("reasoning_effort") or "medium")
+    floor_effort = str(floor.get("reasoning_effort") or current_effort)
+    effort = floor_effort if EFFORT_RANK.get(floor_effort, 99) > EFFORT_RANK.get(current_effort, -1) else current_effort
+    return {**route, "model": model, "reasoning_effort": effort}
+
+
+def _codex_route(request: dict, qa: dict, prior_failures: int = 0) -> dict:
+    """Deterministic gear/risk router. Its inputs are bound into the committed request hash."""
+    router = qa.get("codex_model_router", {}) or {}
+    legacy = dict(router.get("legacy_default") or {"model": "gpt-5.6-sol", "reasoning_effort": "medium"})
+    raw_gear = str(request.get("orbit_gear") or "").upper()
+    if not raw_gear:
+        route = legacy
+        normalized = "legacy"
+        reasons = ["legacy request without orbit_gear"]
+    else:
+        number = int(raw_gear[1:])
+        normalized = "T1" if number <= 1 else "T2" if number == 2 else "T3" if number == 3 else "T4"
+        route = dict((router.get("by_gear") or {}).get(normalized) or legacy)
+        reasons = [f"{raw_gear} normalized to {normalized}"]
+    flags = sorted({str(x).strip().lower() for x in request.get("risk_flags", []) if str(x).strip()})
+    sol = set(router.get("sol_floor_risks") or [])
+    terra = set(router.get("terra_floor_risks") or [])
+    sol_hits = sorted(sol.intersection(flags))
+    terra_hits = sorted(terra.intersection(flags))
+    if sol_hits:
+        route = _route_floor(route, {"model": "gpt-5.6-sol", "reasoning_effort": "high"})
+        reasons.append("Sol risk floor: " + ", ".join(sol_hits))
+    elif terra_hits:
+        route = _route_floor(route, {"model": "gpt-5.6-terra", "reasoning_effort": "medium"})
+        reasons.append("Terra risk floor: " + ", ".join(terra_hits))
+    promotions = 0
+    if router.get("promote_after_failed_review") is True:
+        for _ in range(max(0, prior_failures)):
+            current = str(route.get("model"))
+            floor = ({"model": "gpt-5.6-terra", "reasoning_effort": "medium"}
+                     if current == "gpt-5.6-luna" else
+                     {"model": "gpt-5.6-sol", "reasoning_effort": "high"})
+            raised = _route_floor(route, floor)
+            if raised != route:
+                promotions += 1
+            route = raised
+    if promotions:
+        reasons.append(f"promoted after {prior_failures} failed review(s)")
+    return {"gear": normalized, "risk_flags": flags, "prior_failures": prior_failures,
+            "model": route.get("model"), "reasoning_effort": route.get("reasoning_effort"),
+            "reason": "; ".join(reasons)}
+
+
+def _previous_failed_reviews(repo: Path, request_hash: str, commit: str) -> int:
+    """Count prior failed exact commits for this acceptance manifest from the trusted control plane."""
+    path = _control_root(repo) / "events.jsonl"
+    try:
+        raw = path.read_text(encoding="utf-8")[-2_000_000:]
+    except Exception:
+        return 0
+    failed = set()
+    for line in raw.splitlines():
+        try:
+            event = json.loads(line)
+        except Exception:
+            continue
+        target = str(event.get("target_commit") or "")
+        if (event.get("request_sha256") == request_hash and target and target != commit
+                and event.get("status") in {"changes_required", "blocked", "error"}):
+            failed.add(target)
+    return len(failed)
+
+
+def _automatic_risk_flags(request: dict, changed_paths: list[str]) -> list[str]:
+    """Conservative, deterministic risk evidence; it may raise a route but can never lower one."""
+    criteria = " ".join(str(x.get("text") or "") for x in request.get("acceptance_criteria", [])
+                        if isinstance(x, dict))
+    evidence = " ".join([str(request.get("goal") or ""), criteria,
+                         " ".join(str(x) for x in request.get("rubric_files", [])),
+                         " ".join(changed_paths)]).lower()
+    signals = {
+        "security": ("security", "vulnerability", "csrf", "xss", "encryption", "secret"),
+        "auth": ("auth", "login", "oauth", "permission", "access-control", "rbac"),
+        "payments": ("payment", "billing", "stripe", "checkout", "invoice"),
+        "privacy": ("privacy", "personal-data", "pii", "consent", "retention"),
+        "compliance": ("compliance", "regulated", "pdpl", "gdpr", "hipaa"),
+        "production_migration": ("migration", "migrate", "schema.sql", "alembic", "prisma/migrations"),
+        "money_at_scale": ("money", "ledger", "payout", "settlement", "wallet"),
+        "design": ("frontend", "ui/", "components/", ".css", "design"),
+        "brand": ("brand", "marketing", "landing-page", "landing_page"),
+        "content": ("content", "copy", "prompt", "localization", "i18n"),
+        "arabic_rtl": ("arabic", "rtl", "ar.json", "/ar/"),
+    }
+    return sorted(flag for flag, needles in signals.items() if any(needle in evidence for needle in needles))
+
+
+def _apply_codex_route(spec: dict, route: dict) -> dict:
+    """Override only Orbit's stock adapter. User-defined adapters remain exactly user-defined."""
+    if spec.get("name") != "codex" or spec.get("orbit_managed_model") is not True:
+        return spec
+    command = list(spec.get("argv") or [])
+    model = str(route.get("model") or spec.get("model") or "gpt-5.6-sol")
+    effort = str(route.get("reasoning_effort") or spec.get("reasoning_effort") or "medium")
+    if "--model" in command and command.index("--model") + 1 < len(command):
+        command[command.index("--model") + 1] = model
+    else:
+        command[2:2] = ["--model", model]
+    effort_value = f'model_reasoning_effort="{effort}"'
+    replaced = False
+    for idx, value in enumerate(command):
+        if str(value).startswith("model_reasoning_effort="):
+            command[idx] = effort_value
+            replaced = True
+            break
+    if not replaced:
+        command[2:2] = ["-c", effort_value]
+    return {**spec, "argv": command, "model": model, "reasoning_effort": effort,
+            "route_reason": route.get("reason", "")}
+
+
 def _decode_provider_output(spec: dict, proc: subprocess.CompletedProcess, raw_output: Path) -> dict:
     if spec.get("output") == "stdout_json":
         try:
@@ -401,7 +533,17 @@ def run_review(repo: Path, request_path: Path, ref: str) -> dict:
     max_rounds = int(qa.get("max_rounds", 3))
     if len(rounds) >= max_rounds:
         raise QAError(f"independent QA max_rounds ({max_rounds}) reached")
-    providers = _provider_specs(qa)
+    prior_failures = _previous_failed_reviews(repo, request_hash, commit)
+    changed_paths = _git(repo, "diff", "--name-only", f"{baseline}..{commit}").splitlines()
+    detected_risks = _automatic_risk_flags(request, changed_paths)
+    routed_request = dict(request)
+    routed_request["risk_flags"] = sorted(set(request.get("risk_flags", [])).union(detected_risks))
+    codex_route = _codex_route(routed_request, qa, prior_failures)
+    codex_route["declared_risk_flags"] = sorted(set(request.get("risk_flags", [])))
+    codex_route["detected_risk_flags"] = detected_risks
+    providers = [_apply_codex_route(spec, codex_route) for spec in _provider_specs(qa)]
+    provider_routes = {"codex": codex_route} if any(
+        spec.get("name") == "codex" and spec.get("orbit_managed_model") is True for spec in providers) else {}
 
     round_no = len(rounds) + 1
     provider_name = "+".join(x.get("name") or qa.get("provider", {}).get("name") or "command"
@@ -417,6 +559,7 @@ def run_review(repo: Path, request_path: Path, ref: str) -> dict:
         "request_id": request["id"], "request_sha256": request_hash,
         "target_commit": commit, "baseline_commit": baseline, "round": round_no,
         "provider": provider_name,
+        "provider_routes": provider_routes,
         "providers": provider_states,
         "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     })
@@ -444,6 +587,7 @@ def run_review(repo: Path, request_path: Path, ref: str) -> dict:
                     "request_id": request["id"], "request_sha256": request_hash,
                     "target_commit": commit, "baseline_commit": baseline, "round": round_no,
                     "provider": provider_name, "providers": provider_states,
+                    "provider_routes": provider_routes,
                     "reason": f"{one_name} is reviewing the exact committed snapshot",
                     "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 })
@@ -457,8 +601,10 @@ def run_review(repo: Path, request_path: Path, ref: str) -> dict:
                     provider_states[one_name] = {"status": "error", "reason": proc.stderr[-1000:]}
                     _write_pipeline_state(repo, {
                         "stage": "independent_qa", "status": "error", "request_id": request["id"],
-                        "target_commit": commit, "round": round_no, "provider": provider_name,
+                        "request_sha256": request_hash, "target_commit": commit,
+                        "baseline_commit": baseline, "round": round_no, "provider": provider_name,
                         "providers": provider_states,
+                        "provider_routes": provider_routes,
                         "reason": f"{one_name} failed ({proc.returncode}): {proc.stderr[-1000:]}",
                     })
                     raise QAError(f"review provider {one_name} failed ({proc.returncode}): {proc.stderr[-2000:]}")
@@ -474,6 +620,7 @@ def run_review(repo: Path, request_path: Path, ref: str) -> dict:
                     "request_id": request["id"], "request_sha256": request_hash,
                     "target_commit": commit, "baseline_commit": baseline, "round": round_no,
                     "provider": provider_name, "providers": provider_states,
+                    "provider_routes": provider_routes,
                     "reason": f"{one_name} finished; waiting for remaining reviewers",
                 })
                 provider_results.append((one_name, one))
@@ -486,6 +633,7 @@ def run_review(repo: Path, request_path: Path, ref: str) -> dict:
     envelope = {"schema_version": 1, "request_id": request["id"], "request_sha256": request_hash,
                 "baseline_commit": baseline, "target_commit": commit, "round": round_no,
                 "provider": provider_name,
+                "provider_routes": provider_routes,
                 "provider_models": {str(spec.get("name")): spec.get("model") for spec in providers
                                     if spec.get("name") and spec.get("model")},
                 "provider_results": {name: value for name, value in provider_results},

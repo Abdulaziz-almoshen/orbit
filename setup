@@ -88,7 +88,7 @@ if [ ! -f "$QA_PREF" ]; then
   if [ -z "$QA_PROVIDER" ] && [ -t 0 ]; then
     if [ "$CODEX_OK" = 1 ]; then
       printf '\nIndependent QA reviewer (Codex detected):\n'
-      printf '  1) Codex — OpenAI GPT-5.6 Sol independent QA (recommended)\n  2) Claude — isolated internal reviewer\n  3) Both\n  4) Configure later\nChoice [1]: '
+      printf '  1) Codex — OpenAI QA, routed Luna/Terra/Sol by difficulty (recommended)\n  2) Claude — isolated internal reviewer\n  3) Both\n  4) Configure later\nChoice [1]: '
       read -r _qa; case "${_qa:-1}" in 1) QA_PROVIDER=codex;; 2) QA_PROVIDER=claude;; 3) QA_PROVIDER=both;; *) QA_PROVIDER=later;; esac
     else
       printf '\nCodex was not detected. Orbit can use isolated Claude QA.\nEnable Claude QA? [Y/n] '

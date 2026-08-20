@@ -2,12 +2,14 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Orbit Independent Review Request",
   "type": "object",
-  "required": ["schema_version", "id", "goal", "baseline_commit", "acceptance_criteria", "armed"],
+  "required": ["schema_version", "id", "goal", "baseline_commit", "orbit_gear", "risk_flags", "acceptance_criteria", "armed"],
   "properties": {
     "schema_version": { "const": 1 },
     "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$" },
     "goal": { "type": "string", "minLength": 1 },
     "baseline_commit": { "type": "string", "minLength": 7 },
+    "orbit_gear": { "type": "string", "pattern": "^T[0-9]+$" },
+    "risk_flags": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
     "scope": { "type": "object" },
     "rubric_files": { "type": "array", "items": { "type": "string" } },
     "acceptance_criteria": {

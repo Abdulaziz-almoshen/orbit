@@ -298,6 +298,19 @@
     "min_score": 8.5,
     "max_rounds": 3,
     "timeout_seconds": 900,
+    "codex_model_router": {
+      "enabled": true,
+      "legacy_default": { "model": "gpt-5.6-sol", "reasoning_effort": "medium" },
+      "by_gear": {
+        "T1": { "model": "gpt-5.6-luna", "reasoning_effort": "low" },
+        "T2": { "model": "gpt-5.6-terra", "reasoning_effort": "medium" },
+        "T3": { "model": "gpt-5.6-sol", "reasoning_effort": "high" },
+        "T4": { "model": "gpt-5.6-sol", "reasoning_effort": "high" }
+      },
+      "sol_floor_risks": ["security", "auth", "payments", "privacy", "compliance", "destructive_migration", "production_migration", "money_at_scale"],
+      "terra_floor_risks": ["design", "brand", "content", "arabic_rtl"],
+      "promote_after_failed_review": true
+    },
     "external_export": {
       "approved": false,
       "approved_by": "",
@@ -309,6 +322,7 @@
       "fallback_requires_human_approval": true,
       "adapters": {
         "codex": {
+          "orbit_managed_model": true,
           "model": "gpt-5.6-sol",
           "reasoning_effort": "medium",
           "argv": ["codex", "exec", "--model", "gpt-5.6-sol", "-c", "model_reasoning_effort=\"medium\"", "--ephemeral", "--sandbox", "read-only", "--output-schema", "{schema}", "-o", "{output}", "-"]

@@ -37,15 +37,17 @@ def main():
         reviewer.write_text("""import json,sys
 json.dump({'schema_version':1,'verdict':'PASS','score':9.3,'summary':'proved','findings':[],
 'criteria':[{'id':'AC-1','verdict':'PASS','evidence':'deterministic test'}],
-'recommendations':[]},open(sys.argv[1],'w'))
+'recommendations':[]},open(sys.argv[-1],'w'))
 """)
+        router = json.loads((ROOT / "assets/loop.config.json").read_text())["independent_qa"]["codex_model_router"]
         config = {"independent_qa": {"enabled": True, "min_score": 8.5, "max_rounds": 2,
             "auto_review": {"enabled": True, "trigger": "post_commit",
                             "request": ".orbit/review-requests/M1.json"},
             "external_export": {"approved": True, "approved_by": "owner",
                 "approved_at": "2026-07-15T00:00:00Z", "scope": "committed_snapshot_only"},
+            "codex_model_router": router,
             "provider": {"mode": "both", "adapters": {
-                "codex": {"model": "gpt-5.6-sol",
+                "codex": {"orbit_managed_model": True, "model": "gpt-5.6-sol",
                           "argv": [sys.executable, "{repo}/reviewer.py", "{output}"]},
                 "claude": {"argv": [sys.executable, "{repo}/reviewer.py", "{output}"]}}}},
             "paths": {"independent_reviews": ".orbit/reviews"}}
@@ -53,7 +55,7 @@ json.dump({'schema_version':1,'verdict':'PASS','score':9.3,'summary':'proved','f
         (repo / "product.txt").write_text("before\n")
         baseline = commit(repo, "baseline")
         request = {"schema_version": 1, "id": "M1", "goal": "safe feature",
-            "baseline_commit": baseline,
+            "baseline_commit": baseline, "orbit_gear": "T2", "risk_flags": [],
             "acceptance_criteria": [{"id": "AC-1", "text": "works", "required": True}],
             "armed": {"approved": True, "approved_by": "owner",
                       "approved_at": "2026-07-15T00:00:00Z"}}
@@ -82,8 +84,12 @@ json.dump({'schema_version':1,'verdict':'PASS','score':9.3,'summary':'proved','f
         providers = state.get("providers", {})
         if set(providers) != {"codex", "claude"} or any(x.get("status") != "pass" for x in providers.values()):
             fails.append(f"dual-provider final states missing: {providers}")
-        if providers.get("codex", {}).get("model") != "gpt-5.6-sol":
+        if providers.get("codex", {}).get("model") != "gpt-5.6-terra":
             fails.append(f"Codex QA model was not published in live state: {providers}")
+        route = state.get("provider_routes", {}).get("codex", {})
+        if (route.get("gear"), route.get("model"), route.get("reasoning_effort")) != (
+                "T2", "gpt-5.6-terra", "medium"):
+            fails.append(f"exact-commit T2 route was not published: {route}")
         events_path = common / "orbit-independent-qa/events.jsonl"
         events = [json.loads(x) for x in events_path.read_text().splitlines() if x.strip()]
         if not any(e.get("status") == "queued" for e in events):

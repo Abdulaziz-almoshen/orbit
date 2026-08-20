@@ -53,6 +53,40 @@ def main():
     if (shipped.get("model") != "gpt-5.6-sol" or "--model" not in shipped.get("argv", [])
             or "gpt-5.6-sol" not in shipped.get("argv", [])):
         fails.append(f"Orbit does not explicitly select its OpenAI Codex QA model: {shipped}")
+    qa_defaults = json.loads((ROOT / "assets/loop.config.json").read_text())["independent_qa"]
+    route_cases = [
+        ({"orbit_gear": "T1", "risk_flags": []}, 0, "gpt-5.6-luna", "low"),
+        ({"orbit_gear": "T2", "risk_flags": []}, 0, "gpt-5.6-terra", "medium"),
+        ({"orbit_gear": "T3", "risk_flags": []}, 0, "gpt-5.6-sol", "high"),
+        ({"orbit_gear": "T100", "risk_flags": []}, 0, "gpt-5.6-sol", "high"),
+        ({"orbit_gear": "T1", "risk_flags": ["content"]}, 0, "gpt-5.6-terra", "medium"),
+        ({"orbit_gear": "T1", "risk_flags": ["security"]}, 0, "gpt-5.6-sol", "high"),
+        ({"orbit_gear": "T1", "risk_flags": []}, 1, "gpt-5.6-terra", "medium"),
+        ({"orbit_gear": "T2", "risk_flags": []}, 1, "gpt-5.6-sol", "high"),
+        ({"risk_flags": []}, 0, "gpt-5.6-sol", "medium"),
+    ]
+    for request, failures, model, effort in route_cases:
+        route = qa._codex_route(request, qa_defaults, failures)
+        if (route.get("model"), route.get("reasoning_effort")) != (model, effort):
+            fails.append(f"wrong Codex route for {request}/failures={failures}: {route}")
+    routed_spec = qa._apply_codex_route({**shipped, "name": "codex"},
+        qa._codex_route({"orbit_gear": "T2", "risk_flags": []}, qa_defaults))
+    if (routed_spec.get("model") != "gpt-5.6-terra" or
+            routed_spec.get("argv", []).count("gpt-5.6-terra") != 1 or
+            'model_reasoning_effort="medium"' not in routed_spec.get("argv", [])):
+        fails.append(f"Codex command did not receive the routed model/effort: {routed_spec}")
+    custom = {"name": "codex", "argv": ["custom-reviewer"], "model": "custom-model"}
+    if qa._apply_codex_route(custom, {"model": "gpt-5.6-sol", "reasoning_effort": "high"}) != custom:
+        fails.append("router rewrote a custom Codex adapter")
+    detected = qa._automatic_risk_flags(
+        {"goal": "Security for checkout authentication", "acceptance_criteria": [], "rubric_files": []},
+        ["db/migrations/2026_add_wallet.sql", "src/ui/payment-form.tsx"])
+    for risk in ("security", "auth", "payments", "production_migration", "money_at_scale"):
+        if risk not in detected:
+            fails.append(f"deterministic risk detector missed {risk}: {detected}")
+    request_schema = json.loads((ROOT / "assets/qa/independent-review-request.schema.json").read_text())
+    if not {"orbit_gear", "risk_flags"}.issubset(set(request_schema.get("required", []))):
+        fails.append("new acceptance manifests do not mechanically require gear and risk flags")
 
     # A fresh scaffold installs the stage; a reinstall additively migrates old config.
     with tempfile.TemporaryDirectory() as d:
@@ -77,7 +111,9 @@ def main():
         if cfg["independent_qa"].get("provider", {}).get("mode") != "codex":
             fails.append("global QA preference did not preselect the provider")
         installed_codex = cfg["independent_qa"].get("provider", {}).get("adapters", {}).get("codex", {})
-        if installed_codex.get("model") != "gpt-5.6-sol" or "--model" not in installed_codex.get("argv", []):
+        if (installed_codex.get("model") != "gpt-5.6-sol" or "--model" not in installed_codex.get("argv", [])
+                or installed_codex.get("orbit_managed_model") is not True
+                or "codex_model_router" not in cfg["independent_qa"]):
             fails.append(f"fresh scaffold did not pin Orbit's Codex QA model: {installed_codex}")
         cfg.pop("independent_qa", None); cfg.pop("_independent_qa_help", None)
         cfg["custom_project_value"] = "preserve-me"

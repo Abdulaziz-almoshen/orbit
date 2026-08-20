@@ -3,6 +3,8 @@
   "id": "replace-with-milestone-id",
   "goal": "State the user-visible outcome being implemented.",
   "baseline_commit": "REPLACE_WITH_COMMIT_BEFORE_THE_ARMED_MANIFEST_COMMIT",
+  "orbit_gear": "T2",
+  "risk_flags": [],
   "scope": { "include": [], "exclude": [] },
   "rubric_files": [],
   "acceptance_criteria": [

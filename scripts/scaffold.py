@@ -620,6 +620,10 @@ def _merge_loop_config_defaults(target: Path, created: list, warnings: list) -> 
         if isinstance(qa, dict) and "auto_review" not in qa:
             qa["auto_review"] = json.loads(json.dumps(defaults["independent_qa"]["auto_review"]))
             changed.append("independent_qa.auto_review")
+        if isinstance(qa, dict) and "codex_model_router" not in qa:
+            qa["codex_model_router"] = json.loads(json.dumps(
+                defaults["independent_qa"]["codex_model_router"]))
+            changed.append("independent_qa.codex_model_router")
         provider = qa.get("provider", {}) if isinstance(qa, dict) else {}
         shipped_codex = defaults["independent_qa"]["provider"]["adapters"]["codex"]
         shipped_codex_argv = shipped_codex["argv"]
@@ -635,9 +639,15 @@ def _merge_loop_config_defaults(target: Path, created: list, warnings: list) -> 
             provider = replacement
         adapters = provider.get("adapters", {}) if isinstance(provider, dict) else {}
         codex_adapter = adapters.get("codex") if isinstance(adapters, dict) else None
-        if isinstance(codex_adapter, dict) and codex_adapter.get("argv") == previous_stock_codex_argv:
+        stock_pinned_without_marker = (isinstance(codex_adapter, dict)
+            and codex_adapter.get("argv") == shipped_codex_argv
+            and codex_adapter.get("model") == "gpt-5.6-sol"
+            and codex_adapter.get("reasoning_effort") == "medium"
+            and "orbit_managed_model" not in codex_adapter)
+        if (isinstance(codex_adapter, dict) and codex_adapter.get("argv") == previous_stock_codex_argv
+                or stock_pinned_without_marker):
             adapters["codex"] = json.loads(json.dumps(shipped_codex))
-            changed.append("independent_qa.codex_model(gpt-5.6-sol)")
+            changed.append("independent_qa.codex_model_router(adapter)")
         paths = current.setdefault("paths", {})
         for key in ("independent_reviews", "independent_qa_runner", "delivery_evidence",
                     "delivery_quality_gate", "user_memory_checkpoint", "user_memory_events"):
