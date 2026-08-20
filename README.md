@@ -123,6 +123,9 @@ enables `CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS=1`, attaches one watchdog to t
 and propagates it to descendants. Anthropic still remotely gates this experimental Claude capability;
 when it is unavailable, the deterministic Safety, QA, CPO, budget, and Stop gates continue to bind.
 
+The terminal keeps Claude fixed on the left and Codex QA fixed on the right: `📦 →` means code and
+content are under review; `← 💬` means Codex returned feedback. The state changes, never the layout.
+
 ## Frontend standard
 
 Frontend projects add a mandatory Designer, the canonical [TasteSkill](https://www.tasteskill.dev/)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Tests the stable one-line Claude Code status surface and its scaffold wiring: only phase, progress,
-owner, cost, blocker, and QA gate render; no animation/second line; malformed input never crashes.
+Tests the stable Claude Code status surface and its scaffold wiring: a compact run line and a fixed
+Claude-to-Codex QA handoff line; malformed input never crashes.
 
 Run: python3 tests/test_statusline.py   (exit 0 = pass)
 """
@@ -51,7 +51,7 @@ def main():
     if "⚠ INPUT" not in bl or "builder" in bl.lower():
         fails.append(f"blocked run should prioritize INPUT over the owner: {bl!r}")
 
-    # QA is a fixed one-line badge. Provider choreography and handoff animation belong in the dashboard.
+    # QA is a fixed-position handoff contract: Claude left, Codex right, with no traveling animation.
     with tempfile.TemporaryDirectory() as d:
         orbit = os.path.join(d, ".orbit"); os.makedirs(orbit)
         subprocess.run(["git", "init", "-q"], cwd=d, check=True)
@@ -75,10 +75,35 @@ def main():
                                         "TERM_SESSION_ID": "term-window-42"},
                                    capture_output=True, text=True, timeout=10)
         rendered = qa_render.stdout.strip()
-        if "QA REVIEW" not in rendered or "\n" in rendered:
-            fails.append(f"QA must be one stable badge on one line: {rendered!r}")
-        if any(mark in rendered for mark in ("📦", "💬", "▶", "◀", "⚔")):
-            fails.append(f"status line must not animate provider handoffs: {rendered!r}")
+        lines = rendered.splitlines()
+        if len(lines) != 2 or "Claude" not in lines[1] or "Codex QA" not in lines[1]:
+            fails.append(f"QA must render one explicit Claude/Codex handoff row: {rendered!r}")
+        if "📦" not in rendered or "REVIEW" not in rendered or "▶" not in rendered:
+            fails.append(f"reviewing must show a Claude-to-Codex code/content review: {rendered!r}")
+        again = subprocess.run([sys.executable, SL], input=json.dumps(payload),
+                               env={**os.environ, "TERM_PROGRAM": "iTerm.app",
+                                    "TERM_SESSION_ID": "term-window-42"},
+                               capture_output=True, text=True, timeout=10).stdout.strip()
+        if rendered != again:
+            fails.append(f"handoff must not move between refreshes: {rendered!r} != {again!r}")
+        states = {
+            "changes_required": ("◀", "💬", "FEEDBACK"),
+            "pass": ("✓", "PASS"),
+            "blocked": ("⛔", "BLOCKED"),
+        }
+        for state, expected in states.items():
+            json.dump({"schema_version": 1, "status": state, "target_commit": head,
+                       "providers": {"codex": {"status": state}, "claude": {"status": "queued"}}},
+                      open(os.path.join(control, "current.json"), "w"))
+            transition = subprocess.run([sys.executable, SL], input=json.dumps(payload),
+                                        env={**os.environ, "TERM_PROGRAM": "iTerm.app",
+                                             "TERM_SESSION_ID": "term-window-42"},
+                                        capture_output=True, text=True, timeout=10).stdout.strip()
+            handoff = transition.splitlines()[-1]
+            if not all(mark in handoff for mark in expected):
+                fails.append(f"{state} handoff is unclear: {handoff!r}")
+            if handoff.find("Claude") >= handoff.find("Codex QA"):
+                fails.append(f"{state} moved Claude/Codex positions: {handoff!r}")
         sessions = json.load(open(os.path.join(orbit, "sessions.json")))
         if sessions.get("session-qa-123", {}).get("model") != "Opus 4.8":
             fails.append(f"statusline did not record session/model identity: {sessions}")
@@ -129,7 +154,7 @@ def main():
         for f in fails:
             print("  -", f)
         sys.exit(1)
-    print("PASS: statusline (one stable line · no animation/noise · blocker/QA · fail-safe · non-overwrite)")
+    print("PASS: statusline (compact run · fixed Claude/Codex QA handoff · fail-safe · non-overwrite)")
 
 
 if __name__ == "__main__":

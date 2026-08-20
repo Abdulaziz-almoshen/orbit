@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""orbit-statusline — one stable, compact Claude Code status line.
+"""orbit-statusline — a stable Claude Code run line plus a fixed QA handoff line.
 
 Only state that changes the operator's next decision is shown: phase, progress, active owner, cost,
-blocker, and QA gate. Context/cache/confidence detail belongs in the dashboard. No animation and no
-second line: terminal height must not jump every refresh.
+blocker, and QA gate. Context/cache/confidence detail belongs in the dashboard. The second line is a
+fixed-position contract: Claude builds on the left; Codex reviews code and content on the right.
 
   🛰 BUILD · 5/9 · Builder · $0.42
+     Claude ○  ──📦──▶  ● Codex QA · REVIEW
   🛰 ⚠ INPUT · BUILD · 5/9 · $0.42
 
 Install: `.claude/settings.json` → {"statusLine": {"type":"command",
@@ -126,21 +127,31 @@ def _qa_state(orbit: Path) -> dict:
             "reason": control.get("reason", ""), "verdict": control.get("verdict")}
 
 
-def _qa_badge(qa: dict) -> str:
-    """One fixed vocabulary badge; provider choreography stays in the dashboard."""
-    status = str((qa or {}).get("status") or "")
+def _codex_status(qa: dict) -> str:
+    """Return Codex's state when available; the aggregate state is a safe fallback."""
+    providers = (qa or {}).get("providers")
+    codex = providers.get("codex") if isinstance(providers, dict) else None
+    if isinstance(codex, dict) and codex.get("status"):
+        return str(codex["status"])
+    return str((qa or {}).get("status") or "")
+
+
+def build_handoff_line(qa: dict) -> str:
+    """Fixed Claude/Codex positions. State may change; the box never travels or animates."""
+    status = _codex_status(qa)
     if status in ("", "off", "awaiting_project_approval"):
         return ""
-    return {
-        "awaiting_review": "QA QUEUED",
-        "queued": "QA QUEUED",
-        "reviewing": "QA REVIEW",
-        "pass": "QA PASS",
-        "changes_required": "QA FIX",
-        "blocked": "QA BLOCK",
-        "error": "QA BLOCK",
-        "awaiting_deploy_approval": "DEPLOY GATE",
-    }.get(status, "QA")
+    if status == "changes_required":
+        return "   Claude ●  ◀─💬────  ● Codex QA · FEEDBACK"
+    if status == "pass":
+        return "   Claude ○  ───✓───  ● Codex QA · PASS"
+    if status in ("blocked", "error"):
+        return "   Claude ●  ───⛔───  ● Codex QA · BLOCKED"
+    if status == "awaiting_deploy_approval":
+        return "   Claude ○  ───✓───  ● Codex QA · DEPLOY GATE"
+    if status == "reviewing":
+        return "   Claude ○  ──📦──▶  ● Codex QA · REVIEW"
+    return "   Claude ●  ──📦──▶  ○ Codex QA · QUEUED"
 
 
 def build_line(claude: dict, run: dict, agents: dict = None, qa: dict = None) -> str:
@@ -166,10 +177,6 @@ def build_line(claude: dict, run: dict, agents: dict = None, qa: dict = None) ->
     cost = _get(claude, "cost", "total_cost_usd")
     if isinstance(cost, (int, float)):
         seg.append(f"${cost:.2f}")
-
-    badge = _qa_badge(qa or {})
-    if badge:
-        seg.append(badge)
 
     return "🛰 " + " · ".join(seg) if seg else ""
 
@@ -206,7 +213,11 @@ def main():
     except Exception:
         pass
     try:
-        print(build_line(claude, run, agents, _qa_state(orbit)))
+        qa = _qa_state(orbit)
+        print(build_line(claude, run, agents, qa))
+        handoff = build_handoff_line(qa)
+        if handoff:
+            print(handoff)
     except Exception:
         print("")                                           # never crash the status line
 

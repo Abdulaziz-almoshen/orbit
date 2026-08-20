@@ -78,7 +78,7 @@ _LEGACY_OLD = {
         "7319c631a5ec8fee181a7457e41c7f27765404153dc0a9756b97972ecf7af2e1",  # 0.45.0 reporter
     },
     "scripts/orbit-statusline": {
-        "7f4b512f83674863fef70d465ee6a483d78191e21382ef6f34a5c5236b914c49",  # <=0.44.0 one-line reporter
+        "7f4b512f83674863fef70d465ee6a483d78191e21382ef6f34a5c5236b914c49",  # 0.62.0 compact reporter
         "00fbea070a9633c2630fc3da20706ad621c05ee6fb0087720e887d40a40e64dd",  # 0.45.0 session identity
     },
 }
@@ -232,7 +232,7 @@ FILE_PLAN = [
     ("orbit-status",     "scripts/orbit-status",      0o755),
     ("orbit-dashboard",  "scripts/orbit-dashboard",   0o755),   # read-only local web board over .orbit/
     ("orbit-pet",        "scripts/orbit-pet",         0o755),   # macOS always-on-top board reporter
-    ("orbit-statusline.py", "scripts/orbit-statusline", 0o755),  # the one-line Claude Code status line
+    ("orbit-statusline.py", "scripts/orbit-statusline", 0o755),  # compact run + fixed Claude/Codex QA handoff
 
     ("security/rules.json", ".orbit/security/rules.json", None),  # declarative repo rules for the trusted guard
     ("checks/guard.py",  ".orbit/checks/guard.py",    0o755),  # built-in ruleset reference (the wired wall is the trusted orbit-guard)
@@ -1097,7 +1097,7 @@ def install_hooks(target: Path, has_ui: bool = False, reporter_only: bool = Fals
     statusline_manual = False
     if "statusLine" not in data:
         data["statusLine"] = {"type": "command", "command": STATUSLINE_CMD, "refreshInterval": 2}
-        added.append("statusLine → orbit-statusline   (live one-line run summary, 2s refresh)")
+        added.append("statusLine → orbit-statusline   (run summary + fixed Claude/Codex QA handoff)")
     else:
         statusline_manual = True
 
