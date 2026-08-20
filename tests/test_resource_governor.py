@@ -110,7 +110,8 @@ def main():
         if "RESOURCE CHECKPOINT" not in json.dumps(restored):
             fails.append("PostCompact did not restore the bounded goal checkpoint")
 
-        # T1 allows at most four Agent edges. The fifth is denied directly, never converted to ask.
+        # T1 allows four Agent edges. A fifth triggers automatic governed reconsideration to T2,
+        # preserving the goal and spend without asking the user.
         ledger = json.loads((orbit / "budget.json").read_text())
         ledger["gear"] = "T1"; ledger["requested_gear"] = "T1"; ledger["agent_calls"] = 4
         (orbit / "budget.json").write_text(json.dumps(ledger))
@@ -118,10 +119,13 @@ def main():
         ceiling = invoke(project, {"hook_event_name": "PreToolUse", "tool_name": "Agent",
                           "tool_use_id": "edge-5", "cwd": str(project),
                           "tool_input": {"subagent_type": "planner", "prompt": "more"}})
-        if ceiling.get("hookSpecificOutput", {}).get("permissionDecision") != "deny":
-            fails.append("gear-specific Agent-call ceiling was not enforced")
+        if ceiling.get("hookSpecificOutput", {}).get("permissionDecision") != "allow":
+            fails.append("gear-specific Agent-call pressure was not auto-reconsidered")
         if "ask" in json.dumps(ceiling).lower():
             fails.append("Agent-call ceiling exposed a confirmation path")
+        ledger = json.loads((orbit / "budget.json").read_text())
+        if ledger.get("gear") != "T2" or not ledger.get("reconsiderations"):
+            fails.append("Agent-call pressure did not produce a recorded T1→T2 reconsideration")
 
     with tempfile.TemporaryDirectory() as td:
         project = Path(td); (project / ".orbit").mkdir()
@@ -135,6 +139,12 @@ def main():
     with tempfile.TemporaryDirectory() as td:
         project = Path(td); orbit = project / ".orbit"; orbit.mkdir()
         (orbit / "loop.config.json").write_text((ROOT / "assets/loop.config.json").read_text())
+        (orbit / "checks").mkdir()
+        shutil.copy2(ROOT / "assets/checks/repository_intelligence.py",
+                     orbit / "checks/repository_intelligence.py")
+        (orbit / "intelligence").mkdir()
+        (orbit / "intelligence/latest.json").write_text(json.dumps({
+            "policy": {"hops": 1}, "retrieval": {"files": [], "estimated_tokens": 0}}))
         transcript = project / "session.jsonl"
         transcript.write_text(json.dumps({"type": "assistant", "message": {"id": "m1",
             "role": "assistant", "usage": {"input_tokens": 18000, "output_tokens": 3000}}}) + "\n")
@@ -145,18 +155,21 @@ def main():
         ledger = json.loads((orbit / "budget.json").read_text())
         if sum(ledger.get("parent_usage", {}).values()) != 21000:
             fails.append("root transcript usage was missing or double-counted")
-        denied = invoke(project, {"hook_event_name": "PreToolUse", "tool_name": "Agent",
+        resized = invoke(project, {"hook_event_name": "PreToolUse", "tool_name": "Agent",
                          "tool_use_id": "root-edge", "cwd": str(project),
                          "transcript_path": str(transcript),
                          "tool_input": {"subagent_type": "planner", "prompt": "delegate"}})
-        if denied.get("hookSpecificOutput", {}).get("permissionDecision") != "deny":
-            fails.append("root usage did not consume the same hard session ceiling")
+        ledger = json.loads((orbit / "budget.json").read_text())
+        if resized.get("hookSpecificOutput", {}).get("permissionDecision") != "allow" or ledger.get("gear") == "T1":
+            fails.append("measured root usage did not trigger automatic governed expansion")
+        if ledger.get("goal") != "root-heavy goal" or not ledger.get("reconsiderations"):
+            fails.append("mid-goal expansion lost the immutable goal or its audit record")
 
     if fails:
         print("FAIL: resource governor")
         for failure in fails: print("  -", failure)
         return 1
-    print("PASS: resource governor (immutable budget + bounded evidence packet + reservation + actual charge + checkpoint)")
+    print("PASS: resource governor (immutable goal · auto reconsideration · bounded evidence · actual charge · checkpoint)")
     return 0
 
 

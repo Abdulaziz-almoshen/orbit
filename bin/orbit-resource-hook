@@ -232,17 +232,21 @@ def main() -> int:
                 return 0
             gear = ledger.get("gear", "T1")
             max_calls = int((contract.get("max_agent_calls") or {}).get(gear, 0) or 0)
-            if int(ledger.get("agent_calls", 0)) >= max_calls:
-                _deny(f"Orbit resource governor: {gear} agent-call ceiling ({max_calls}) reached. "
-                      "Use existing evidence, deterministic checks, or the reserved closeout path; do not weaken the goal.")
-                return 0
             slices = contract.get("role_slice_tokens") or budget.DEFAULT_ROLE_SLICE
             estimate = int(slices.get(role, 6000) or 6000)
             decision = budget.check(ledger, role, estimate)
-            if decision.get("decision") != "allow":
-                _deny("Orbit resource governor: " + decision.get("reason", "dispatch exceeds budget") +
-                      ". Preserve the goal and produce a resumable BUDGET_PAUSED handoff if proof cannot finish.")
-                return 0
+            call_pressure = int(ledger.get("agent_calls", 0)) >= max_calls
+            reconsidered = None
+            if decision.get("decision") != "allow" or call_pressure:
+                cause = "agent-call ceiling" if call_pressure else decision.get("action", "token pressure")
+                reconsidered = budget.reconsider(orbit, role, estimate, cause, require_call_slot=True)
+                ledger = budget.load(orbit)
+                gear = ledger.get("gear", gear)
+                if reconsidered.get("decision") != "allow":
+                    _deny("Orbit resource governor: automatic mid-goal reconsideration stopped at the "
+                          f"hard ceiling: {reconsidered.get('reason', 'capacity exhausted')}. "
+                          "No user confirmation can widen T4; preserve the goal and close out with evidence.")
+                    return 0
             rid = _reservation_id(data)
             budget.reserve(orbit, role, rid, estimate)
             tool_input = dict(data.get("tool_input") or {})
@@ -254,12 +258,19 @@ def main() -> int:
                     tool_input["model"] = "opus"
                 else:
                     tool_input["model"] = "sonnet"
+            resized = (f" Budget auto-reconsidered {reconsidered['entry']['from_gear']}→{gear}; "
+                       "goal and measured spend preserved."
+                       if reconsidered and reconsidered.get("changed") else "")
             note = (f"\n\n[orbit resource envelope] role={role}; reservation={rid}; "
                     f"slice~{estimate} tokens. Return a compact evidence envelope; persist long logs/artifacts by path. "
                     "Use the role view in `.orbit/intelligence/latest.json`; expand only a named uncertainty with a "
-                    "targeted query. Never ingest the full repository/index. The goal and acceptance criteria are immutable.")
+                    "targeted query. Never ingest the full repository/index. The goal and acceptance criteria are immutable."
+                    + resized)
             tool_input["prompt"] = str(tool_input.get("prompt") or "") + note
-            _allow_with_input(tool_input, f"reserved ~{estimate:,} tokens for {role}")
+            reason = f"reserved ~{estimate:,} tokens for {role}"
+            if reconsidered and reconsidered.get("changed"):
+                reason += f" after automatic {reconsidered['entry']['from_gear']}→{gear} reconsideration"
+            _allow_with_input(tool_input, reason)
             return 0
 
         if event == "PostToolUse" and str(data.get("tool_name") or "") == "Agent":

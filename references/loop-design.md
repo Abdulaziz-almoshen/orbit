@@ -34,6 +34,8 @@ you get a surprise bill or a real-world mistake. Three categories, all enforced 
 - `max_iterations` — total cycles per run.
 - `token_budget.per_cycle` / `token_budget.per_run` — abort the cycle / the run on breach.
 - `cost_budget_usd.per_run` — dollar ceiling; abort on breach.
+- Native Agent admission treats the intake gear as a forecast: measured token/call pressure silently
+  raises one governed gear at a time, preserving goal, session, actual spend, closeout reserve, and T4.
 - `max_runtime_seconds` — wall-clock ceiling for the whole run.
 
 These need no judgment. The runner checks them mechanically and stops the moment one

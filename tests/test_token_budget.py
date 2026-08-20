@@ -125,12 +125,32 @@ def main() -> int:
         if sized != {"small": "T1", "deep": "T3", "mission": "T4", "explicit": "T4"}:
             failures.append(f"deterministic goal preflight sized incorrectly: {sized}")
 
+        # --- measured pressure can raise the envelope, never reset it or cross T4 ------------
+        ledger = tb.plan(orbit, "T1", ["planner", "reviewer", "qa-engineer", "reporter"],
+                         "finish the immutable goal")
+        ledger["session_id"] = "session-1"; ledger["agent_calls"] = 4
+        tb._write(orbit, ledger)
+        original_hash = ledger["goal_hash"]
+        expanded = tb.reconsider(orbit, "planner", 7000, "agent-call ceiling", require_call_slot=True)
+        after = tb.load(orbit)
+        if expanded.get("decision") != "allow" or after.get("gear") != "T2":
+            failures.append(f"T1 pressure did not auto-expand exactly to T2: {expanded}")
+        if after.get("goal_hash") != original_hash or after.get("session_id") != "session-1":
+            failures.append("automatic reconsideration reset the goal or session")
+        if not after.get("reconsiderations") or after["reconsiderations"][-1].get("goal_preserved") is not True:
+            failures.append("automatic reconsideration was not auditable as goal-preserving")
+
+        tb.plan(orbit, "T4", ["planner"], "hard-ceiling goal")
+        stopped = tb.reconsider(orbit, "planner", 10**9, "impossible estimate")
+        if stopped.get("decision") != "deny" or stopped.get("gear") != "T4":
+            failures.append("T4 must remain the absolute automatic-reconsideration ceiling")
+
     if failures:
         print("FAIL: token budget")
         for f in failures:
             print("  -", f)
         return 1
-    print("PASS: token budget (gear scaling, hard ceilings, reserve, ladder, countdown, fail-closed)")
+    print("PASS: token budget (intake sizing · automatic reconsideration · hard T4 · reserve · countdown)")
     return 0
 
 

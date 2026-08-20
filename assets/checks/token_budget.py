@@ -333,6 +333,66 @@ def sync_gear(orbit: Path, requested_gear: str) -> dict:
     return ledger
 
 
+def reconsider(orbit: Path, role: str, estimate: int, cause: str = "capacity",
+               require_call_slot: bool = False) -> dict:
+    """Automatically resize an active goal without resetting it or asking the user.
+
+    Reconsideration is monotonic and evidence-driven: preserve the immutable goal/session/spend,
+    test the current envelope, then raise one governed gear at a time only until both the token
+    reservation and (when requested) Agent-call slot fit. T4 is absolute. Every decision is logged.
+    """
+    ledger = load(orbit)
+    if not ledger:
+        return {"decision": "deny", "changed": False, "reason": "no active goal ledger"}
+    original_gear = normalize_gear(ledger.get("gear", "T1"))
+    original_goal_hash = ledger.get("goal_hash")
+    original_session = ledger.get("session_id")
+    original_spent = total_spent(ledger)
+    contract_data = contract(orbit)
+    gear = original_gear
+    steps = []
+
+    while True:
+        ledger = load(orbit)
+        token_decision = check(ledger, role, int(estimate))
+        call_cap = int((contract_data.get("max_agent_calls") or {}).get(gear, 0) or 0)
+        calls_ok = not require_call_slot or int(ledger.get("agent_calls", 0)) < call_cap
+        if token_decision.get("decision") == "allow" and calls_ok:
+            decision = "allow"
+            reason = "current envelope fits" if not steps else "automatic governed expansion fits"
+            break
+        if gear == "T4":
+            decision = "deny"
+            pressure = token_decision.get("reason", "token pressure")
+            reason = (f"T4 hard ceiling reached; {pressure}"
+                      if calls_ok else f"T4 Agent-call ceiling ({call_cap}) reached")
+            break
+        next_gear = f"T{int(gear[1:]) + 1}"
+        steps.append({"from": gear, "to": next_gear,
+                      "token_decision": token_decision.get("decision"),
+                      "call_pressure": not calls_ok})
+        ledger = sync_gear(orbit, next_gear)
+        gear = ledger.get("gear", next_gear)
+
+    ledger = load(orbit)
+    invariant_ok = (ledger.get("goal_hash") == original_goal_hash
+                    and ledger.get("session_id") == original_session
+                    and total_spent(ledger) == original_spent)
+    entry = {
+        "ts": _now(), "cause": str(cause)[:120], "role": str(role),
+        "estimate": int(estimate), "from_gear": original_gear, "to_gear": gear,
+        "decision": decision, "reason": reason, "steps": steps,
+        "goal_preserved": invariant_ok,
+    }
+    ledger.setdefault("reconsiderations", []).append(entry)
+    _write(orbit, ledger)
+    if not invariant_ok:
+        return {"decision": "deny", "changed": bool(steps), "gear": gear,
+                "reason": "budget reconsideration invariant failed", "entry": entry}
+    return {"decision": decision, "changed": bool(steps), "gear": gear,
+            "reason": reason, "entry": entry}
+
+
 def open_session(orbit: Path, session_id: str, goal: str, gear: str = "T1") -> dict:
     """Open once per Claude session. User follow-ups cannot reset the same session's allowance."""
     current = load(orbit)

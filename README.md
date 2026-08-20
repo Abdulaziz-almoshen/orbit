@@ -11,7 +11,7 @@
 Orbit maps the repository, selects the smallest qualified team, watches the work, tests the full
 impact, repairs failures, and commits only after the goal is proven.
 
-![version](https://img.shields.io/badge/version-0.63.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.64.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![tests](https://img.shields.io/badge/tests-all%20passing-10a877)
@@ -42,13 +42,14 @@ impact, repairs failures, and commits only after the goal is proven.
 - **No silent drift.** One propagated Claude watchdog observes the complete role tree and reports
   shallow discovery, scope drift, stalled work, weakened tests, or unsupported completion.
 - **No unmetered fan-out.** Root and agent usage share hard token/call ceilings. T5/T100 labels clamp
-  to T4; closeout budget remains protected.
+  to T4; closeout budget remains protected. If measured work outgrows the intake forecast, Orbit
+  automatically reconsiders one gear at a time without resetting spend, changing the goal, or asking.
 
 ## What is mechanically enforced
 
 | Control | Binding behavior |
 |---|---|
-| Task intake | Every real task enters the loop, is sized T1–T4 deterministically, receives its budget, and creates a visible `⏣ orbit` lane before implementation. |
+| Task budget | Intake selects T1–T4. Measured token or Agent-call pressure can auto-raise one gear at a time; goal, session, spend, closeout reserve, and the T4 ceiling are immutable. |
 | Repository evidence | Intake builds a ≤1-hop, ≤12-file, ~4,000-token packet. Orbit-generated drift is repaired automatically before Agent launch; an unrecoverable or >12 KB handoff is denied without asking the user. |
 | Capability graph | T1 requires Plan/Review/QA/Report; T2 adds Safety/CPO; T3/T4 add Discovery/BA/Market; UI adds Designer. |
 | Autonomy | Routine edits auto-accept and routine Bash auto-runs inside [Claude's OS sandbox](https://code.claude.com/docs/en/sandboxing). Design omissions route back to the agent, never to a confirmation dialog. |
