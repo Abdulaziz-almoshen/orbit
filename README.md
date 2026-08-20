@@ -1,151 +1,78 @@
 <p align="center">
-  <img src="assets/orbit-readme-header.png" alt="Orbit - self-prompting agentic workflows" width="100%">
+  <img src="assets/orbit-readme-header.png" alt="Orbit — governed agentic delivery" width="100%">
 </p>
 
 <div align="center">
 
 # Orbit
 
-### Stop prompting your agent. Build a system that prompts itself.
+### Give it the goal. Get back a proven commit.
 
-#### Give Orbit the goal. It selects the smallest expert graph that can prove it, watches the whole run, and commits the result.
-
-Orbit turns a product repository into a durable, observable agentic loop: it remembers the work,
-plans the next move, delegates focused tasks, **watches the full role tree live for drift**, checks the
-result, repairs failures, and returns a proven local commit—interrupting only for true blockers.
+Orbit maps the repository, selects the smallest qualified team, watches the work, tests the full
+impact, repairs failures, and commits only after the goal is proven.
 
 ![version](https://img.shields.io/badge/version-0.62.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
-![observable](https://img.shields.io/badge/observable-live%20dashboard-e8590c)
-![live observer](https://img.shields.io/badge/live%20observer-full%20role%20tree-e8590c)
+![tests](https://img.shields.io/badge/tests-all%20passing-10a877)
 
 </div>
 
-## Why Orbit
-
-Most agent sessions forget context, repeat failed work, and leave you watching a black box. Orbit
-gives the work a durable operating system:
-
-- **User memory that binds delivery:** every real request advances a machine checkpoint; strong
-  corrections and “always/never/must/remember” signals enter an append-only event ledger immediately.
-  Orbit reviews memory at least every five requests and again after the latest request before shipping.
-  Pending or stale memory blocks CPO/Stop; a no-new-signal checkpoint is valid, invented preferences are not.
-- **Plan and progress:** every run has a visible checklist, owner, phase, gate, and next action.
-- **Repository intelligence without repository prompts:** install builds a deterministic local index
-  of topology, build targets, symbols, dependencies, APIs, events, schemas, config, tests, ownership,
-  and Git co-change. Every task receives a provenance-bearing one-hop impact packet capped at 12 files
-  and roughly 4,000 tokens; roles never ingest the raw repository or the SQLite index.
-- **Enforced capabilities without ceremonial fan-out:** Orbit chooses a protected role graph by gear.
-  T1 proves with Planner/Reviewer/QA/Reporter; T2 adds Safety/CPO; T3/T4 add Discovery/BA/Market;
-  UI adds Design. Every required owner is machine-gated, but irrelevant roles are pruned.
-- **Iterative quality:** failures become evidence-backed repair packets and return to the loop.
-- **Scenario-complete QA:** every delivery executes happy, alternate, negative, boundary,
-  authorization, and failure/recovery journeys with observed artifacts—not only ticket assertions.
-- **Dependency regression:** QA maps changed units to direct and transitive dependents plus related
-  user flows, then captures focused, integration, and relevant wider-suite command results.
-- **Pixel evidence on every UI delivery:** every changed route/screen requires baseline, actual, and
-  computed diff images at 375×812, 768×1024, and 1440×900, together with token fidelity, accessibility, responsiveness, and
-  zero console errors. “Trivial” changes reduce design ceremony, not visual QA.
-- **TasteSkill-powered Designer:** frontend installs vendor the complete canonical TasteSkill v2
-  framework into the Designer, with its MIT license. Landing pages, portfolios, editorial work, and
-  redesigns get the full anti-slop/art-direction method; dashboards and multi-step product UI retain
-  Orbit's functional design rules instead of inheriting inappropriate marketing-page recipes.
-- **Machine-gated before CPO:** `.orbit/checks/delivery-quality-gate.py` validates the exact-commit
-  evidence bundle. A `qa-engineer done` event or green narrow test is not sufficient.
-- **Independent QA:** an opt-in second provider reviews an exact commit against an armed acceptance
-  manifest; code or manifest changes invalidate the approval.
-- **CPO acceptance:** after QA proves the work was built right, a CPO role judges whether the *right
-  thing* was built — the deliverable against your original goal. The run cannot finish without a
-  commit-bound `ACCEPT`; `ITERATE`/`REDEVELOP` verdicts return the work with change orders, and every
-  verdict grows a per-project user-model (`.orbit/skills/user-model.md`) so each iteration lands
-  closer to what you actually want.
-- **Reviewer choice:** install-time detection offers Codex, isolated Claude QA, or both. Missing providers
-  block instead of silently weakening the gate; the choice never grants project export consent, and
-  Arabic/RTL QA follows the project, not the provider.
-- **Adversarial thinking:** a cheap counterfactual probe challenges risky assumptions before build.
-- **Model discipline:** Sonnet handles normal work; the Opus 4.8 Advisor is invoked on demand for
-  expensive decisions.
-- **Trusted resource kernel:** root-turn usage is reconciled from Claude's transcript; every Agent
-  call is reserved before launch and charged from actual usage after return. T0–T4 have hard ceilings, T5/T100 clamp to T4, ten percent is protected
-  for closeout, and budget exhaustion returns a resumable checkpoint—never an unmetered retry.
-- **Parallel work:** independent workers use isolated Git worktrees instead of fighting over one checkout.
-- **One full-loop Claude observer:** a single watchdog is attached to the root orchestrator with
-  descendant propagation, so it sees Discovery through delivery without paying for a duplicate
-  observer beside every role. Its state is visible as `armed`, `watching`, `intervention`, or `clean`.
-- **Autonomous delivery:** reversible product and engineering decisions are Orbit's job. It asks only
-  for missing access, human authority over irreversible/external actions, or an expensive product fork
-  that evidence cannot resolve. Green work is returned as a scoped local commit with proof.
-- **Non-interactive Bash safety:** routine commands—including normal push/merge—proceed without a
-  hook prompt. Catastrophic commands are hard-denied; risky or uninspectable commands are denied
-  rather than pausing for confirmation. The `PreToolUse:Bash` hook never emits `ask`.
-- **Always-on routing:** a deterministic hook classifies every message before the model sees it.
-  In the default `always` mode each real request engages the loop and every reply opens with a
-  visible `⏣ orbit` lane marker — you always see Orbit take the request. Acks and "don't…"
-  messages stay silent; set `router.mode: "smart"` for conservative routing.
-
-## The loop
+## One goal, one governed delivery
 
 <picture>
-  <img src="assets/orbit-loop-observer.svg" alt="The Orbit loop: one goal flows through every enforced specialist while a real Claude watchdog surrounds and observes the full role tree; green work ends in a proven commit." width="100%">
+  <img src="assets/orbit-loop-observer.svg" alt="User intent becomes a bounded repository-impact packet, enters a gear-selected expert loop watched by one Claude observer, passes protected quality gates, and exits as a proven commit." width="100%">
 </picture>
 
-> **New in Orbit 0.62:** Orbit separates repository-wide computation from model context. A zero-LLM,
-> zero-network index is built once and incrementally refreshed by metadata plus SHA-256. Intent retrieves
-> a bounded, evidence-backed one-hop impact packet with role-specific product/engineering/QA/ownership
-> views. Weak coverage is reported; it never silently becomes a whole-codebase prompt.
+| 1 · Understand | 2 · Select | 3 · Deliver | 4 · Prove | 5 · Ship |
+|---|---|---|---|---|
+| Map intent to repository evidence | Choose the smallest expert graph | Design and build autonomously | Safety → Review → QA → CPO | Commit the exact proven snapshot |
 
-> **New in Orbit 0.61:** AgentPrune's spatial-temporal graph insight is now an enforceable resource
-> kernel. One root observer watches the descendant tree; gear selects the smallest protected role DAG;
-> Agent hooks reserve and charge actual tokens; compaction carries a bounded goal/evidence checkpoint;
-> every tier is capped. Quality gates and the user's goal are protected from pruning.
+## What Orbit changes
 
-> **New in Orbit 0.57:** QA is evidence-enforced before CPO. The gate chain is now
-> Safety → Reviewer → QA Engineer → **Delivery Quality** (scenario matrix + dependency regression +
-> three-viewport computed pixel diffs) → Independent QA (opt-in) → **CPO acceptance** → done. CPO must
-> rerun the gate, inspect raw evidence, and bind its ACCEPT to the evidence file's exact SHA-256.
+- **No whole-codebase prompts.** A local, zero-LLM index maps topology, symbols, calls, APIs,
+  events, schemas, tests, ownership, and Git co-change. Agents receive a one-hop evidence packet,
+  not the repository.
+- **No ceremonial agent swarm.** Gear determines the mandatory roles. Irrelevant roles are pruned;
+  required roles must actually run.
+- **No “tests passed” shortcut.** QA covers six scenario types, direct and transitive dependencies,
+  and relevant regression journeys. UI work adds three-viewport pixel evidence.
+- **No rubber-stamped finish.** A CPO compares the exact deliverable with the original goal. Missing
+  evidence or a rejected verdict returns the work to repair.
+- **No silent drift.** One propagated Claude watchdog observes the complete role tree and reports
+  shallow discovery, scope drift, stalled work, weakened tests, or unsupported completion.
+- **No unmetered fan-out.** Root and agent usage share hard token/call ceilings. T5/T100 labels clamp
+  to T4; closeout budget remains protected.
 
-> **New in Orbit 0.58:** user memory is an enforced architecture, not an optional note. The router
-> records requests and important corrections into `.orbit/memory/`; the five-request review clock is
-> mechanical, every delivery requires a review after the latest request, and CPO ACCEPT binds the exact
-> memory checkpoint SHA-256 alongside QA evidence.
+## What is mechanically enforced
 
-> **New in Orbit 0.50:** the **CPO** closed the goal-fidelity gap. Every
-> earlier gate verifies the build against artifacts the system wrote for itself; the CPO is the
-> user's proxy — it re-anchors on the goal you actually stated, returns the deliverable
-> (`ITERATE`/`REDEVELOP`) when the goal isn't served, and records what it learns about your
-> taste in a per-project user-model that every later run inherits.
-
-> **Enforcement means the declared gear is binding.** Required owners must produce completion
-> evidence; irrelevant owners do not run. Missing evidence blocks Stop. A role name in prose is not
-> evidence, and a larger gear never creates an uncapped budget.
-
-Three controls make the loop meaningfully safer and iterative:
-
-1. **Counterfactual preflight:** identify the riskiest assumption, run the cheapest useful probe,
-   and backtrack to discovery or planning when evidence disagrees.
-2. **One propagated observer:** inspect discovery quality, analysis, planning, implementation, every gate,
-   and reporting for drift, stalled/repetitive work, rubber-stamping, or unsupported proof. Healthy
-   work produces no advisory, but its watcher state remains visible.
-3. **Bounded repair:** capture the failure, owner, root cause, required change, and regression test;
-   repair it and return to the original gate. Repeated failure escalates to Advisor or a human.
-
-### Why the observer matters
-
-| Without live observation | With Orbit 0.56 |
+| Control | Binding behavior |
 |---|---|
-| Weak discovery or a wrong approach may travel through the loop. | The watchdog can flag generic ideas, missing evidence, or delivery drift at the role where it begins. |
-| The worker must remember every constraint while optimizing for completion. | A separate Haiku observer has one narrow job: notice compounding mistakes. |
-| Test weakening may only appear in the finished diff. | Attempts to skip, weaken, delete, or reverse-engineer tests can be challenged immediately. |
-| More code and tokens accumulate before repair begins. | One early advisory can avoid an expensive downstream repair cycle. |
+| Task intake | Every real task enters the loop and creates a visible `⏣ orbit` lane. |
+| Repository evidence | Agent launch is denied if the packet is missing, exceeds one hop, 12 files, ~4,000 evidence tokens, or a 12 KB Agent prompt. There is no confirmation escape. |
+| Capability graph | T1 requires Plan/Review/QA/Report; T2 adds Safety/CPO; T3/T4 add Discovery/BA/Market; UI adds Designer. |
+| Safety | Routine Bash runs without confirmation. Catastrophic or uninspectable commands are denied; the hook never emits `ask`. |
+| QA | Happy, alternate, negative, boundary, authorization, and failure/recovery scenarios plus dependency regression are required. |
+| UI proof | Baseline, actual, and computed diff at 375×812, 768×1024, and 1440×900, with accessibility and console checks. |
+| Delivery | Stop blocks missing owners, stale user memory, failed QA evidence, or missing commit-bound CPO acceptance. |
+| Updates | Every scaffold and safe auto-heal installs missing managed components and refreshes repository intelligence without overwriting custom project files. |
 
-The expected steady state is silence. The observer is a **drift tripwire**, not another worker and
-not a security boundary; Safety, Reviewer, QA, approval checkpoints, and hard limits still decide
-whether the result may proceed.
+## The gear decides the team
+
+| Gear | Use | Required quality spine |
+|---|---|---|
+| T0 · Direct | No project work | Direct answer |
+| T1 · Quick | Small, low-risk change | Planner → Builder → Reviewer → QA → Reporter |
+| T2 · Standard | Normal product work | T1 + Safety + CPO |
+| T3 · Deep | Broad or uncertain work | T2 + Discovery + BA + Market Research |
+| T4 · Mission | Production/migration/irreversible risk | T3 + durable checkpoints and human gates |
+
+UI work always adds the Designer. Orbit runs required owners sequentially in Lite mode and widens
+only when evidence and the configured budget justify it.
 
 ## Install
 
-Choose one installation path. Do not install both the clone and marketplace plugin.
+Choose one path—do not install both.
 
 ```bash
 git clone --single-branch --depth 1 https://github.com/Abdulaziz-almoshen/orbit.git \
@@ -159,179 +86,69 @@ Or:
 curl -fsSL https://raw.githubusercontent.com/Abdulaziz-almoshen/orbit/main/install.sh | bash
 ```
 
-Then open a product repository and run `/orbit`. The preamble checks for updates and quietly repairs
-safe scaffold drift: it adds missing Orbit-owned files, preserves custom files and disabled hooks,
-and skips projects under an active writer lock.
+Then open a product repository and run:
 
-## Command map
+```text
+/orbit
+```
+
+Orbit detects the project surfaces, provisions the relevant roles and playbooks, enables the hooks,
+builds the repository index, and preserves existing custom files.
+
+## Daily commands
 
 | Command | Purpose |
 |---|---|
-| `/orbit` | Scaffold a project or merge safe template updates. |
-| `/orbit:orbit-run <task>` | Force a task through the governed loop. |
-| `scripts/orbit-status --follow` | Follow agents, checklist, gates, budget, and confidence. |
-| `scripts/orbit-dashboard --once` | Print the redacted status snapshot; `--port N` serves a read-only board. |
-| `scripts/orbit-pet start` | Show the always-on-top macOS pet that narrates tasks, questions, QA, commits, and deployment. |
-| `scaffold.py --enable-reporter` | One-time trusted-project activation: hooks, terminal QA scene, local board, and macOS pet. |
-| `scripts/orbit-qa-hook install` | Opt in to automatic post-commit QA and the exact-commit pre-push gate after project approval. |
-| `orbit-doctor` | Inspect scaffold drift; `--fix` applies only safe managed-hook refreshes. |
-| `scripts/orbit-lock status` | Inspect the current checkout lease. |
-| `scripts/orbit-lock takeover --reason "..."` | Atomically break, acquire, and verify a handoff. |
-| `scripts/orbit-worktree create --task <slug>` | Create an isolated worker branch and checkout. |
-| `scripts/orbit-worktree finish <worktree>` | Submit changed files, tests, summary, and budget to the merge queue. |
-| `scripts/orbit-memory review` | Review the learning ledger before promoting anything durable. |
-| `scripts/orbit-intel update` | Incrementally refresh the deterministic repository-intelligence index. |
-| `scripts/orbit-intel query --goal "…"` | Produce the bounded, provenance-bearing impact packet used by the loop. |
-| `/orbit-upgrade` | Upgrade the installed plugin. |
+| `/orbit:orbit-run <goal>` | Deliver a goal through the governed loop. |
+| `scripts/orbit-status --follow` | Watch owner, phase, gates, confidence, and budget. |
+| `scripts/orbit-dashboard --port 8765` | Open the read-only local board. |
+| `scripts/orbit-intel query --goal "…"` | Inspect the bounded repository-impact packet. |
+| `scripts/orbit-memory review` | Review captured user corrections before promotion. |
+| `scripts/orbit-worktree create --task <slug>` | Isolate an independent worker. |
+| `orbit-doctor --fix` | Diagnose and safely repair managed scaffold drift. |
+| `/orbit-upgrade` | Update Orbit and safely heal installed projects. |
 
-## Parallel work
-
-The coordinator owns the plan, integration branch, `STATE.md`, and final QA. Workers write in separate
-branches:
+## Live supervision
 
 ```text
-Coordinator: plan -> integrate -> verify
-     |-- orbit/task-a  -> worker + private worktree
-     `-- orbit/task-b  -> worker + private worktree
+Goal → repository evidence → gear-selected team → Safety → Review → QA → CPO → Commit
+                    └────────── Watchdog observes the descendant tree ──────────┘
 ```
 
-Each worker receives a bounded token/USD reservation and returns a completion packet. The shared
-registry lives in Git's common directory; each worktree has its own local Orbit lease. This means
-parallel sessions are normal without allowing two sessions to edit the same checkout.
+The observer is a drift tripwire, not a worker or security boundary. Healthy work is silent. Orbit
+enables `CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS=1`, attaches one watchdog to the root Orchestrator,
+and propagates it to descendants. Anthropic still remotely gates this experimental Claude capability;
+when it is unavailable, the deterministic Safety, QA, CPO, budget, and Stop gates continue to bind.
 
-```bash
-scripts/orbit-worktree create --task concierge-fix
-scripts/orbit-worktree status
-scripts/orbit-worktree finish ../project-orbit-concierge-fix \
-  --summary "Implemented and tested the concierge fix" \
-  --tests "pytest -q"
-```
+## Frontend standard
 
-The coordinator reviews the packet, resolves conflicts, runs integration QA, and merges. Orbit does
-not silently merge worker branches.
+Frontend projects add a mandatory Designer, the canonical [TasteSkill](https://www.tasteskill.dev/)
+method where appropriate, a 67-style design catalog, prototype-before-build discipline, and pixel
+verification on every UI delivery. Marketing-page art direction never overrides functional product
+UX, accessibility, the project design system, or the user's source of truth.
 
-## Live visibility
+## Honest boundaries
 
-Orbit is designed to be watched without reading a wall of model prose:
+- Repository packet size is mechanically enforced; semantic relevance is not perfect. Python uses
+  real AST symbols/calls, while other languages currently use conservative confidence-labeled
+  extraction.
+- Business language may not match code vocabulary on the first retrieval. Orbit must run one silent,
+  targeted internal query—not ask the user and not widen to the full repository.
+- Role execution is enforceable; expert judgment quality remains model-governed. Validate Recall@K
+  against your enterprise task corpus before treating the index as a complete impact oracle.
+- The architecture applies the sparse spatial/temporal communication principle from
+  [AgentPrune, ICLR 2025](https://proceedings.iclr.cc/paper_files/paper/2025/file/bbc461518c59a2a8d64e70e2c38c4a0e-Paper-Conference.pdf);
+  it never prunes the goal, Safety, Review, QA, CPO, or proof.
+
+## Repository
 
 ```text
-Orbit  |  Build  |  3/8 complete  |  1 active  |  budget $0.42/$1.25
-
-> frontend-engineer  building the requested slice
-  reviewer            queued: checks regressions
-  safety-gate         queued: confirms approval boundaries
+bin/                  trusted hooks and commands
+assets/               scaffolded engines, checks, roles, and visual assets
+references/           playbooks and project templates
+scripts/scaffold.py   deterministic install and migration
+tests/                safety, quality, budget, lifecycle, and retrieval contracts
 ```
-
-In Claude Code, the native checklist is the primary surface. In headless or portable runs, use
-`scripts/orbit-status --follow` or the read-only dashboard.
-
-## Observer agents: real, full-loop, and visible (experimental Claude capability)
-
-Orbit's Claude Code adapter pairs the root Orchestrator with one descendant-propagating
-`.claude/agents/watchdog.md`:
-
-```text
-Goal → Orchestrator → gear-selected expert DAG → Safety → Review → QA → CPO → Report
-          │                     descendant read-only activity digest                    │
-          └──────────────────────▶ Watchdog (Haiku) ────────────────────────────────────┘
-
-No finding = no message. The worker continues uninterrupted.
-```
-
-The watcher sees Claude Code's truncated, read-only activity digest and stays silent unless a short
-advisory can prevent shallow discovery, stalled work, scope drift, weakened tests, rubber-stamped
-gates, or unsupported proof. It cannot edit,
-block the worker, or grant user authority, and it does not replace the final Reviewer or QA gates.
-
-Every scaffold and auto-heal enables the project experiment, installs a missing watchdog, restores
-required hooks, and migrates old duplicate child-watchdog blocks without replacing customized role
-bodies. Explicit env values and alternate custom observers are preserved. To enable it manually:
-
-```bash
-CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS=1 claude
-```
-
-This Claude capability remains undocumented, experimental, and remotely gated; Orbit cannot honestly
-guarantee that Anthropic's server enables it. Orbit does guarantee the project setting, agent
-root frontmatter, descendant propagation, update repair, visible `observer.json` state, and
-regression tests. When Claude withholds the capability, roles continue and the final gates still bind.
-
-## What binds
-
-| Capability | Guarantee |
-|---|---|
-| Safety wall | Trusted Bash guard is non-interactive: routine commands allow, catastrophic commands deny, and no `ask` confirmation is ever emitted. |
-| Writer lease | One writer per checkout; reads remain available. `takeover` verifies the new owner before writes resume. |
-| Worktree isolation | Separate workers can write concurrently in separate Git worktrees. |
-| Runtime and budget caps | The trusted Agent hook enforces per-session token/call ceilings on native Claude sessions; `ralph_loop.sh` and `loop.py` retain iteration, runtime, token, and dollar limits. |
-| Repository context | The deterministic index sees the repository; agents receive a one-hop evidence file by path. Oversized Agent prompts are hard-denied without a confirmation escape. |
-| Checkpointing | Durable runner state persists budget and progress across resume. |
-| Telemetry | Hooks observe and redact activity; they fail open and never block work. |
-| Capability completion | Strict Stop contract blocks substantial work when a mandatory role has no completed post-route event; UI projects additionally require Designer. |
-
-Role activation is mechanically checked; the quality of discovery, analysis, design, and review
-judgment remains model-governed. Advisor invocation and the portable runner's model `dispatch()` seam
-also remain model-governed. The
-Claude Code path is the complete default path; wire `dispatch()` before using `loop.py` with another
-orchestrator.
-
-Repository retrieval is mechanically bounded, but relevance is not magically solved. Python receives
-real AST symbols/calls; other shipped extractors are conservative and carry lower confidence. Exact
-product vocabulary performs best. A business-language alias may return weak or empty first-pass
-coverage; Orbit must translate that uncertainty into one internal targeted query and continue—not ask
-the user and not widen to the whole repository. Validate Recall@K on your own enterprise corpus before
-treating the index as a complete impact oracle.
-
-## Model and cost policy
-
-Orbit Lite is the default:
-
-- gear-required stage owners run sequentially, one at a time;
-- maximum two isolated workers by default;
-- focused packets instead of full repository history and telemetry;
-- the Sonnet Executor lane for ordinary work;
-- one Opus Advisor call for an architectural fork, safety uncertainty, or repeated gate failure;
-- explicit per-cycle and per-run token, dollar, runtime, and context limits.
-
-The configured graph—not reassurance—controls concurrency and required owners. The goal is complete
-accountability without uncontrolled fan-out.
-
-## Frontend projects
-
-UI repositories receive a mandatory Designer stage, a 67-style design catalog,
-prototype-before-build guidance, and visual QA helpers. A substantial UI run cannot stop without a
-completed Designer event. The design gate also records the chosen direction and asks when a UI
-change has no design decision on record; visual judgment itself remains human/model work.
-
-## Self-update
-
-```text
-/orbit-upgrade
-```
-
-The installer reports the resolved commit and version. Project scaffolds are separate snapshots; the
-automatic preamble refreshes only safe Orbit-owned drift and never overwrites custom project files.
-
-For a manual install refresh:
-
-```bash
-cd ~/.claude/skills/orbit
-git fetch origin
-git reset --hard origin/main
-./setup
-```
-
-## Repository layout
-
-```text
-bin/                  trusted commands and hooks
-assets/               scaffolded engines, checks, agents, and wrappers
-references/           playbooks, role specs, and templates
-scripts/scaffold.py   deterministic project provisioning and migration
-tests/                regression, safety, budget, and lifecycle tests
-```
-
-## Development
 
 ```bash
 bash tests/run.sh
@@ -339,9 +156,9 @@ python3 scripts/check-coherence.py
 python3 bin/orbit-verify --root .
 ```
 
-Before a release, bump `VERSION`, add a `CHANGELOG.md` entry, regenerate `checksums.txt`, and run the
-full suite. The current channel is an unsigned development channel; checksum verification detects
-modification but is not a cryptographic signature.
+The development channel is checksum-verifiable but unsigned. See [CHANGELOG.md](CHANGELOG.md) for
+release history and [references/playbooks/repository-intelligence.md](references/playbooks/repository-intelligence.md)
+for the evidence-retrieval contract.
 
 ## License
 
