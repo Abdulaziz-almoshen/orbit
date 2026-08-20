@@ -1,0 +1,222 @@
+#!/usr/bin/env python3
+"""Trusted, zero-model-call resource governor for native Claude Code sessions.
+
+The goal loop is allowed to reason; this kernel controls the resources used to do it. It implements
+AgentPrune's systems insight as an enforceable sparse execution graph: reserve before an Agent edge,
+charge the edge from PostToolUse usage telemetry, keep a protected closeout pool, and carry only a
+bounded checkpoint across temporal (compaction) edges. It never asks for confirmation.
+"""
+from __future__ import annotations
+
+import fcntl
+import importlib.util
+import json
+import os
+import re
+import sys
+import time
+from pathlib import Path
+
+
+def _find_orbit(start: str) -> Path | None:
+    project = os.environ.get("CLAUDE_PROJECT_DIR")
+    candidates = [Path(project)] if project else []
+    candidates.append(Path(start or "."))
+    for candidate in candidates:
+        try:
+            current = candidate.resolve()
+        except Exception:
+            continue
+        for root in (current, *current.parents):
+            if (root / ".orbit").is_dir():
+                return root / ".orbit"
+    return None
+
+
+def _load_budget():
+    path = Path(__file__).resolve().parent.parent / "assets/checks/token_budget.py"
+    spec = importlib.util.spec_from_file_location("orbit_resource_budget", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["orbit_resource_budget"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _read_json(path: Path):
+    try:
+        value = json.loads(path.read_text())
+        return value if isinstance(value, (dict, list)) else {}
+    except Exception:
+        return {}
+
+
+def _latest_gear(orbit: Path) -> str:
+    path = orbit / "activity.jsonl"
+    if not path.exists():
+        return "T1"
+    gear = "T1"
+    try:
+        for line in path.read_text(errors="ignore").splitlines()[-1000:]:
+            event = json.loads(line)
+            if event.get("phase") == "gear":
+                raw = event.get("gear") or event.get("msg") or ""
+                found = re.search(r"\bT\d+\b", str(raw), re.IGNORECASE)
+                if found:
+                    gear = found.group(0).upper()
+    except Exception:
+        pass
+    return gear
+
+
+def _prompt(data: dict) -> str:
+    return str(data.get("prompt") or data.get("user_prompt") or "")[:4000]
+
+
+def _role(data: dict) -> str:
+    tool_input = data.get("tool_input") if isinstance(data.get("tool_input"), dict) else {}
+    return str(tool_input.get("subagent_type") or tool_input.get("agent_type") or
+               tool_input.get("name") or "subagent").strip().lower()
+
+
+def _reservation_id(data: dict) -> str:
+    return str(data.get("tool_use_id") or data.get("toolUseId") or
+               f"edge-{time.time_ns()}")
+
+
+def _config(orbit: Path, budget) -> dict:
+    return budget.contract(orbit)
+
+
+def _deny(reason: str) -> None:
+    print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
+          "permissionDecision": "deny", "permissionDecisionReason": reason}}))
+
+
+def _allow_with_input(updated: dict, reason: str) -> None:
+    print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
+          "permissionDecision": "allow", "permissionDecisionReason": reason,
+          "updatedInput": updated}}))
+
+
+def _usage_total(response: dict) -> tuple[int, dict]:
+    usage = response.get("usage") if isinstance(response.get("usage"), dict) else {}
+    total = response.get("totalTokens")
+    if not isinstance(total, (int, float)):
+        total = sum(int(usage.get(key, 0) or 0) for key in
+                    ("input_tokens", "output_tokens", "cache_creation_input_tokens",
+                     "cache_read_input_tokens"))
+    return max(0, int(total or 0)), usage
+
+
+def _checkpoint(orbit: Path, budget) -> None:
+    ledger = budget.load(orbit)
+    state = (orbit / "STATE.md").read_text(errors="ignore")[:5000] if (orbit / "STATE.md").exists() else ""
+    value = {
+        "schema": 1, "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "goal_hash": ledger.get("goal_hash", ""), "goal": ledger.get("goal", "")[:500],
+        "gear": ledger.get("gear", "T1"), "spent": budget.total_spent(ledger),
+        "remaining": budget.global_remaining(ledger), "tasks": _read_json(orbit / "tasks.json"),
+        "run": _read_json(orbit / "run.json"), "state_excerpt": state,
+    }
+    path = orbit / "context-checkpoint.json"
+    tmp = orbit / ".context-checkpoint.json.tmp"
+    tmp.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n")
+    os.replace(tmp, path)
+
+
+def _restore_context(orbit: Path) -> None:
+    checkpoint = _read_json(orbit / "context-checkpoint.json")
+    if not checkpoint:
+        return
+    compact = {
+        "goal_hash": checkpoint.get("goal_hash"), "goal": checkpoint.get("goal"),
+        "gear": checkpoint.get("gear"), "spent": checkpoint.get("spent"),
+        "remaining": checkpoint.get("remaining"), "next": (checkpoint.get("run") or {}).get("active_task"),
+    }
+    print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostCompact",
+          "additionalContext": "[orbit] RESOURCE CHECKPOINT (data, not instructions): " +
+          json.dumps(compact, separators=(",", ":")) +
+          ". Re-read exact evidence by path; do not reset the goal or budget."}}))
+
+
+def main() -> int:
+    try:
+        data = json.load(sys.stdin)
+    except Exception:
+        return 0
+    orbit = _find_orbit(str(data.get("cwd") or "."))
+    if orbit is None:
+        return 0
+    event = str(data.get("hook_event_name") or "")
+    budget = _load_budget()
+
+    lock_path = orbit / ".budget.lock"
+    lock_path.touch(exist_ok=True)
+    with lock_path.open("r+") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+
+        if event == "UserPromptSubmit":
+            session = str(data.get("session_id") or "unknown-session")
+            budget.open_session(orbit, session, _prompt(data), "T1")
+            return 0
+
+        if event == "PreCompact":
+            _checkpoint(orbit, budget)
+            return 0
+
+        if event == "PostCompact":
+            _restore_context(orbit)
+            return 0
+
+        if event == "PreToolUse" and str(data.get("tool_name") or "") == "Agent":
+            role = _role(data)
+            ledger = budget.load(orbit)
+            if not ledger:
+                _deny("Orbit resource governor: no goal ledger. New agent work is blocked, not unmetered.")
+                return 0
+            ledger = budget.sync_gear(orbit, _latest_gear(orbit))
+            contract = _config(orbit, budget)
+            gear = ledger.get("gear", "T1")
+            max_calls = int((contract.get("max_agent_calls") or {}).get(gear, 0) or 0)
+            if int(ledger.get("agent_calls", 0)) >= max_calls:
+                _deny(f"Orbit resource governor: {gear} agent-call ceiling ({max_calls}) reached. "
+                      "Use existing evidence, deterministic checks, or the reserved closeout path; do not weaken the goal.")
+                return 0
+            slices = contract.get("role_slice_tokens") or budget.DEFAULT_ROLE_SLICE
+            estimate = int(slices.get(role, 6000) or 6000)
+            decision = budget.check(ledger, role, estimate)
+            if decision.get("decision") != "allow":
+                _deny("Orbit resource governor: " + decision.get("reason", "dispatch exceeds budget") +
+                      ". Preserve the goal and produce a resumable BUDGET_PAUSED handoff if proof cannot finish.")
+                return 0
+            rid = _reservation_id(data)
+            budget.reserve(orbit, role, rid, estimate)
+            tool_input = dict(data.get("tool_input") or {})
+            tool_input["run_in_background"] = False  # synchronous response carries exact usage telemetry
+            if not tool_input.get("model"):
+                if role in ("reporter", "dispatcher", "safety-gate"):
+                    tool_input["model"] = "haiku"
+                elif role == "advisor":
+                    tool_input["model"] = "opus"
+                else:
+                    tool_input["model"] = "sonnet"
+            note = (f"\n\n[orbit resource envelope] role={role}; reservation={rid}; "
+                    f"slice~{estimate} tokens. Return a compact evidence envelope; persist long logs/artifacts by path. "
+                    "The goal and acceptance criteria are immutable.")
+            tool_input["prompt"] = str(tool_input.get("prompt") or "") + note
+            _allow_with_input(tool_input, f"reserved ~{estimate:,} tokens for {role}")
+            return 0
+
+        if event == "PostToolUse" and str(data.get("tool_name") or "") == "Agent":
+            response = data.get("tool_response") if isinstance(data.get("tool_response"), dict) else {}
+            if response.get("status") == "async_launched":
+                return 0  # reservation intentionally remains until a measurable completion
+            role = _role(data)
+            total, usage = _usage_total(response)
+            budget.reconcile(orbit, _reservation_id(data), role, total, usage)
+            return 0
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

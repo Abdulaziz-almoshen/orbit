@@ -155,11 +155,12 @@ compliance/security · reversibility · runtime/cost), **highest risk-trigger wi
 **declare the gear out loud** (a *Gear Card*) before moving. Full rubric + fan-out math:
 `.orbit/skills/loop-tiers.md`.
 
-**Mandatory stage owners, sequential by default.** For substantial work, run Product Discovery →
-Business Analyst → Market Researcher → Planner → [Designer for UI] → Build → Safety → Reviewer →
-QA Engineer → delivery-quality evidence gate → CPO → Reporter as actual stages. A private lens does not count. Keep concurrency at one
-unless configured caps safely permit wider independent fan-out. Approval is only for human-authority
-actions, not reassurance about routine execution.
+**Mandatory capability coverage, sparse execution.** Follow `.orbit/loop.config.json` →
+`required_by_gear`: T1 proves with Planner/Reviewer/QA/Reporter; T2 adds Safety/CPO; T3/T4 add
+Discovery/BA/Market Research; UI work adds Designer. Required roles are actual stages, never private
+lenses. Non-required roles are not spawned as ceremony. Keep concurrency at one unless configured
+caps permit independent fan-out. The trusted resource hook reserves every Agent edge and denies an
+over-budget edge without asking for confirmation. Approval is only for human-authority actions.
 
 **Model switching:** ordinary loop work stays on the Executor lane (`model_policy.executor`, normally
 Sonnet 5). Use the Advisor lane (`model_policy.advisor`, Opus 4.8) only on demand for architecture

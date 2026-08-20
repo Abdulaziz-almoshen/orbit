@@ -6,11 +6,9 @@ description: >-
   dependency + risk, with a proof bar per slice and hand-off specs to the per-surface engineers.
   Emits decision briefs in the standard format up to the Orchestrator, who ratifies via plan-review.
 tools: Read, Grep, Glob, Write, Edit
-observer: watchdog
-observerMessage: >-
-  Watch for vague slices, missing dependencies, weak proof bars, unowned risks, and plans that merely restate
-  the request. Report precise observed evidence when the plan cannot support autonomous delivery.
-observeSubagents: true
+model: sonnet
+effort: high
+maxTurns: 5
 ---
 
 # Role: Planner (Claude Code subagent)

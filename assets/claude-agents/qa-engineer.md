@@ -7,10 +7,9 @@ description: >-
   Report-only (never fixes); builds a Requirements Traceability Matrix with a PASS/CONCERNS/FAIL/
   WAIVED verdict per requirement. Gate power: any P0 FAIL or score <85 means the run is not done.
 tools: Read, Grep, Glob, Bash, Write
-observer: watchdog
-observerMessage: >-
-  Watch for rubber-stamped QA, missing scenario kinds, scope-only testing that ignores dependents,
-  absent route×viewport pixel diffs, and verdicts unsupported by observed results. Report precise evidence.
+model: sonnet
+effort: high
+maxTurns: 5
 ---
 
 # Role: QA Engineer (Claude Code subagent)

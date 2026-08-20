@@ -3,6 +3,24 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.61.0
+
+**AgentPrune-inspired resource governance is now enforced on Claude's live Agent path.**
+
+- A trusted, zero-model-call hook opens one immutable budget per session, reserves every Agent edge,
+  forces measurable foreground execution, and reconciles Claude's actual `totalTokens` telemetry.
+- Every gear is finite: T0 8k, T1 25k, T2 60k, T3 140k, T4 240k; T5/T100 clamp to T4. Ten percent
+  stays protected for closeout, and exhaustion yields a resumable checkpoint instead of waiving QA.
+- AgentPrune's graph insight is applied as a protected sparse DAG: role coverage scales by gear,
+  optional handoffs require unique evidence, full-history/all-to-all packets are forbidden, and
+  Goal/Safety/Review/QA/CPO/Report edges cannot be pruned.
+- Claude observer topology is reduced from a watchdog beside every role to one root Orchestrator
+  watchdog with descendant propagation—the same execution coverage without duplicate observer cost.
+- `UserPromptSubmit`, `PreToolUse[Agent]`, `PostToolUse[Agent]`, `PreCompact`, and `PostCompact` resource
+  hooks are installed on every scaffold and restored by auto-heal. Bash remains allow/deny-only.
+- Agent frontmatter now pins model, effort, and maximum turns by role. The README architecture graphic
+  has been rebuilt around the immutable goal, sparse role orbit, observer, protected gates, and kernel.
+
 ## 0.60.1
 
 **The QA handoff parcel actually moves.**

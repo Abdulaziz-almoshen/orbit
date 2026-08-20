@@ -52,6 +52,15 @@ def main():
             fails.append("user's unrelated hook was dropped")
         if "PreToolUse" not in data["hooks"] or "UserPromptSubmit" not in data["hooks"]:
             fails.append("Orbit hooks were not installed into a valid file")
+        wired = json.dumps(data["hooks"])
+        for token in ("orbit-resource-hook", "PreCompact", "PostCompact"):
+            if token not in wired and token not in data["hooks"]:
+                fails.append(f"resource-governor hook missing: {token}")
+        env = data.get("env", {})
+        if env.get("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE") != "70":
+            fails.append("proactive compaction threshold was not installed")
+        if env.get("CLAUDE_CODE_DISABLE_BACKGROUND_TASKS") != "1":
+            fails.append("governed Agent calls were not forced measurable")
         if not list((t / ".claude").glob("settings.json.bak*")):
             fails.append("valid file was not backed up before edit")
 

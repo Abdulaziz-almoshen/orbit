@@ -1,0 +1,109 @@
+#!/usr/bin/env python3
+"""End-to-end contract for the trusted zero-model-call resource governor."""
+import json
+import os
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+HOOK = ROOT / "bin/orbit-resource-hook"
+
+
+def invoke(project: Path, payload: dict):
+    env = dict(os.environ, CLAUDE_PROJECT_DIR=str(project))
+    proc = subprocess.run([sys.executable, str(HOOK)], input=json.dumps(payload), text=True,
+                          capture_output=True, env=env, check=True)
+    return json.loads(proc.stdout) if proc.stdout.strip() else {}
+
+
+def main():
+    fails = []
+    with tempfile.TemporaryDirectory() as td:
+        project = Path(td); orbit = project / ".orbit"; orbit.mkdir()
+        (orbit / "loop.config.json").write_text((ROOT / "assets/loop.config.json").read_text())
+        invoke(project, {"hook_event_name": "UserPromptSubmit", "session_id": "s1",
+                         "prompt": "Fix the checkout", "cwd": str(project)})
+        ledger = json.loads((orbit / "budget.json").read_text())
+        if ledger.get("total") != 25000 or ledger.get("goal") != "Fix the checkout":
+            fails.append("session intake did not open the default governed T1 ledger")
+
+        ledger["spent"]["planner"] = 1234
+        (orbit / "budget.json").write_text(json.dumps(ledger))
+        invoke(project, {"hook_event_name": "UserPromptSubmit", "session_id": "s1",
+                         "prompt": "and test it", "cwd": str(project)})
+        if json.loads((orbit / "budget.json").read_text())["spent"]["planner"] != 1234:
+            fails.append("follow-up prompt reset the session allowance")
+
+        pre = invoke(project, {"hook_event_name": "PreToolUse", "tool_name": "Agent",
+                     "tool_use_id": "edge-1", "cwd": str(project),
+                     "tool_input": {"subagent_type": "reporter", "prompt": "summarize"}})
+        out = pre.get("hookSpecificOutput", {})
+        if out.get("permissionDecision") != "allow":
+            fails.append(f"admissible Agent edge was not allowed: {pre}")
+        updated = out.get("updatedInput", {})
+        if updated.get("run_in_background") is not False or updated.get("model") != "haiku":
+            fails.append("Agent edge was not forced measurable and routed to its policy model")
+        ledger = json.loads((orbit / "budget.json").read_text())
+        if "edge-1" not in ledger.get("reservations", {}):
+            fails.append("preflight did not reserve the Agent edge")
+
+        invoke(project, {"hook_event_name": "PostToolUse", "tool_name": "Agent",
+                         "tool_use_id": "edge-1", "cwd": str(project),
+                         "tool_input": {"subagent_type": "reporter"},
+                         "tool_response": {"status": "completed", "totalTokens": 777,
+                                           "usage": {"input_tokens": 500, "output_tokens": 277}}})
+        ledger = json.loads((orbit / "budget.json").read_text())
+        if ledger["spent"].get("reporter") != 777 or "edge-1" in ledger.get("reservations", {}):
+            fails.append("PostToolUse did not reconcile reservation to actual usage")
+
+        (orbit / "activity.jsonl").write_text(json.dumps({"phase": "gear", "gear": "T100"}) + "\n")
+        invoke(project, {"hook_event_name": "PreToolUse", "tool_name": "Agent",
+                         "tool_use_id": "edge-2", "cwd": str(project),
+                         "tool_input": {"subagent_type": "reporter", "prompt": "final"}})
+        ledger = json.loads((orbit / "budget.json").read_text())
+        if ledger.get("gear") != "T4" or ledger.get("total") != 240000:
+            fails.append("arbitrary high gear did not clamp to hard T4")
+
+        (orbit / "STATE.md").write_text("# State\nnext: verify")
+        (orbit / "tasks.json").write_text('[{"task":"verify","status":"active"}]')
+        invoke(project, {"hook_event_name": "PreCompact", "cwd": str(project)})
+        checkpoint = json.loads((orbit / "context-checkpoint.json").read_text())
+        if checkpoint.get("goal") != "Fix the checkout" or not isinstance(checkpoint.get("tasks"), list):
+            fails.append("compaction checkpoint lost goal or task evidence")
+        restored = invoke(project, {"hook_event_name": "PostCompact", "cwd": str(project)})
+        if "RESOURCE CHECKPOINT" not in json.dumps(restored):
+            fails.append("PostCompact did not restore the bounded goal checkpoint")
+
+        # T1 allows at most four Agent edges. The fifth is denied directly, never converted to ask.
+        ledger = json.loads((orbit / "budget.json").read_text())
+        ledger["gear"] = "T1"; ledger["requested_gear"] = "T1"; ledger["agent_calls"] = 4
+        (orbit / "budget.json").write_text(json.dumps(ledger))
+        (orbit / "activity.jsonl").write_text(json.dumps({"phase": "gear", "gear": "T1"}) + "\n")
+        ceiling = invoke(project, {"hook_event_name": "PreToolUse", "tool_name": "Agent",
+                          "tool_use_id": "edge-5", "cwd": str(project),
+                          "tool_input": {"subagent_type": "planner", "prompt": "more"}})
+        if ceiling.get("hookSpecificOutput", {}).get("permissionDecision") != "deny":
+            fails.append("gear-specific Agent-call ceiling was not enforced")
+        if "ask" in json.dumps(ceiling).lower():
+            fails.append("Agent-call ceiling exposed a confirmation path")
+
+    with tempfile.TemporaryDirectory() as td:
+        project = Path(td); (project / ".orbit").mkdir()
+        denied = invoke(project, {"hook_event_name": "PreToolUse", "tool_name": "Agent",
+                         "cwd": str(project), "tool_input": {"subagent_type": "planner"}})
+        decision = denied.get("hookSpecificOutput", {}).get("permissionDecision")
+        if decision != "deny" or "ask" in json.dumps(denied).lower():
+            fails.append("missing ledger must deny without a confirmation path")
+
+    if fails:
+        print("FAIL: resource governor")
+        for failure in fails: print("  -", failure)
+        return 1
+    print("PASS: resource governor (immutable session budget + reservation + actual charge + checkpoint)")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

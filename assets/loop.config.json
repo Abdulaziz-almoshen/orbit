@@ -30,8 +30,8 @@
   "_context_budget_help": "Cheap-mode context governor. orbit-context doctor reads these thresholds before expensive loops; orbit-context compact archives old append-only logs, keeping the last N events. Token estimates are deliberately rough (bytes / token_estimate_divisor) and used as a stoplight, not billing truth. user_model_* and skills_* were added in v0.60.0: the user-model is read on every substantial task and appended on every CPO verdict, so it was the fastest-growing file in the project and the only one the doctor could not see.",
   "context_budget": {
     "token_estimate_divisor": 4,
-    "total_warn_tokens": 50000,
-    "total_fail_tokens": 90000,
+    "total_warn_tokens": 30000,
+    "total_fail_tokens": 60000,
     "state_warn_tokens": 12000,
     "state_fail_tokens": 25000,
     "activity_warn_tokens": 25000,
@@ -50,12 +50,23 @@
     "archive_dir": ".orbit/archive"
   },
 
-  "_token_budget_help": "The per-goal allocator (.orbit/checks/token_budget.py, CLI scripts/orbit-budget). The orchestrator opens a ledger when it declares the gear, pre-flights each dispatch, and records spend — so a run's economics are inspectable in .orbit/budget.json instead of implied. per_gear caps the whole goal; allocation splits what remains after the reserve across the roles that actually run (renormalized, so a short gear's unused shares flow to the roles that remain). T4 is null = tracked, never capped. On exhaustion the loop DEGRADES rather than throwing: trim the packet, then downgrade the model, then waive the role with a record the CPO can see. Never a silent skip.",
+  "_token_budget_help": "Trusted Resource Kernel contract. Every Claude session gets one goal ledger. PreToolUse[Agent] reserves a p90 slice atomically; PostToolUse[Agent] charges Claude's actual totalTokens; missing ledgers fail closed. Every gear, including arbitrary T5/T100 labels, saturates at a hard T4 ceiling. Exhaustion changes execution shape, never the goal or proof bar. Mandatory evidence cannot be waived for cost.",
   "token_budget": {
     "enabled": true,
     "unit": "tokens",
-    "per_gear": { "T0": 15000, "T1": 60000, "T2": 200000, "T3": 600000, "T4": null },
+    "per_gear": { "T0": 8000, "T1": 25000, "T2": 60000, "T3": 140000, "T4": 240000 },
     "reserve_fraction": 0.15,
+    "closeout_fraction": 0.10,
+    "fail_closed": true,
+    "force_synchronous_agents": true,
+    "max_agent_calls": { "T0": 0, "T1": 4, "T2": 6, "T3": 10, "T4": 14 },
+    "role_slice_tokens": {
+      "product-discovery": 7000, "business-analyst": 5000, "market-researcher": 7000,
+      "planner": 7000, "designer": 9000, "builder": 12000, "frontend-engineer": 12000,
+      "backend-engineer": 12000, "mobile-developer": 12000, "data-engineer": 12000,
+      "cli-engineer": 10000, "safety-gate": 4000, "reviewer": 6000,
+      "qa-engineer": 7000, "cpo": 5000, "reporter": 2500, "advisor": 10000
+    },
     "allocation": {
       "product-discovery": 0.08,
       "business-analyst": 0.05,
@@ -69,8 +80,23 @@
       "cpo": 0.07,
       "reporter": 0.03
     },
-    "degrade_ladder": ["trim_packet", "downgrade_model", "waive_role_with_record"],
+    "degrade_ladder": ["trim_packet", "downgrade_model", "budget_pause_with_checkpoint"],
     "warn_at": 0.75
+  },
+
+  "_communication_pruning_help": "AgentPrune-inspired sparse spatial-temporal graph. Roles are nodes; compact evidence handoffs are spatial edges; compaction/history handoffs are temporal edges. The protected quality spine cannot be pruned. Optional edges need unique evidence utility; full history and all-to-all role communication are forbidden.",
+  "communication_pruning": {
+    "enabled": true,
+    "method": "protected_sparse_dag",
+    "paper": "AgentPrune, ICLR 2025",
+    "quality_epsilon": 0.02,
+    "bootstrap_prune_ratio": 0.30,
+    "warmup_goals_before_learned_mask": 20,
+    "max_handoff_bytes": 2400,
+    "temporal_policy": "goal_capsule_plus_latest_relevant_evidence",
+    "forbid_full_history_handoff": true,
+    "protected_capabilities": ["goal", "safety", "review", "qa", "cpo", "report"],
+    "optional_edge_admission": "new_requirement_or_risk_or_external_evidence"
   },
 
   "_eval_gates_help": "Proceed only if all pass. A single failure routes a fix task into the queue; gate_failure_streak consecutive failures trips a hard stop (the loop is thrashing). Thresholds are domain-specific; fit them to your product.",

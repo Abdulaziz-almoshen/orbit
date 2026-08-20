@@ -20,7 +20,7 @@ existing files are never clobbered.
 Usage:
   python scaffold.py --target /path/to/repo      # default target: current directory
   python scaffold.py --frontend                  # also stand up the Designer + design playbooks
-  python scaffold.py --install-hooks             # also wire the PreToolUse safety hook
+  python scaffold.py --install-hooks             # compatibility flag; hooks are default-on
 """
 from __future__ import annotations
 
@@ -270,7 +270,7 @@ QA_FRONTEND = [("qa/snapshot.py", ".orbit/qa/snapshot.py"),
 
 # The design gate hook (Phase 2) — a coarse PreToolUse backstop that asks once per cycle when a
 # UI production file is edited with no design-decision record. Frontend-only (it acts on a
-# rendered UI); placed but NOT wired unless --install-hooks (see install_hooks below).
+# rendered UI); placed and wired on every normal scaffold (see install_hooks below).
 DESIGN_GATE_FRONTEND = [("checks/design-gate.py", ".orbit/checks/design-gate.py")]
 
 # The UNIVERSAL spine — every project gets these (routing, planning, gates, reporting). Copied
@@ -283,20 +283,14 @@ ROLES_CORE = ["dispatcher", "orchestrator", "advisor", "product-discovery", "bus
 # portable runtime has no ObserverReport/digest primitive, and presenting a watchdog as a normal
 # role would invite the orchestrator to dispatch it as a worker.
 CLAUDE_OBSERVERS = ["watchdog"]
-OBSERVED_AGENT_NAMES = tuple(ROLES_CORE) + (
+OPERATIONAL_AGENT_NAMES = tuple(ROLES_CORE) + (
     "builder", "frontend-engineer", "backend-engineer", "mobile-developer",
     "data-engineer", "cli-engineer", "designer",
 )
-# Descendant observation (`observeSubagents: true`) makes the watchdog read the observed agent's
-# whole sub-tree. That is worth paying for where an agent MUTATES the repo or spawns its own
-# workers — drift there is expensive and hard to see. It is not worth paying for on read-only
-# advisory roles, whose output the loop reads directly anyway. Measured before this split: the
-# watchdog was 38-44% of all logged events across two live installs.
-DESCENDANT_OBSERVED_NAMES = (
-    "orchestrator", "planner", "builder", "designer",
-    "frontend-engineer", "backend-engineer", "mobile-developer",
-    "data-engineer", "cli-engineer",
-)
+# One root observer with descendant propagation watches the same execution tree without spawning
+# a fresh observer beside every role. This is Orbit's protected spatial edge: always present, never
+# all-to-all. Existing non-Orbit custom observers are preserved.
+ROOT_OBSERVER_AGENT = "orchestrator"
 OBSERVER_MESSAGE = (
     "  Watch this role and its descendants for shallow discovery, missing alternatives, untested\n"
     "  assumptions, stalled or repetitive work, scope drift, weakened tests, rubber-stamped gates,\n"
@@ -358,6 +352,14 @@ ORBIT_HOOK_CMD = (
     '"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/orbit/bin/orbit-hook" '
     '"$HOME"/.claude/plugins/cache/*/orbit/*/bin/orbit-hook '
     '"${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/*/orbit/*/bin/orbit-hook; '
+    "do [ -f \"$p\" ] && exec python3 \"$p\"; done; exit 0'"
+)
+ORBIT_RESOURCE_CMD = (
+    "sh -c 'for p in "
+    '"${CLAUDE_PLUGIN_ROOT:-}/bin/orbit-resource-hook" '
+    '"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/orbit/bin/orbit-resource-hook" '
+    '"$HOME"/.claude/plugins/cache/*/orbit/*/bin/orbit-resource-hook '
+    '"${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/*/orbit/*/bin/orbit-resource-hook; '
     "do [ -f \"$p\" ] && exec python3 \"$p\"; done; exit 0'"
 )
 # The TRUSTED safety wall (v0.31.0): runs the plugin's hardened built-in guard + the repo's DECLARATIVE
@@ -426,14 +428,9 @@ def _engineer_text(builder: str, name: str, display: str, scope: str) -> str:
 
 
 def _ensure_agent_observers(target: Path, changed: list, warnings: list) -> None:
-    """Attach the watchdog to every operational Orbit role without replacing customized bodies.
-
-    Existing `observer:` declarations are user intent and always win. Malformed/non-frontmatter
-    files are preserved with a warning. This narrow additive migration is what makes a project
-    refresh activate the watchdog instead of limiting it to newly scaffolded repositories.
-    """
+    """Enforce one propagated root watchdog and prune redundant Orbit-owned child observers."""
     agents = target / ".claude/agents"
-    for name in OBSERVED_AGENT_NAMES:
+    for name in OPERATIONAL_AGENT_NAMES:
         path = agents / f"{name}.md"
         if not path.exists():
             continue
@@ -444,20 +441,26 @@ def _ensure_agent_observers(target: Path, changed: list, warnings: list) -> None
                 warnings.append(f"{path.relative_to(target)} has malformed frontmatter — observer not added")
                 continue
             front = match.group("front")
-            has_observer = bool(re.search(r"(?m)^observer\s*:", front))
-            addition = ""
-            if not has_observer:
-                addition += "\nobserver: watchdog"
-                if not re.search(r"(?m)^observerMessage\s*:", front):
-                    addition += "\nobserverMessage: >-\n" + OBSERVER_MESSAGE
-            if name in DESCENDANT_OBSERVED_NAMES and not re.search(
-                    r"(?m)^observeSubagents\s*:", front):
-                addition += "\nobserveSubagents: true"
-            if not addition:
+            updated_front = front
+            if name == ROOT_OBSERVER_AGENT:
+                addition = ""
+                if not re.search(r"(?m)^observer\s*:", front):
+                    addition += "\nobserver: watchdog\nobserverMessage: >-\n" + OBSERVER_MESSAGE
+                if not re.search(r"(?m)^observeSubagents\s*:", front):
+                    addition += "\nobserveSubagents: true"
+                updated_front += addition
+            elif re.search(r"(?m)^observer:\s*watchdog\s*$", front):
+                updated_front = re.sub(r"(?m)^observer:\s*watchdog\s*\n", "", updated_front)
+                updated_front = re.sub(
+                    r"(?ms)^observerMessage:\s*>-\s*\n(?:  [^\n]*\n?)+", "", updated_front)
+                updated_front = re.sub(r"(?m)^observeSubagents:\s*true\s*\n?", "", updated_front)
+            if updated_front == front:
                 continue
-            updated = original[:match.end("front")] + addition + original[match.end("front"):]
+            updated = original[:match.start("front")] + updated_front + original[match.end("front"):]
             path.write_text(updated)
-            changed.append(f"{path.relative_to(target)}  (enabled full-loop watchdog; body preserved)")
+            action = ("enabled one propagated root watchdog" if name == ROOT_OBSERVER_AGENT
+                      else "pruned redundant child watchdog")
+            changed.append(f"{path.relative_to(target)}  ({action}; body preserved)")
         except Exception as exc:
             warnings.append(f"Could not add observer to {path.relative_to(target)}: {exc}")
 
@@ -726,6 +729,7 @@ def scaffold_drift(target: Path) -> dict:
     hook_drift = [name for name, tok in (
         ("router", "route.py"),
         ("observability Stop hook", "orbit-stop-check.py"), ("telemetry", "orbit-hook"),
+        ("resource governor", "orbit-resource-hook"),
         ("status line", "orbit-statusline")) if tok not in wired]
     if "guard.py" not in wired and "orbit-guard" not in wired:   # either wall counts as wired
         hook_drift.insert(0, "safety guard")
@@ -758,7 +762,8 @@ def _print_drift(target: Path) -> None:
     d = scaffold_drift(target)
     if not (target / ".orbit").is_dir():
         print("Not an Orbit-scaffolded repo (no .orbit/). Run /orbit to set it up."); return
-    fresh = (not d["metadata_stale_or_missing"] and not d["missing_files"] and not d["hook_drift"])
+    fresh = (not d["metadata_stale_or_missing"] and not d["missing_files"] and not d["hook_drift"]
+             and not d["guard_customized_preserved"])
     print(f"Orbit scaffold drift — plugin v{d['plugin_version']} · this project's scaffold "
           f"v{d['scaffold_version'] or 'unknown'}")
     if d.get("legacy_guard_wired"):
@@ -880,9 +885,9 @@ def _auto_heal(target: Path) -> str:
     """Perform the safe, non-interactive subset of a full scaffold refresh.
 
     This never edits CLAUDE.md, replaces role bodies, or overwrites customized checks. It backfills
-    missing shipped core roles/playbooks and may add narrowly scoped, idempotent observer/TasteSkill
-    activation blocks to recognized Orbit roles plus the observer env default; existing body content
-    and explicit observer/settings values always win.
+    missing shipped core roles/playbooks, enforces the sparse observer topology, and idempotently
+    merges the required trusted hooks; existing body content and explicit custom observer/settings
+    values always win.
     """
     if not (target / ".orbit").is_dir():
         return "not an Orbit repo"
@@ -918,6 +923,7 @@ def _auto_heal(target: Path) -> str:
         _place(AGENTS / f"{observer}.md", target / ".claude/agents" / f"{observer}.md", created, skipped)
     _ensure_agent_observers(target, created, warnings)
     _ensure_observer_setting(target, created, warnings)
+    install_hooks(target, has_ui)
 
     migrate_hooks(target, created, warnings)
     _write_manifest(target)
@@ -935,14 +941,18 @@ def _auto_heal(target: Path) -> str:
 def install_hooks(target: Path, has_ui: bool = False, reporter_only: bool = False) -> None:
     """Activate Orbit in .claude/settings.json (default-on + announced):
 
-      • env.CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS=1 → arm full-loop watchdogs unless the user has
+      • env.CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS=1 → arm the propagated root watchdog unless the user has
         already set an explicit value. This is skipped for reporter-only activation.
 
       • PreToolUse(Bash) → orbit-guard  — the non-interactive safety wall (allow or deny; never ask),
         TRUSTED-install resolved = built-in hardened rules + the repo's declarative
         .orbit/security/rules.json. A repo that already wired the legacy project-local guard.py keeps it.
-      • UserPromptSubmit → route.py  — the deterministic router: classifies every message
-        (task → loop, question → direct) and injects the decision as the default lane.
+      • UserPromptSubmit → route.py + trusted resource hook — classify the request and open exactly
+        one fail-closed goal ledger per Claude session; follow-ups cannot reset its allowance.
+      • PreToolUse/PostToolUse(Agent) → trusted resource hook — atomically reserve before dispatch,
+        force measurable synchronous execution, then charge Claude's actual usage telemetry.
+      • PreCompact/PostCompact → trusted resource hook — preserve and restore a bounded goal/budget
+        checkpoint instead of paying to replay full temporal history.
       • PreToolUse(Edit|Write|MultiEdit) → design-gate.py — UI repos only (has_ui): a coarse
         backstop that asks once per cycle if a UI production file has no design-decision record.
         Never denies; fails open. Not a per-change heavy-redesign blocker — see its own docstring.
@@ -982,9 +992,17 @@ def install_hooks(target: Path, has_ui: bool = False, reporter_only: bool = Fals
         if isinstance(env, dict) and "CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS" not in env:
             env["CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS"] = "1"
             added.append("env.CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS=1   "
-                         "(experimental: visible watchdog across the full Orbit role tree)")
+                         "(experimental: one visible watchdog across the full Orbit role tree)")
         elif not isinstance(env, dict):
             print("  Note: .claude/settings.json env is not an object — observer flag left untouched.")
+        if isinstance(env, dict):
+            if "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE" not in env:
+                env["CLAUDE_AUTOCOMPACT_PCT_OVERRIDE"] = "70"
+                added.append("env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=70   (proactive context rollover)")
+            if "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS" not in env:
+                env["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"] = "1"
+                added.append("env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1   "
+                             "(governed Agent calls return measurable usage)")
 
     pre = hooks.setdefault("PreToolUse", [])
     # The safety wall. NEW repos wire the TRUSTED orbit-guard (built-in rules + declarative
@@ -996,11 +1014,30 @@ def install_hooks(target: Path, has_ui: bool = False, reporter_only: bool = Fals
         pre.append({"matcher": "Bash", "hooks": [{"type": "command", "command": ORBIT_GUARD_CMD}]})
         added.append("PreToolUse[matcher=Bash] → orbit-guard   (TRUSTED non-interactive wall: "
                      "allow/deny only, never confirmation; a repo can't weaken it)")
+    if not reporter_only and not any("orbit-resource-hook" in json.dumps(e) and
+                                     e.get("matcher") == "Agent" for e in pre):
+        pre.append({"matcher": "Agent", "hooks": [{"type": "command", "command": ORBIT_RESOURCE_CMD}]})
+        added.append("PreToolUse[matcher=Agent] → orbit-resource-hook   "
+                     "(fail-closed reservation; allow/deny only, never confirmation)")
 
     ups = hooks.setdefault("UserPromptSubmit", [])
     if not reporter_only and not any("route.py" in json.dumps(e) for e in ups):
         ups.append({"hooks": [{"type": "command", "command": ROUTE_CMD}]})
         added.append("UserPromptSubmit → route.py            (routing: classify task vs question)")
+    if not reporter_only and not any("orbit-resource-hook" in json.dumps(e) for e in ups):
+        ups.append({"hooks": [{"type": "command", "command": ORBIT_RESOURCE_CMD}]})
+        added.append("UserPromptSubmit → orbit-resource-hook (one immutable goal budget per session)")
+
+    if not reporter_only:
+        post = hooks.setdefault("PostToolUse", [])
+        if not any("orbit-resource-hook" in json.dumps(e) and e.get("matcher") == "Agent" for e in post):
+            post.append({"matcher": "Agent", "hooks": [{"type": "command", "command": ORBIT_RESOURCE_CMD}]})
+            added.append("PostToolUse[matcher=Agent] → orbit-resource-hook (charge actual totalTokens)")
+        for event in ("PreCompact", "PostCompact"):
+            entries = hooks.setdefault(event, [])
+            if not any("orbit-resource-hook" in json.dumps(e) for e in entries):
+                entries.append({"hooks": [{"type": "command", "command": ORBIT_RESOURCE_CMD}]})
+                added.append(f"{event} → orbit-resource-hook (bounded goal/budget checkpoint)")
 
     if not reporter_only and has_ui and not any("design-gate.py" in json.dumps(e) for e in pre):
         pre.append({"matcher": "Edit|Write|MultiEdit",
@@ -1068,7 +1105,7 @@ def main():
     ap.add_argument("--frontend", action="store_true",
                     help="back-compat alias: implies a web surface (Designer + design playbooks)")
     ap.add_argument("--install-hooks", action="store_true",
-                    help="also wire the always-on safety hook into .claude/settings.json")
+                    help="compatibility flag; normal scaffold already wires Orbit's required hooks")
     ap.add_argument("--enable-reporter", action="store_true",
                     help="wire observability/status-line hooks and start the macOS floating reporter")
     ap.add_argument("--check-drift", action="store_true",
@@ -1081,7 +1118,7 @@ def main():
                          "(backups kept); never touches a customized hook. Then exit.")
     ap.add_argument("--auto-heal", action="store_true",
                     help="NON-INTERACTIVE safe refresh: add missing Orbit-owned files, refresh proven "
-                         "unchanged checks, and stamp metadata; never edits settings or custom files")
+                         "unchanged checks, merge required hooks, and stamp metadata; never replaces custom files")
     args = ap.parse_args()
     target = args.target.resolve()
 
@@ -1170,7 +1207,7 @@ def main():
             _place(ASSETS / src_rel, target / dst_rel, created, skipped, 0o755)
 
     # 3d. the design gate hook (UI surfaces only) -> .orbit/checks/design-gate.py
-    #     placed here always on has_ui repos; WIRED into settings.json only via --install-hooks.
+    #     placed here on has_ui repos; the default-on install_hooks call wires it below.
     if has_ui:
         for src_rel, dst_rel in DESIGN_GATE_FRONTEND:
             _place(ASSETS / src_rel, target / dst_rel, created, skipped, 0o755)
@@ -1241,17 +1278,8 @@ def main():
         "  * the engineers are already named per detected surface; add a specialist only if needed.\n"
         "  * wire loop.py dispatch() to your orchestrator; tune loop.config.json thresholds."
     )
-    if args.install_hooks or args.enable_reporter:
-        print()
-        install_hooks(target, has_ui, reporter_only=args.enable_reporter and not args.install_hooks)
-    else:
-        print(
-            "\nSafety guard: NOT wired yet (re-run with --install-hooks, or let the skill do it in\n"
-            "Phase 6a). When wired it's the TRUSTED orbit-guard (built-in wall + your declarative\n"
-            ".orbit/security/rules.json) — a repo can't weaken its own wall. Add repo rules in\n"
-            "rules.json; .orbit/checks/guard.py is the built-in ruleset reference (editing it does\n"
-            "nothing once the trusted runner is wired)."
-        )
+    print()
+    install_hooks(target, has_ui, reporter_only=args.enable_reporter and not args.install_hooks)
     if args.enable_reporter:
         if sys.platform == "darwin":
             reporter = target / "scripts" / "orbit-pet"

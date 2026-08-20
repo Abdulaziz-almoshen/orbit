@@ -2,9 +2,9 @@
 """
 orbit-budget — open, inspect, and debit the per-goal token ledger.
 
-The orchestrator opens a ledger when it declares the gear, checks before each dispatch, and records
-spend after. Everything lands in .orbit/budget.json so the run's economics are inspectable rather
-than implied.
+The trusted resource hook opens one ledger per Claude session, reserves before every Agent edge,
+and reconciles actual provider usage after it returns. This CLI is the inspect/manual-repair surface;
+normal native sessions do not rely on the model remembering to call it.
 
   orbit-budget plan --gear T2 --roles planner,builder,reviewer --goal "..."   open a ledger
   orbit-budget check --role builder --estimate 40000                          pre-flight a dispatch
@@ -12,9 +12,7 @@ than implied.
   orbit-budget degrade --role builder --action trim_packet --reason "..."     log a ladder rung
   orbit-budget status                                                         show the ledger
 
-`check` exits 0 when the dispatch fits and 3 when the caller must degrade — the action to take is
-on stdout either way. It never exits non-zero for "over budget" in a way that reads as an error,
-because a degrade is a normal operating mode, not a failure.
+`check` exits 0 when a dispatch fits, 3 for a cheaper execution shape, and 4 for a hard denial.
 """
 from __future__ import annotations
 
@@ -84,10 +82,9 @@ def main(argv=None) -> int:
         else:
             print(f"Orbit budget opened — gear {led['gear']}, goal: {led['goal'][:70] or '(unstated)'}")
             total = led.get("total")
-            print(f"  total:   {'uncapped' if total is None else f'{total:,} tokens'}"
-                  + ("" if total is None else f"   reserve {led['reserve']:,}"))
+            print(f"  total:   {int(total):,} tokens   reserve {led['reserve']:,}")
             for role, alloc in led["allocations"].items():
-                print(f"  {role:<20} {'uncapped' if alloc is None else f'{alloc:>8,} tok'}")
+                print(f"  {role:<20} {int(alloc):>8,} tok")
         return 0
 
     if a.command == "check":
@@ -101,7 +98,7 @@ def main(argv=None) -> int:
             print(f"{res['decision'].upper()}: {res['reason']}")
             if res["decision"] == "degrade":
                 print(f"  action: {res['action']}")
-        return 3 if res["decision"] == "degrade" else 0
+        return 4 if res["decision"] == "deny" else (3 if res["decision"] == "degrade" else 0)
 
     if a.command == "spend":
         if not a.role:
@@ -138,14 +135,12 @@ def main(argv=None) -> int:
     total = led.get("total")
     for role, alloc in (led.get("allocations") or {}).items():
         spent = int((led.get("spent") or {}).get(role, 0))
-        if alloc is None:
-            print(f"  {role:<20} {spent:>8,} tok spent  (uncapped)")
-        else:
-            pct = int(round(100 * spent / max(1, alloc)))
-            flag = "  ⚠" if pct >= 100 else ""
-            print(f"  {role:<20} {spent:>8,} / {alloc:>8,} tok  ({pct:>3}%){flag}")
-    if total is not None:
-        print(f"  reserve used: {led.get('reserve_used', 0):,} / {led.get('reserve', 0):,}")
+        pct = int(round(100 * spent / max(1, alloc)))
+        flag = "  ⚠" if pct >= 100 else ""
+        print(f"  {role:<20} {spent:>8,} / {alloc:>8,} tok  ({pct:>3}%){flag}")
+    print(f"  reserve used: {led.get('reserve_used', 0):,} / {led.get('reserve', 0):,}")
+    print(f"  agent calls: {led.get('agent_calls', 0)} · outstanding reservations: "
+          f"{len(led.get('reservations') or {})}")
     for d in led.get("degrades") or []:
         print(f"  degrade: {d['role']} → {d['action']} — {d['reason']}")
     return 0

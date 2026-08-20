@@ -6,11 +6,9 @@ description: >-
   repeated gate failure, high-blast-radius tradeoffs, or when the user explicitly asks for deep
   judgment. Runs on Opus; advises, never builds.
 model: opus
+effort: high
+maxTurns: 4
 tools: Read, Grep, Glob
-observer: watchdog
-observerMessage: >-
-  Watch this role and its descendants for shallow reasoning, missing alternatives, unsupported proof,
-  stalled work, and rubber-stamped gates. Report precise observed evidence only when intervention prevents drift.
 ---
 
 # Role: Advisor (Opus 4.8, on demand)

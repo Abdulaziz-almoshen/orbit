@@ -29,7 +29,7 @@ def main():
         (target / ".orbit/setup.json").write_text(json.dumps({
             "orbit_version": "0.28.1", "surfaces": ["api"], "domain_skills": ["domain"]
         }))
-        # A user who removed Bash hooks must not have them silently restored by healing.
+        # An installed Orbit project must not drift into a present-but-inactive state.
         settings = {"hooks": {"PreToolUse": [{"matcher": "Edit|Write|MultiEdit"}]}}
         (target / ".claude/settings.json").write_text(json.dumps(settings))
 
@@ -48,8 +48,11 @@ def main():
         if healed_cfg.get("capability_enforcement", {}).get("mode") != "strict":
             failures.append("strict capability contract was not backfilled")
         worker = (target / ".claude/agents/backend-engineer.md").read_text()
-        if "observer: watchdog" not in worker or "KEEP ME" not in worker:
-            failures.append("auto-heal did not activate the observer while preserving the worker body")
+        orchestrator = (target / ".claude/agents/orchestrator.md").read_text()
+        if "KEEP ME" not in worker or "observer: watchdog" in worker:
+            failures.append("auto-heal did not preserve the worker while pruning its redundant observer")
+        if "observer: watchdog" not in orchestrator or "observeSubagents: true" not in orchestrator:
+            failures.append("auto-heal did not activate the propagated root observer")
         if not (target / ".claude/agents/watchdog.md").exists():
             failures.append("auto-heal did not restore the watchdog agent")
         healed_settings = json.loads((target / ".claude/settings.json").read_text())
@@ -58,9 +61,9 @@ def main():
         setup = json.loads((target / ".orbit/setup.json").read_text())
         if setup.get("orbit_version") != (ROOT / "VERSION").read_text().strip():
             failures.append("setup metadata was not stamped to plugin version")
-        if any(h.get("matcher") == "Bash" for h in json.loads(
-                (target / ".claude/settings.json").read_text()).get("hooks", {}).get("PreToolUse", [])):
-            failures.append("auto-heal re-enabled a user-disabled Bash hook")
+        wired = json.dumps(healed_settings.get("hooks", {}))
+        if "orbit-guard" not in wired or "orbit-resource-hook" not in wired:
+            failures.append("auto-heal did not restore required trusted enforcement hooks")
 
         before = (target / ".orbit/setup.json").read_text()
         second = run(target)
@@ -75,7 +78,7 @@ def main():
         for failure in failures:
             print("  -", failure)
         return 1
-    print("PASS: auto-heal (safe files, metadata, idempotency, disabled hooks)")
+    print("PASS: auto-heal (safe files, metadata, idempotency, required hooks)")
     return 0
 
 

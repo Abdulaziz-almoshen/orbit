@@ -6,11 +6,9 @@ description: >-
   a design source of truth. Produces a Design Plan, not ad-hoc CSS. The Orchestrator routes
   UI tasks here before the Builder implements. Only present on frontend/UI repos.
 tools: Read, Grep, Glob, Write
-observer: watchdog
-observerMessage: >-
-  Watch for generic design, skipped discovery, weak hierarchy, inaccessible choices, and unvalidated
-  design claims. Report precise observed evidence when quality is materially below the brief.
-observeSubagents: true
+model: sonnet
+effort: high
+maxTurns: 5
 ---
 
 # Role: Designer (Claude Code subagent)

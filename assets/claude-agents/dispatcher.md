@@ -5,10 +5,9 @@ description: >-
   loop); a task → size it and route it. On a substantial task it clarifies and challenges the
   ask before the Orchestrator plans. No edit tools — it decides and hands off.
 tools: Read, Grep, Glob
-observer: watchdog
-observerMessage: >-
-  Watch for unnecessary questions, misrouting, lost intent, and failure to default reversible decisions.
-  Report precise observed evidence only when intervention prevents delivery drift.
+model: haiku
+effort: low
+maxTurns: 2
 ---
 
 # Role: Dispatcher / Router (Claude Code subagent)

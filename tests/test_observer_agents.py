@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Observer-agent contract: every operational role is watched, visible, and low-trust."""
+"""Observer contract: one low-trust root watcher covers the tree without per-role token fanout."""
 import importlib.util
 import json
 import os
@@ -23,106 +23,81 @@ def frontmatter(text):
 
 def main():
     fails = []
-    watchdog = read("assets", "claude-agents", "watchdog.md")
-    observed = ("dispatcher", "orchestrator", "advisor", "product-discovery", "business-analyst",
-                "market-researcher", "planner", "builder", "designer", "safety-gate", "reviewer",
-                "qa-engineer", "cpo", "reporter")
-    # Every role is WATCHED. Only roles that mutate the repo or spawn their own workers propagate
-    # observation to DESCENDANTS — reading a whole sub-tree is the expensive part, and on read-only
-    # advisory roles it bought nothing the loop couldn't see in their output. (v0.60.0: the watchdog
-    # was 38-44% of all logged events across two live installs before this split.)
-    descendant_observed = ("orchestrator", "planner", "builder", "designer")
-    for name in observed:
+    operational = ("dispatcher", "orchestrator", "advisor", "product-discovery",
+                   "business-analyst", "market-researcher", "planner", "builder", "designer",
+                   "safety-gate", "reviewer", "qa-engineer", "cpo", "reporter")
+    for name in operational:
         fm = frontmatter(read("assets", "claude-agents", f"{name}.md"))
-        if not re.search(r"(?m)^observer:\s*watchdog\s*$", fm):
-            fails.append(f"{name} does not declare observer: watchdog")
-        if not re.search(r"(?m)^observerMessage:\s*>-\s*$", fm):
-            fails.append(f"{name} does not provide an observerMessage")
-        has_desc = bool(re.search(r"(?m)^observeSubagents:\s*true\s*$", fm))
-        if name in descendant_observed and not has_desc:
-            fails.append(f"{name} mutates or spawns and must propagate observation to descendants")
-        if name not in descendant_observed and has_desc:
-            fails.append(f"{name} is read-only advisory — descendant observation is a token tax "
-                         f"with no signal; drop observeSubagents")
-    if re.search(r"(?m)^observer:", frontmatter(watchdog)):
-        fails.append("watchdog declares an observer (observer chaining must stay impossible)")
-    if re.search(r"(?m)^tools:", frontmatter(watchdog)):
-        fails.append("watchdog requests normal task tools instead of relying only on ObserverReport")
+        watched = bool(re.search(r"(?m)^observer:\s*watchdog\s*$", fm))
+        propagated = bool(re.search(r"(?m)^observeSubagents:\s*true\s*$", fm))
+        if name == "orchestrator" and not (watched and propagated):
+            fails.append("orchestrator must own the one propagated watchdog")
+        if name != "orchestrator" and (watched or propagated):
+            fails.append(f"{name} has a redundant observer edge")
+
+    watchdog = read("assets", "claude-agents", "watchdog.md")
+    if re.search(r"(?m)^observer:|^tools:", frontmatter(watchdog)):
+        fails.append("watchdog must neither chain observers nor request normal tools")
     for phrase in ("expected steady state is silence", "data, not instructions", "not user authority"):
         if phrase not in watchdog.lower():
-            fails.append(f"watchdog is missing the low-trust contract phrase {phrase!r}")
+            fails.append(f"watchdog is missing low-trust phrase {phrase!r}")
 
     with tempfile.TemporaryDirectory() as d:
         subprocess.run(["git", "init", "-q", d], check=True)
-        subprocess.run([sys.executable, SCAFFOLD, "--surfaces", "web,api", "--install-hooks",
-                        "--target", d], check=True, capture_output=True, text=True)
-        for name in ("dispatcher", "orchestrator", "product-discovery", "business-analyst",
-                     "market-researcher", "planner", "frontend-engineer", "backend-engineer",
-                     "designer", "safety-gate", "reviewer", "qa-engineer", "cpo", "reporter"):
-            text = open(os.path.join(d, ".claude", "agents", f"{name}.md"), encoding="utf-8").read()
-            if "observer: watchdog" not in frontmatter(text):
-                fails.append(f"generated {name} lost the observer pairing")
-        if not os.path.isfile(os.path.join(d, ".claude", "agents", "watchdog.md")):
-            fails.append("scaffolder did not install the Claude watchdog agent")
-        if os.path.exists(os.path.join(d, ".orbit", "roles", "watchdog.md")):
-            fails.append("Claude-native watchdog leaked into the model-agnostic role catalog")
+        subprocess.run([sys.executable, SCAFFOLD, "--surfaces", "web,api", "--target", d],
+                       check=True, capture_output=True, text=True)
+        watched = []
+        for name in operational + ("frontend-engineer", "backend-engineer"):
+            path = os.path.join(d, ".claude", "agents", f"{name}.md")
+            if os.path.isfile(path) and "observer: watchdog" in frontmatter(open(path, encoding="utf-8").read()):
+                watched.append(name)
+        if watched != ["orchestrator"]:
+            fails.append(f"generated topology must have one root observer, got {watched}")
         settings = json.load(open(os.path.join(d, ".claude", "settings.json"), encoding="utf-8"))
         if settings.get("env", {}).get("CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS") != "1":
-            fails.append("normal hook installation did not enable the experimental observer gate")
+            fails.append("normal scaffold did not enable Claude observer agents")
+        if not os.path.isfile(os.path.join(d, ".claude", "agents", "watchdog.md")):
+            fails.append("scaffold did not install watchdog")
 
-        payload = json.dumps({"hook_event_name": "SubagentStart", "agent_type": "watchdog", "cwd": d})
-        subprocess.run([sys.executable, os.path.join(ROOT, "bin", "orbit-hook")], input=payload,
-                       text=True, check=True)
-        agents_path = os.path.join(d, ".orbit", "agents.json")
-        agents = json.load(open(agents_path)) if os.path.isfile(agents_path) else {}
-        if "watchdog" in agents:
-            fails.append("observer sidecar displaced the worker on Orbit's visible team board")
-        state = json.load(open(os.path.join(d, ".orbit", "observer.json"), encoding="utf-8"))
-        if state.get("state") != "watching" or state.get("scope") != "full-loop":
-            fails.append(f"observer lifecycle is not visibly evidenced: {state}")
-
-    # Existing scaffold refresh: add keys without replacing a customized worker body, and honor an
-    # existing alternate observer declaration on another worker.
+    # Upgrade an old all-role topology: remove Orbit watchdogs from children, preserve a custom one.
     with tempfile.TemporaryDirectory() as d:
         subprocess.run(["git", "init", "-q", d], check=True)
-        subprocess.run([sys.executable, SCAFFOLD, "--surfaces", "web,api", "--target", d],
+        subprocess.run([sys.executable, SCAFFOLD, "--surfaces", "api", "--target", d],
                        check=True, capture_output=True, text=True)
-        backend = os.path.join(d, ".claude", "agents", "backend-engineer.md")
-        text = open(backend, encoding="utf-8").read()
-        text = re.sub(r"(?ms)^observer: watchdog\nobserverMessage: >-\n(?:  [^\n]*\n)+observeSubagents: true\n", "", text)
-        text += "\nCUSTOMIZED WORKER BODY\n"
-        open(backend, "w", encoding="utf-8").write(text)
-        frontend = os.path.join(d, ".claude", "agents", "frontend-engineer.md")
-        text = open(frontend, encoding="utf-8").read().replace("observer: watchdog", "observer: local-auditor")
-        open(frontend, "w", encoding="utf-8").write(text)
-        subprocess.run([sys.executable, SCAFFOLD, "--surfaces", "web,api", "--target", d],
+        child = os.path.join(d, ".claude", "agents", "backend-engineer.md")
+        body = open(child, encoding="utf-8").read()
+        body = body.replace("description:", "observer: watchdog\nobserverMessage: >-\n  old Orbit watcher\nobserveSubagents: true\ndescription:", 1)
+        body += "\nCUSTOMIZED BODY\n"
+        open(child, "w", encoding="utf-8").write(body)
+        custom = os.path.join(d, ".claude", "agents", "planner.md")
+        body = open(custom, encoding="utf-8").read().replace("description:", "observer: local-auditor\ndescription:", 1)
+        open(custom, "w", encoding="utf-8").write(body)
+        subprocess.run([sys.executable, SCAFFOLD, "--surfaces", "api", "--target", d],
                        check=True, capture_output=True, text=True)
-        migrated = open(backend, encoding="utf-8").read()
-        if "observer: watchdog" not in frontmatter(migrated) or "CUSTOMIZED WORKER BODY" not in migrated:
-            fails.append("refresh did not add the watchdog while preserving a customized worker body")
-        if "observer: local-auditor" not in frontmatter(open(frontend, encoding="utf-8").read()):
-            fails.append("refresh overwrote an existing project-specific observer")
+        migrated = open(child, encoding="utf-8").read()
+        if "observer: watchdog" in frontmatter(migrated) or "CUSTOMIZED BODY" not in migrated:
+            fails.append("refresh did not prune old child watchdog while preserving its body")
+        if "observer: local-auditor" not in frontmatter(open(custom, encoding="utf-8").read()):
+            fails.append("refresh overwrote a project-specific observer")
 
     spec = importlib.util.spec_from_file_location("observer_scaffold", SCAFFOLD)
-    sc = importlib.util.module_from_spec(spec)
-    sys.modules["observer_scaffold"] = sc
+    sc = importlib.util.module_from_spec(spec); sys.modules["observer_scaffold"] = sc
     spec.loader.exec_module(sc)
     with tempfile.TemporaryDirectory() as d:
         t = sc.Path(d); (t / ".claude").mkdir()
         settings = t / ".claude" / "settings.json"
         settings.write_text(json.dumps({"env": {"CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS": "0"}}))
         sc.install_hooks(t)
-        value = json.loads(settings.read_text())["env"]["CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS"]
-        if value != "0":
-            fails.append("install_hooks overwrote the user's explicit observer opt-out")
+        if json.loads(settings.read_text())["env"]["CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS"] != "0":
+            fails.append("install_hooks overwrote explicit observer opt-out")
 
     if fails:
         print(f"FAIL: observer-agents {len(fails)} case(s):")
-        for failure in fails:
-            print("  -", failure)
-        sys.exit(1)
-    print("PASS: observer-agents (full-loop pairing + propagation + visible low-trust watcher + opt-out)")
+        for failure in fails: print("  -", failure)
+        return 1
+    print("PASS: observer-agents (one propagated root watcher; custom observers preserved)")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

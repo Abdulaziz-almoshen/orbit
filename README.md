@@ -8,13 +8,13 @@
 
 ### Stop prompting your agent. Build a system that prompts itself.
 
-#### Give Orbit the goal. It runs every specialist, watches every role, proves the result, and commits it.
+#### Give Orbit the goal. It selects the smallest expert graph that can prove it, watches the whole run, and commits the result.
 
 Orbit turns a product repository into a durable, observable agentic loop: it remembers the work,
 plans the next move, delegates focused tasks, **watches the full role tree live for drift**, checks the
 result, repairs failures, and returns a proven local commit—interrupting only for true blockers.
 
-![version](https://img.shields.io/badge/version-0.59.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.61.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![observable](https://img.shields.io/badge/observable-live%20dashboard-e8590c)
@@ -32,10 +32,9 @@ gives the work a durable operating system:
   Orbit reviews memory at least every five requests and again after the latest request before shipping.
   Pending or stale memory blocks CPO/Stop; a no-new-signal checkpoint is valid, invented preferences are not.
 - **Plan and progress:** every run has a visible checklist, owner, phase, gate, and next action.
-- **Enforced capabilities:** substantial work must complete Product Discovery, Business Analysis,
-  Market Research, Planning, Safety, Reviewer, QA, CPO, and Reporting; UI work must also complete
-  Design. The Stop hook blocks missing owners. Mentioning a role or using it as a private “lens”
-  does not satisfy the contract.
+- **Enforced capabilities without ceremonial fan-out:** Orbit chooses a protected role graph by gear.
+  T1 proves with Planner/Reviewer/QA/Reporter; T2 adds Safety/CPO; T3/T4 add Discovery/BA/Market;
+  UI adds Design. Every required owner is machine-gated, but irrelevant roles are pruned.
 - **Iterative quality:** failures become evidence-backed repair packets and return to the loop.
 - **Scenario-complete QA:** every delivery executes happy, alternate, negative, boundary,
   authorization, and failure/recovery journeys with observed artifacts—not only ticket assertions.
@@ -63,12 +62,13 @@ gives the work a durable operating system:
 - **Adversarial thinking:** a cheap counterfactual probe challenges risky assumptions before build.
 - **Model discipline:** Sonnet handles normal work; the Opus 4.8 Advisor is invoked on demand for
   expensive decisions.
-- **Cost control:** token, dollar, runtime, context, iteration, and fan-out limits are explicit.
+- **Trusted resource kernel:** every Agent call is reserved before launch and charged from Claude's
+  actual usage after return. T0–T4 have hard ceilings, T5/T100 clamp to T4, ten percent is protected
+  for closeout, and budget exhaustion returns a resumable checkpoint—never an unmetered retry.
 - **Parallel work:** independent workers use isolated Git worktrees instead of fighting over one checkout.
-- **Full-loop Claude observer:** every operational role and propagated descendant—Discovery, BA,
-  Research, Planner, Design, Build, Safety, Reviewer, QA, CPO, and Reporter—is paired with the silent
-  watchdog. Its state is visible as `armed`, `watching`, `intervention`, or `clean` without replacing
-  the active owner.
+- **One full-loop Claude observer:** a single watchdog is attached to the root orchestrator with
+  descendant propagation, so it sees Discovery through delivery without paying for a duplicate
+  observer beside every role. Its state is visible as `armed`, `watching`, `intervention`, or `clean`.
 - **Autonomous delivery:** reversible product and engineering decisions are Orbit's job. It asks only
   for missing access, human authority over irreversible/external actions, or an expensive product fork
   that evidence cannot resolve. Green work is returned as a scoped local commit with proof.
@@ -86,10 +86,10 @@ gives the work a durable operating system:
   <img src="assets/orbit-loop-observer.svg" alt="The Orbit loop: one goal flows through every enforced specialist while a real Claude watchdog surrounds and observes the full role tree; green work ends in a proven commit." width="100%">
 </picture>
 
-> **New in Orbit 0.56:** the orange watchdog is no longer builder-only or hidden. Claude’s real
-> observer attaches to every operational role, propagates through descendants, and exposes a separate
-> supervision state on Orbit’s status and dashboard. Orbit also defaults to autonomous delivery:
-> no spec, taste, or budget-reassurance questions inside configured limits; green work is committed.
+> **New in Orbit 0.61:** AgentPrune's spatial-temporal graph insight is now an enforceable resource
+> kernel. One root observer watches the descendant tree; gear selects the smallest protected role DAG;
+> Agent hooks reserve and charge actual tokens; compaction carries a bounded goal/evidence checkpoint;
+> every tier is capped. Quality gates and the user's goal are protected from pruning.
 
 > **New in Orbit 0.57:** QA is evidence-enforced before CPO. The gate chain is now
 > Safety → Reviewer → QA Engineer → **Delivery Quality** (scenario matrix + dependency regression +
@@ -107,18 +107,15 @@ gives the work a durable operating system:
 > (`ITERATE`/`REDEVELOP`) when the goal isn't served, and records what it learns about your
 > taste in a per-project user-model that every later run inherits.
 
-> **New in Orbit 0.55:** the complete team is enforceable. Every substantial run follows the
-> mandatory spine below, with actual post-route completion evidence from each named role. Lite mode
-> runs it sequentially; approval changes concurrency, never coverage.
->
-> `Discovery → Business Analysis → Market/Prior Art → Plan → [Design for UI] → Build → Safety →
-> Reviewer → QA → CPO → Reporter`
+> **Enforcement means the declared gear is binding.** Required owners must produce completion
+> evidence; irrelevant owners do not run. Missing evidence blocks Stop. A role name in prose is not
+> evidence, and a larger gear never creates an uncapped budget.
 
 Three controls make the loop meaningfully safer and iterative:
 
 1. **Counterfactual preflight:** identify the riskiest assumption, run the cheapest useful probe,
    and backtrack to discovery or planning when evidence disagrees.
-2. **Full-loop observer:** inspect discovery quality, analysis, planning, implementation, every gate,
+2. **One propagated observer:** inspect discovery quality, analysis, planning, implementation, every gate,
    and reporting for drift, stalled/repetitive work, rubber-stamping, or unsupported proof. Healthy
    work produces no advisory, but its watcher state remains visible.
 3. **Bounded repair:** capture the failure, owner, root cause, required change, and regression test;
@@ -219,13 +216,13 @@ In Claude Code, the native checklist is the primary surface. In headless or port
 
 ## Observer agents: real, full-loop, and visible (experimental Claude capability)
 
-Orbit's Claude Code adapter automatically pairs every operational role and descendant with
+Orbit's Claude Code adapter pairs the root Orchestrator with one descendant-propagating
 `.claude/agents/watchdog.md`:
 
 ```text
-Discovery → BA → Research → Plan → Design → Build → Safety → Review → QA → CPO → Report
-    │               each role + propagated descendants: read-only activity digest              │
-    └──────────────────────────────▶ Watchdog (Haiku) ───────────────────────────────────────────┘
+Goal → Orchestrator → gear-selected expert DAG → Safety → Review → QA → CPO → Report
+          │                     descendant read-only activity digest                    │
+          └──────────────────────▶ Watchdog (Haiku) ────────────────────────────────────┘
 
 No finding = no message. The worker continues uninterrupted.
 ```
@@ -235,9 +232,9 @@ advisory can prevent shallow discovery, stalled work, scope drift, weakened test
 gates, or unsupported proof. It cannot edit,
 block the worker, or grant user authority, and it does not replace the final Reviewer or QA gates.
 
-Every scaffold and safe update enables the project-scoped experiment, installs a missing watchdog,
-and additively wires every existing Orbit role without replacing customized role bodies. Explicit env
-values and existing alternate observers are preserved. To enable it manually, launch Claude Code with:
+Every scaffold and auto-heal enables the project experiment, installs a missing watchdog, restores
+required hooks, and migrates old duplicate child-watchdog blocks without replacing customized role
+bodies. Explicit env values and alternate custom observers are preserved. To enable it manually:
 
 ```bash
 CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS=1 claude
@@ -245,7 +242,7 @@ CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS=1 claude
 
 This Claude capability remains undocumented, experimental, and remotely gated; Orbit cannot honestly
 guarantee that Anthropic's server enables it. Orbit does guarantee the project setting, agent
-frontmatter, descendant propagation, additive update repair, visible `observer.json` state, and
+root frontmatter, descendant propagation, update repair, visible `observer.json` state, and
 regression tests. When Claude withholds the capability, roles continue and the final gates still bind.
 
 ## What binds
@@ -255,7 +252,7 @@ regression tests. When Claude withholds the capability, roles continue and the f
 | Safety wall | Trusted Bash guard is non-interactive: routine commands allow, catastrophic commands deny, and no `ask` confirmation is ever emitted. |
 | Writer lease | One writer per checkout; reads remain available. `takeover` verifies the new owner before writes resume. |
 | Worktree isolation | Separate workers can write concurrently in separate Git worktrees. |
-| Runtime and budget caps | `ralph_loop.sh` and `loop.py` enforce iteration, runtime, token, and dollar limits. |
+| Runtime and budget caps | The trusted Agent hook enforces per-session token/call ceilings on native Claude sessions; `ralph_loop.sh` and `loop.py` retain iteration, runtime, token, and dollar limits. |
 | Checkpointing | Durable runner state persists budget and progress across resume. |
 | Telemetry | Hooks observe and redact activity; they fail open and never block work. |
 | Capability completion | Strict Stop contract blocks substantial work when a mandatory role has no completed post-route event; UI projects additionally require Designer. |
@@ -270,14 +267,14 @@ orchestrator.
 
 Orbit Lite is the default:
 
-- mandatory stage owners run sequentially, one at a time;
+- gear-required stage owners run sequentially, one at a time;
 - maximum two isolated workers by default;
 - focused packets instead of full repository history and telemetry;
 - the Sonnet Executor lane for ordinary work;
 - one Opus Advisor call for an architectural fork, safety uncertainty, or repeated gate failure;
 - explicit per-cycle and per-run token, dollar, runtime, and context limits.
 
-Approval is required to widen concurrency, not to activate the required team. The goal is complete
+The configured graph—not reassurance—controls concurrency and required owners. The goal is complete
 accountability without uncontrolled fan-out.
 
 ## Frontend projects

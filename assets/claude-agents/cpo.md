@@ -9,10 +9,9 @@ description: >-
   the project's user-model skill — what this user values, accepts, and rejects — so each
   iteration lands closer and the next one can genuinely surprise them.
 tools: Read, Grep, Glob, Bash, Write
-observer: watchdog
-observerMessage: >-
-  Watch for rubber-stamped acceptance, lost user intent, uninspected scenario/dependency/pixel evidence,
-  unsupported quality claims, and an uncommitted deliverable. Report when the verdict is not earned.
+model: sonnet
+effort: high
+maxTurns: 4
 ---
 
 # Role: CPO — Chief Product Officer (Claude Code subagent)

@@ -35,7 +35,7 @@ def main() -> int:
         # --- gear scaling: a smaller gear gets a smaller pot -------------------------------
         t1 = tb.plan(orbit, "T1", ["planner", "reviewer", "qa-engineer", "reporter"], "small fix")
         t3 = tb.plan(orbit, "T3", ["planner", "builder", "reviewer"], "big initiative")
-        if not (t1["total"] == 60000 and t3["total"] == 600000):
+        if not (t1["total"] == 25000 and t3["total"] == 140000):
             failures.append(f"per_gear totals wrong: T1={t1['total']} T3={t3['total']}")
 
         # --- renormalization: the running roles split the whole spendable pot ---------------
@@ -45,15 +45,15 @@ def main() -> int:
         allocated = sum(led["allocations"].values())
         if abs(allocated - spendable) > 5:                 # rounding slack only
             failures.append(f"allocations {allocated} do not fill spendable {spendable}")
-        if led["reserve"] != 9000:
-            failures.append(f"reserve should be 15% of 60000 = 9000, got {led['reserve']}")
+        if led["reserve"] != 3750:
+            failures.append(f"reserve should be 15% of 25000 = 3750, got {led['reserve']}")
 
-        # --- T4 is tracked but never capped -------------------------------------------------
+        # --- every label is governed; arbitrary high labels saturate at hard T4 --------------
         t4 = tb.plan(orbit, "T4", ["planner", "builder"], "mission")
-        if t4["total"] is not None or any(v is not None for v in t4["allocations"].values()):
-            failures.append("T4 must be uncapped")
-        if tb.check(orbit, "builder", 10**9)["decision"] != "allow":
-            failures.append("an uncapped gear must never force a degrade")
+        if t4["total"] != 240000 or tb.plan(orbit, "T100", ["planner"], "mission")["gear"] != "T4":
+            failures.append("T4/T100 must share the 240k hard ceiling")
+        if tb.check(orbit, "planner", 10**9)["decision"] != "deny":
+            failures.append("the hard global ceiling must deny an impossible dispatch")
 
         # --- the degrade ladder escalates with the size of the overrun ---------------------
         tb.plan(orbit, "T1", ["planner", "reviewer", "qa-engineer", "reporter"], "small fix")
@@ -68,8 +68,8 @@ def main() -> int:
             failures.append(f"a small overrun should trim, got {rungs['small']}")
         if rungs["medium"] != "downgrade_model":
             failures.append(f"a medium overrun should downgrade, got {rungs['medium']}")
-        if rungs["huge"] != "waive_role_with_record":
-            failures.append(f"a huge overrun should waive, got {rungs['huge']}")
+        if rungs["huge"] not in ("budget_pause_with_checkpoint", "budget_pause"):
+            failures.append(f"a huge overrun should pause with a checkpoint, got {rungs['huge']}")
         if tb.check(orbit, "planner", 100)["decision"] != "allow":
             failures.append("a dispatch that fits must be allowed")
 
@@ -104,12 +104,12 @@ def main() -> int:
         if not tb.load(orbit)["allocations"].get("some-custom-role"):
             failures.append("an unlisted role must still receive a default allocation")
 
-        # --- no ledger → allow, never crash ------------------------------------------------
+        # --- no ledger → deny, never run unmetered -----------------------------------------
         with tempfile.TemporaryDirectory() as td2:
             empty = Path(td2) / ".orbit"
             empty.mkdir()
-            if tb.check(empty, "planner", 999999)["decision"] != "allow":
-                failures.append("a missing ledger must fail open")
+            if tb.check(empty, "planner", 999999)["decision"] != "deny":
+                failures.append("a missing ledger must fail closed")
 
         # --- estimator is monotonic and non-zero ------------------------------------------
         if not (tb.estimate_tokens("x" * 400) > tb.estimate_tokens("x" * 100) > 0):
@@ -120,7 +120,7 @@ def main() -> int:
         for f in failures:
             print("  -", f)
         return 1
-    print("PASS: token budget (gear scaling, renormalization, reserve, ladder, countdown, fail-open)")
+    print("PASS: token budget (gear scaling, hard ceilings, reserve, ladder, countdown, fail-closed)")
     return 0
 
 

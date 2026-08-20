@@ -224,20 +224,30 @@ contract. The roles that *are* required are required absolutely.
 
 ## The token budget — one ledger per goal
 
-Every non-T0 run opens a ledger (`scripts/orbit-budget plan --gear <T> --roles <a,b,c>`), which
-writes `.orbit/budget.json`. The orchestrator pre-flights each dispatch against it and records spend
-after. Defaults live in `token_budget`: T1 60k · T2 200k · T3 600k · T4 uncapped, with 15% held in
-reserve and the rest split across the roles that actually run.
+Every session automatically opens exactly one ledger in `.orbit/budget.json`; follow-up prompts in
+that session cannot reset it. The trusted `PreToolUse[Agent]` hook atomically reserves before a call,
+forces measurable foreground execution, and `PostToolUse[Agent]` charges Claude's actual usage.
+Defaults: T0 8k · T1 25k · T2 60k · T3 140k · T4 240k. T5/T100 saturate at T4—there is
+no ungoverned tier. Fifteen percent is burst reserve and ten percent is protected for closeout.
 
-On exhaustion the loop **degrades, it does not throw** — a thrown budget strands a loop mid-run:
+On exhaustion the loop lands cleanly; it neither waives a mandatory gate nor retries unmetered:
 
 1. **trim_packet** — fewer files, tighter question, smaller output limit
 2. **downgrade_model** — run the role on the cheaper lane
-3. **waive_role_with_record** — skip it and write the waiver into the ledger, where the CPO gate
-   reads it and judges the deliverable knowing the run went thin. Never a silent skip.
+3. **budget_pause_with_checkpoint** — preserve the immutable goal and exact evidence paths, use the
+   closeout allowance, and return a resumable `BUDGET_PAUSED` handoff if proof cannot finish.
 
 A remaining-token note is injected into a role's packet only after it crosses `warn_at` (0.75) —
 surfacing a countdown from token zero makes models wrap up prematurely.
+
+## AgentPrune communication policy
+
+Orbit treats roles as nodes, handoffs inside a cycle as spatial edges, and compaction/resume as
+temporal edges. Goal, Safety, Review, QA, CPO, and Report are protected edges. Optional edges are
+admitted only when they bring unique evidence; packets are capped and point to artifacts instead of
+copying history. One root watchdog observes descendants. This is the deployable, fail-safe form of
+AgentPrune's result; data-driven edge learning remains disabled until a project has enough benchmarked
+goals to estimate utility without gambling with delivery quality.
 
 ## The one-line summary
 T0 answers; T1 proves; T2 adds the veto and acceptance; T3 investigates broadly; T4 makes the

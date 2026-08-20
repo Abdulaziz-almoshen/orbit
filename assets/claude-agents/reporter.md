@@ -5,10 +5,9 @@ description: >-
   a plain-language summary of what was done, what it means, what's next, and the cycle status.
   Reads everything above; writes the report.
 tools: Read, Grep, Glob, Write
-observer: watchdog
-observerMessage: >-
-  Watch for omitted failures or risks, unsupported success claims, missing commit/test evidence, and reports
-  that conceal unfinished work. Report precise evidence when the handoff is misleading.
+model: haiku
+effort: low
+maxTurns: 2
 ---
 
 # Role: Reporter (Claude Code subagent)

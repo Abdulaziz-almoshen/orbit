@@ -7,10 +7,9 @@ description: >-
   Produces a discovery brief, not code. The Orchestrator convenes it; it runs in parallel with the
   Market Researcher. Skipped on small/clear/reversible tasks.
 tools: Read, Grep, Glob, WebSearch, WebFetch, Write
-observer: watchdog
-observerMessage: >-
-  Watch for obvious or generic ideas, premature convergence, missing evidence, untested assumptions, and
-  unnecessary user questions. Report precise evidence when discovery is not producing a strong bet.
+model: sonnet
+effort: medium
+maxTurns: 4
 ---
 
 # Role: Product Discovery Manager (Claude Code subagent)

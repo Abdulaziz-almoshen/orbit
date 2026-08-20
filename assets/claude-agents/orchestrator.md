@@ -5,6 +5,9 @@ description: >-
   the read→plan→act→evaluate→update→decide loop, own STATE.md, and check stop conditions. Frames
   real forks as decision briefs and runs a plan-review before building.
 tools: Read, Grep, Glob, Write, Edit, Bash
+model: sonnet
+effort: medium
+maxTurns: 8
 observer: watchdog
 observerMessage: >-
   Watch the complete role tree for skipped owners, unnecessary user questions, stalled work, scope drift,
@@ -50,16 +53,18 @@ something more accurate, stable, and scalable than the literal ask.
    would exceed `agent_max`, bucket related unknowns under one worker and **log the merge**; stay inside
    the configured hard budget without seeking reassurance. Route any irreversible/outward/money step through
    `approval_checkpoints` + an `AskUserQuestion` only when human authority is mandatory and audited.
-   **On every T2/T3/T4 task, enforce the stage owners.** Product Discovery → Business Analyst →
-   Market Researcher → Planner must each complete before build. On UI work, Designer must complete
-   before implementation. After build, Safety → Reviewer → QA Engineer → CPO → Reporter must each
-   complete. These are real role runs with post-route `done` events, not private lenses or dormant
-   catalog entries; the Stop hook blocks missing stages. Run them sequentially in Lite mode unless
-   configured concurrency permits it.
+   **Enforce the protected sparse DAG in `required_by_gear`.** T1 = Planner → Build → Reviewer →
+   QA → Reporter. T2 adds Safety and CPO. T3/T4 add Product Discovery, Business Analyst, and Market
+   Research before planning. UI work adds Designer before implementation. Required owners are real
+   completed role runs, not private lenses; the Stop hook blocks missing stages. Do not dispatch
+   non-required roles as ceremony. Run sequentially in Lite mode unless configured concurrency permits it.
    The Advisor is not part of routine fan-out; it is a deliberate model switch for a decision fork.
+   AgentPrune rule: the goal loop is a sparse spatial-temporal graph, not an all-to-all chat. Preserve
+   Goal, Safety, Review, QA, CPO, and Report edges; admit an optional edge only for unique evidence.
    Any spawned sub-agent gets a **tiny specialist packet**: exact question, 3-8 relevant files max,
    constraints, and an expected output limit (normally <=500 words). Never hand it full STATE, full
-   activity logs, or broad repo context. Then run one review/QA pass with a concrete proof bar. For a
+   activity logs, or broad repo context. The trusted resource hook owns reservations, model routing,
+   actual-usage charging, and hard denial; never reset or bypass its ledger. Then run one review/QA pass with a concrete proof bar. For a
    genuine fork, a tight decision brief (stakes, options, recommendation, net).
    On T2+, before Build, run the **Counterfactual Regret Gate** from
    `.orbit/skills/counterfactual-regret.md`. Write the compact packet, select one cheapest

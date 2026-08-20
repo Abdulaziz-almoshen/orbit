@@ -26,10 +26,10 @@ Four properties, each chosen against a specific published result:
    mid-thought, whereas a budget the model can see lets it land the plane. Their docs also warn
    this can trigger *premature* wrap-up, so the note only appears once spending crosses warn_at.
 
-4. DEGRADE, DON'T THROW. The ladder is trim_packet → downgrade_model → waive_role_with_record.
-   Every framework surveyed that throws on exhaustion (LlamaIndex, Pydantic AI) is a library whose
-   caller can retry. Orbit is a loop — throwing strands the run. A waived role writes a record so
-   the CPO gate can see the run went thin and judge the deliverable accordingly. Never a silent skip.
+4. LAND, DON'T LEAK. The ladder is trim_packet → downgrade_model → budget_pause_with_checkpoint.
+   Exhaustion never silently drops a quality gate and never opens an unmetered retry. Orbit preserves
+   the immutable goal, writes a resumable checkpoint, and spends the protected closeout allowance on
+   an honest result or evidence-backed pause.
 
 Estimates are deliberately rough (bytes / divisor), matching orbit-context. This is a stoplight for
 a self-governing loop, not billing truth — the authority on real spend is the provider's usage
@@ -61,7 +61,20 @@ DEFAULT_ALLOCATION = {
     "reporter": 0.03,
 }
 
-DEFAULT_PER_GEAR = {"T0": 15000, "T1": 60000, "T2": 200000, "T3": 600000, "T4": None}
+DEFAULT_PER_GEAR = {"T0": 8000, "T1": 25000, "T2": 60000, "T3": 140000, "T4": 240000}
+
+# A dispatch is reserved at its historical/policy slice before Claude starts it. This bounds the
+# overshoot to one already-admitted call and, crucially, prevents two concurrent agents from both
+# seeing the same remaining balance. Values are bootstrap p90s; real installs can tune them from
+# PostToolUse[Agent].tool_response.totalTokens telemetry.
+DEFAULT_ROLE_SLICE = {
+    "dispatcher": 2000, "product-discovery": 7000, "business-analyst": 5000,
+    "market-researcher": 7000, "planner": 7000, "designer": 9000, "builder": 12000,
+    "frontend-engineer": 12000, "backend-engineer": 12000, "mobile-developer": 12000,
+    "data-engineer": 12000, "cli-engineer": 10000, "safety-gate": 4000,
+    "reviewer": 6000, "qa-engineer": 7000, "cpo": 5000, "reporter": 2500,
+    "advisor": 10000,
+}
 
 DEFAULT_CONTRACT = {
     "enabled": True,
@@ -69,8 +82,12 @@ DEFAULT_CONTRACT = {
     "per_gear": DEFAULT_PER_GEAR,
     "reserve_fraction": 0.15,
     "allocation": DEFAULT_ALLOCATION,
-    "degrade_ladder": ["trim_packet", "downgrade_model", "waive_role_with_record"],
+    "degrade_ladder": ["trim_packet", "downgrade_model", "budget_pause_with_checkpoint"],
     "warn_at": 0.75,
+    "fail_closed": True,
+    "closeout_fraction": 0.10,
+    "role_slice_tokens": DEFAULT_ROLE_SLICE,
+    "max_agent_calls": {"T0": 0, "T1": 4, "T2": 6, "T3": 10, "T4": 14},
 }
 
 
@@ -98,6 +115,16 @@ def contract(orbit: Path) -> dict:
 def estimate_tokens(text: str, divisor: int = DEFAULT_DIVISOR) -> int:
     """Rough pre-flight estimate. Same divisor convention as orbit-context, deliberately."""
     return int(math.ceil(len(text.encode("utf-8")) / max(1, divisor)))
+
+
+def normalize_gear(gear: str) -> str:
+    """Map every possible T label to a governed tier. T5/T100 are rigorous, never uncapped."""
+    raw = str(gear or "T1").strip().upper()
+    try:
+        number = int(raw[1:]) if raw.startswith("T") else int(raw)
+    except (TypeError, ValueError):
+        return "T1"
+    return f"T{max(0, min(4, number))}"
 
 
 def estimate_packet(paths, note: str = "", root: Path | None = None,
@@ -129,7 +156,8 @@ def plan(orbit: Path, gear: str, roles: list, goal: str = "") -> dict:
     evaporating into an unused budget the run then feels obliged to spend.
     """
     c = contract(orbit)
-    gear = str(gear or "T2").upper()
+    requested_gear = str(gear or "T1").upper()
+    gear = normalize_gear(requested_gear)
     per_gear = c.get("per_gear") or DEFAULT_PER_GEAR
     total = per_gear.get(gear, per_gear.get("T2"))
     roles = [str(r) for r in (roles or []) if str(r).strip()]
@@ -153,17 +181,28 @@ def plan(orbit: Path, gear: str, roles: list, goal: str = "") -> dict:
         "schema": 1,
         "opened_at": _now(),
         "goal": goal[:500],
+        "goal_hash": __import__("hashlib").sha256(goal.strip().encode()).hexdigest()[:16],
+        "session_id": "",
+        "requested_gear": requested_gear,
         "gear": gear,
         "unit": c.get("unit", "tokens"),
         "total": total,
         "reserve": reserve,
         "reserve_used": 0,
+        "closeout_fraction": float(c.get("closeout_fraction", 0.10) or 0.0),
         "warn_at": float(c.get("warn_at", 0.75)),
         "degrade_ladder": list(c.get("degrade_ladder") or DEFAULT_CONTRACT["degrade_ladder"]),
         "allocations": allocations,
         "spent": {r: 0 for r in roles},
         "degrades": [],
         "waived": [],
+        "status": "active",
+        "agent_calls": 0,
+        "reservations": {},
+        "actual_usage": {"input_tokens": 0, "output_tokens": 0,
+                         "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0},
+        "parent_usage": {"input_tokens": 0, "output_tokens": 0,
+                         "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0},
     }
     _write(orbit, ledger)
     return ledger
@@ -196,20 +235,82 @@ def remaining(ledger: dict, role: str) -> int | None:
     return max(0, alloc - spent) + max(0, reserve_left)
 
 
+def total_spent(ledger: dict) -> int:
+    return sum(int(v or 0) for v in (ledger.get("spent") or {}).values())
+
+
+def total_reserved(ledger: dict) -> int:
+    return sum(int((v or {}).get("tokens", 0) or 0)
+               for v in (ledger.get("reservations") or {}).values())
+
+
+def global_remaining(ledger: dict, protect_closeout: bool = False) -> int:
+    total = ledger.get("total")
+    if total is None:  # legacy ledgers are upgraded to a hard T4 ceiling on the next preflight
+        total = DEFAULT_PER_GEAR["T4"]
+    closeout = int(total * float(ledger.get("closeout_fraction", 0.10) or 0.0))
+    usable = total - (closeout if protect_closeout else 0)
+    return max(0, usable - total_spent(ledger) - total_reserved(ledger))
+
+
+def sync_gear(orbit: Path, requested_gear: str) -> dict:
+    """Raise/lower the envelope without resetting spend. Arbitrary gears saturate at hard T4."""
+    ledger = load(orbit)
+    if not ledger:
+        return {}
+    c = contract(orbit)
+    gear = normalize_gear(requested_gear)
+    total = int((c.get("per_gear") or DEFAULT_PER_GEAR).get(gear) or DEFAULT_PER_GEAR["T4"])
+    ledger["requested_gear"] = str(requested_gear or gear).upper()
+    ledger["gear"] = gear
+    ledger["total"] = total
+    ledger["reserve"] = int(round(total * float(c.get("reserve_fraction", 0.15) or 0.0)))
+    ledger["closeout_fraction"] = float(c.get("closeout_fraction", 0.10) or 0.0)
+    roles = list((ledger.get("allocations") or {}).keys())
+    weights = {r: float((c.get("allocation") or DEFAULT_ALLOCATION).get(r, 0.05)) for r in roles}
+    wsum = sum(weights.values()) or 1.0
+    spendable = total - int(ledger["reserve"])
+    ledger["allocations"] = {
+        r: int(round(spendable * (weight / wsum))) for r, weight in weights.items()
+    }
+    for role in roles:
+        ledger.setdefault("spent", {}).setdefault(role, 0)
+    _write(orbit, ledger)
+    return ledger
+
+
+def open_session(orbit: Path, session_id: str, goal: str, gear: str = "T1") -> dict:
+    """Open once per Claude session. User follow-ups cannot reset the same session's allowance."""
+    current = load(orbit)
+    if current and current.get("session_id") == session_id and current.get("status") == "active":
+        return current
+    roles = ["planner", "reviewer", "qa-engineer", "reporter"]
+    ledger = plan(orbit, gear, roles, goal)
+    ledger["session_id"] = session_id
+    ledger["closeout_fraction"] = float(contract(orbit).get("closeout_fraction", 0.10) or 0.0)
+    _write(orbit, ledger)
+    return ledger
+
+
 def check(orbit_or_ledger, role: str, estimate: int) -> dict:
     """Pre-flight decision for one dispatch. Never raises — returns the rung of the ladder.
 
-    Returns {"decision": "allow"|"degrade", "action": <rung>, "remaining": int|None, "reason": str}.
-    A `degrade` is not a refusal: it is an instruction to run the role in a cheaper shape.
+    Returns {"decision": "allow"|"degrade"|"deny", "action": <rung>, ...}. A `degrade` is an
+    instruction to use a cheaper shape; trusted admission may conservatively deny that edge.
     """
     ledger = orbit_or_ledger if isinstance(orbit_or_ledger, dict) else load(orbit_or_ledger)
     if not ledger:
-        return {"decision": "allow", "action": "none", "remaining": None,
-                "reason": "no budget ledger for this run — budgeting is off or unopened"}
+        return {"decision": "deny", "action": "open_ledger", "remaining": 0,
+                "reason": "no budget ledger — governed agent dispatch fails closed"}
+    global_left = global_remaining(ledger, protect_closeout=role not in ("cpo", "reporter"))
+    if estimate > global_left:
+        return {"decision": "deny", "action": "budget_pause", "remaining": global_left,
+                "reason": (f"{role} needs ~{estimate:,} tokens but the governed goal has "
+                           f"~{global_left:,} dispatchable tokens left")}
     left = remaining(ledger, role)
     if left is None:
-        return {"decision": "allow", "action": "none", "remaining": None,
-                "reason": f"{role} is uncapped at gear {ledger.get('gear')}"}
+        return {"decision": "allow", "action": "none", "remaining": global_left,
+                "reason": f"{role} has no private slice; the governed global ceiling still applies"}
     if estimate <= left:
         alloc = (ledger.get("allocations") or {}).get(role) or 1
         spent = int((ledger.get("spent") or {}).get(role, 0))
@@ -225,7 +326,7 @@ def check(orbit_or_ledger, role: str, estimate: int) -> dict:
     elif over <= left * 3:
         rung = ladder[1] if len(ladder) > 1 else "downgrade_model"
     else:
-        rung = ladder[-1] if ladder else "waive_role_with_record"
+        rung = ladder[-1] if ladder else "budget_pause_with_checkpoint"
     return {"decision": "degrade", "action": rung, "remaining": left,
             "reason": (f"{role} needs ~{estimate:,} tokens but has ~{left:,} left "
                        f"(over by ~{over:,}) — apply '{rung}'")}
@@ -239,11 +340,41 @@ def spend(orbit: Path, role: str, tokens: int, note: str = "") -> dict:
     spent = ledger.setdefault("spent", {})
     spent[role] = int(spent.get(role, 0)) + int(tokens)
     alloc = (ledger.get("allocations") or {}).get(role)
-    if alloc is not None and spent[role] > alloc:
-        ledger["reserve_used"] = min(int(ledger.get("reserve") or 0),
-                                     int(ledger.get("reserve_used") or 0) + (spent[role] - alloc))
+    overruns = sum(max(0, int(value) - int((ledger.get("allocations") or {}).get(name, value)))
+                   for name, value in spent.items())
+    ledger["reserve_used"] = min(int(ledger.get("reserve") or 0), overruns)
     if note:
         ledger.setdefault("notes", []).append({"ts": _now(), "role": role, "note": note[:200]})
+    _write(orbit, ledger)
+    return ledger
+
+
+def reserve(orbit: Path, role: str, reservation_id: str, estimate: int) -> dict:
+    """Atomically record admission. The trusted hook serializes calls around this operation."""
+    ledger = load(orbit)
+    if not ledger:
+        return {}
+    ledger.setdefault("reservations", {})[reservation_id] = {
+        "role": role, "tokens": int(estimate), "ts": _now()
+    }
+    ledger["agent_calls"] = int(ledger.get("agent_calls", 0)) + 1
+    _write(orbit, ledger)
+    return ledger
+
+
+def reconcile(orbit: Path, reservation_id: str, role: str, tokens: int,
+              usage: dict | None = None) -> dict:
+    ledger = load(orbit)
+    if not ledger:
+        return {}
+    ledger.setdefault("reservations", {}).pop(reservation_id, None)
+    spent = ledger.setdefault("spent", {})
+    spent[role] = int(spent.get(role, 0)) + max(0, int(tokens or 0))
+    aggregate = ledger.setdefault("actual_usage", {})
+    for key in ("input_tokens", "output_tokens", "cache_creation_input_tokens",
+                "cache_read_input_tokens"):
+        aggregate[key] = int(aggregate.get(key, 0)) + int((usage or {}).get(key, 0) or 0)
+    ledger["updated_at"] = _now()
     _write(orbit, ledger)
     return ledger
 
@@ -285,9 +416,9 @@ def summary(ledger: dict) -> str:
     if not ledger:
         return ""
     total = ledger.get("total")
-    spent = sum(int(v) for v in (ledger.get("spent") or {}).values())
+    spent = total_spent(ledger)
     if total is None:
-        return f"budget {ledger.get('gear')}: ~{spent:,} tok spent (uncapped)"
+        total = DEFAULT_PER_GEAR["T4"]
     pct = int(round(100 * spent / max(1, total)))
     tail = ""
     if ledger.get("waived"):

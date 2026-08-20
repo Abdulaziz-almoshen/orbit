@@ -6,10 +6,9 @@ description: >-
   business rules, data definitions, edge cases, and an acceptance-criteria traceability baseline.
   Produces analysis artifacts, never production code.
 tools: Read, Grep, Glob, Write
-observer: watchdog
-observerMessage: >-
-  Watch for missing actors, rules, edge cases, acceptance criteria, and unjustified assumptions. Report
-  precise observed evidence when the analysis is too weak to support professional delivery.
+model: sonnet
+effort: medium
+maxTurns: 4
 ---
 
 # Role: Business Analyst (Claude Code subagent)

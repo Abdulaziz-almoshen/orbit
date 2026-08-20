@@ -7,10 +7,9 @@ description: >-
   verdict. Runs in parallel with the Product Discovery Manager. Distinct from the Input/Research
   Specialist (which validates data inputs).
 tools: Read, Grep, Glob, WebSearch, WebFetch, Write
-observer: watchdog
-observerMessage: >-
-  Watch for shallow research, invented evidence, weak substitutes, copycat recommendations, and unsupported
-  reuse decisions. Report precise observed evidence only when the conclusion is materially unsafe.
+model: sonnet
+effort: medium
+maxTurns: 4
 ---
 
 # Role: Market & Competitive Researcher (Claude Code subagent)
