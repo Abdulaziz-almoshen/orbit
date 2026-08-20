@@ -666,6 +666,19 @@ def _merge_loop_config_defaults(target: Path, created: list, warnings: list) -> 
         if isinstance(cpo, dict) and "require_user_memory_checkpoint" not in cpo:
             cpo["require_user_memory_checkpoint"] = True
             changed.append("cpo_acceptance.require_user_memory_checkpoint")
+        token_budget = current.get("token_budget")
+        shipped_budget = defaults.get("token_budget", {})
+        if isinstance(token_budget, dict) and isinstance(shipped_budget, dict):
+            if token_budget.get("force_synchronous_agents") is True:
+                token_budget["force_synchronous_agents"] = False
+                changed.append("token_budget.force_synchronous_agents=false")
+            if token_budget.get("closeout_fraction") == 0.10:
+                token_budget["closeout_fraction"] = shipped_budget["closeout_fraction"]
+                changed.append("token_budget.closeout_fraction=0.15")
+            for key in ("cache_read_weight", "protected_goal_roles", "completion_roles"):
+                if key not in token_budget:
+                    token_budget[key] = json.loads(json.dumps(shipped_budget[key]))
+                    changed.append(f"token_budget.{key}")
         if changed:
             dst.write_text(json.dumps(current, indent=2) + "\n")
             created.append(f".orbit/loop.config.json  (added defaults: {', '.join(changed)}; existing values preserved)")

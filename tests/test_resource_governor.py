@@ -183,6 +183,21 @@ def main():
         if repaired.get("goal") != "Ship the original product goal" or repaired["spent"].get("reviewer") != 123:
             fails.append("unfinished-board goal repair reset spend or retained the follow-up goal")
 
+        # Trusted compatibility path clears stale INPUT and disables an old customized Stop marker
+        # when the latest routed turn is only a question.
+        (orbit / "run.json").write_text(json.dumps({"goal": "Ship the original product goal",
+                                                     "blocked_question": "Claude is waiting"}))
+        (orbit / ".last-task-route").write_text("old-task")
+        with (orbit / "activity.jsonl").open("a") as stream:
+            stream.write(json.dumps({"phase": "route", "status": "info",
+                                     "msg": "routing: question — status?"}) + "\n")
+        invoke(project, {"hook_event_name": "UserPromptSubmit", "session_id": "upgrade-session",
+                         "prompt": "status?", "cwd": str(project)})
+        if json.loads((orbit / "run.json").read_text()).get("blocked_question") is not None:
+            fails.append("trusted hook did not clear stale user-input state")
+        if (orbit / ".last-task-route").exists():
+            fails.append("question turn retained an old task Stop-gate marker")
+
     # Root model usage shares the same ceiling and repeated hooks do not double count it.
     with tempfile.TemporaryDirectory() as td:
         project = Path(td); orbit = project / ".orbit"; orbit.mkdir()

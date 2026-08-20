@@ -48,6 +48,11 @@ def main():
         healed_cfg = json.loads((target / ".orbit/loop.config.json").read_text())
         if healed_cfg.get("capability_enforcement", {}).get("mode") != "strict":
             failures.append("strict capability contract was not backfilled")
+        budget_cfg = healed_cfg.get("token_budget", {})
+        if (budget_cfg.get("force_synchronous_agents") is not False
+                or budget_cfg.get("closeout_fraction") != 0.15
+                or "cpo" not in budget_cfg.get("completion_roles", [])):
+            failures.append("restored autonomous/protected token-budget defaults were not migrated")
         worker = (target / ".claude/agents/backend-engineer.md").read_text()
         orchestrator = (target / ".claude/agents/orchestrator.md").read_text()
         if "KEEP ME" not in worker or "observer: watchdog" in worker:
