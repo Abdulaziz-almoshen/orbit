@@ -50,7 +50,7 @@
     "archive_dir": ".orbit/archive"
   },
 
-  "_token_budget_help": "Trusted Resource Kernel contract. Every Claude session gets one goal ledger. PreToolUse[Agent] reserves a p90 slice atomically; PostToolUse[Agent] charges Claude's actual totalTokens; missing ledgers fail closed. Every gear, including arbitrary T5/T100 labels, saturates at a hard T4 ceiling. Exhaustion changes execution shape, never the goal or proof bar. Mandatory evidence cannot be waived for cost.",
+  "_token_budget_help": "Trusted Resource Kernel contract. Every Claude session gets one goal ledger. Root turns reconcile from Claude's transcript; PreToolUse[Agent] reserves a p90 slice atomically; PostToolUse[Agent] charges Claude's actual totalTokens; missing ledgers fail closed. Every gear, including arbitrary T5/T100 labels, saturates at a hard T4 ceiling. Exhaustion changes execution shape, never the goal or proof bar. Mandatory evidence cannot be waived for cost.",
   "token_budget": {
     "enabled": true,
     "unit": "tokens",

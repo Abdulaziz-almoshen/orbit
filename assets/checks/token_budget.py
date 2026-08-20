@@ -236,7 +236,9 @@ def remaining(ledger: dict, role: str) -> int | None:
 
 
 def total_spent(ledger: dict) -> int:
-    return sum(int(v or 0) for v in (ledger.get("spent") or {}).values())
+    delegated = sum(int(v or 0) for v in (ledger.get("spent") or {}).values())
+    parent = sum(int(v or 0) for v in (ledger.get("parent_usage") or {}).values())
+    return delegated + parent
 
 
 def total_reserved(ledger: dict) -> int:
@@ -288,6 +290,43 @@ def open_session(orbit: Path, session_id: str, goal: str, gear: str = "T1") -> d
     ledger = plan(orbit, gear, roles, goal)
     ledger["session_id"] = session_id
     ledger["closeout_fraction"] = float(contract(orbit).get("closeout_fraction", 0.10) or 0.0)
+    _write(orbit, ledger)
+    return ledger
+
+
+def sync_parent_usage(orbit: Path, transcript_path: str) -> dict:
+    """Recompute root-session usage from Claude's transcript without double charging messages.
+
+    The Agent hook reports delegated usage directly. Root model turns do not pass through Agent, but
+    hook payloads carry `transcript_path`; assistant records contain provider usage. Recomputing the
+    aggregate is deterministic and survives repeated hooks, compaction, and process restarts.
+    """
+    ledger = load(orbit)
+    path = Path(str(transcript_path or ""))
+    if not ledger or not path.is_file():
+        return ledger
+    totals = {"input_tokens": 0, "output_tokens": 0,
+              "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}
+    seen = set()
+    try:
+        for line in path.read_text(errors="ignore").splitlines():
+            row = json.loads(line)
+            message = row.get("message") if isinstance(row.get("message"), dict) else row
+            if row.get("type") != "assistant" and message.get("role") != "assistant":
+                continue
+            usage = message.get("usage") if isinstance(message.get("usage"), dict) else {}
+            identity = str(message.get("id") or row.get("uuid") or "")
+            if identity and identity in seen:
+                continue
+            if identity:
+                seen.add(identity)
+            for key in totals:
+                totals[key] += int(usage.get(key, 0) or 0)
+    except Exception:
+        return ledger
+    ledger["parent_usage"] = totals
+    ledger["parent_messages_metered"] = len(seen)
+    ledger["updated_at"] = _now()
     _write(orbit, ledger)
     return ledger
 

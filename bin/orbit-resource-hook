@@ -158,6 +158,7 @@ def main() -> int:
         if event == "UserPromptSubmit":
             session = str(data.get("session_id") or "unknown-session")
             budget.open_session(orbit, session, _prompt(data), "T1")
+            budget.sync_parent_usage(orbit, str(data.get("transcript_path") or ""))
             return 0
 
         if event == "PreCompact":
@@ -170,6 +171,7 @@ def main() -> int:
 
         if event == "PreToolUse" and str(data.get("tool_name") or "") == "Agent":
             role = _role(data)
+            budget.sync_parent_usage(orbit, str(data.get("transcript_path") or ""))
             ledger = budget.load(orbit)
             if not ledger:
                 _deny("Orbit resource governor: no goal ledger. New agent work is blocked, not unmetered.")
@@ -214,6 +216,7 @@ def main() -> int:
             role = _role(data)
             total, usage = _usage_total(response)
             budget.reconcile(orbit, _reservation_id(data), role, total, usage)
+            budget.sync_parent_usage(orbit, str(data.get("transcript_path") or ""))
             return 0
     return 0
 

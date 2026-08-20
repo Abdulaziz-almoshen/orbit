@@ -947,8 +947,9 @@ def install_hooks(target: Path, has_ui: bool = False, reporter_only: bool = Fals
       • PreToolUse(Bash) → orbit-guard  — the non-interactive safety wall (allow or deny; never ask),
         TRUSTED-install resolved = built-in hardened rules + the repo's declarative
         .orbit/security/rules.json. A repo that already wired the legacy project-local guard.py keeps it.
-      • UserPromptSubmit → route.py + trusted resource hook — classify the request and open exactly
-        one fail-closed goal ledger per Claude session; follow-ups cannot reset its allowance.
+      • UserPromptSubmit → route.py + trusted resource hook — classify the request, open exactly
+        one fail-closed goal ledger per Claude session, and reconcile root-turn transcript usage;
+        follow-ups cannot reset its allowance.
       • PreToolUse/PostToolUse(Agent) → trusted resource hook — atomically reserve before dispatch,
         force measurable synchronous execution, then charge Claude's actual usage telemetry.
       • PreCompact/PostCompact → trusted resource hook — preserve and restore a bounded goal/budget

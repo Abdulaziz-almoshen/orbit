@@ -97,6 +97,27 @@ def main():
         if decision != "deny" or "ask" in json.dumps(denied).lower():
             fails.append("missing ledger must deny without a confirmation path")
 
+    # Root model usage shares the same ceiling and repeated hooks do not double count it.
+    with tempfile.TemporaryDirectory() as td:
+        project = Path(td); orbit = project / ".orbit"; orbit.mkdir()
+        (orbit / "loop.config.json").write_text((ROOT / "assets/loop.config.json").read_text())
+        transcript = project / "session.jsonl"
+        transcript.write_text(json.dumps({"type": "assistant", "message": {"id": "m1",
+            "role": "assistant", "usage": {"input_tokens": 18000, "output_tokens": 3000}}}) + "\n")
+        base = {"session_id": "s2", "prompt": "root-heavy goal", "cwd": str(project),
+                "transcript_path": str(transcript)}
+        invoke(project, {"hook_event_name": "UserPromptSubmit", **base})
+        invoke(project, {"hook_event_name": "UserPromptSubmit", **base})
+        ledger = json.loads((orbit / "budget.json").read_text())
+        if sum(ledger.get("parent_usage", {}).values()) != 21000:
+            fails.append("root transcript usage was missing or double-counted")
+        denied = invoke(project, {"hook_event_name": "PreToolUse", "tool_name": "Agent",
+                         "tool_use_id": "root-edge", "cwd": str(project),
+                         "transcript_path": str(transcript),
+                         "tool_input": {"subagent_type": "planner", "prompt": "delegate"}})
+        if denied.get("hookSpecificOutput", {}).get("permissionDecision") != "deny":
+            fails.append("root usage did not consume the same hard session ceiling")
+
     if fails:
         print("FAIL: resource governor")
         for failure in fails: print("  -", failure)

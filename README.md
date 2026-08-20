@@ -62,8 +62,8 @@ gives the work a durable operating system:
 - **Adversarial thinking:** a cheap counterfactual probe challenges risky assumptions before build.
 - **Model discipline:** Sonnet handles normal work; the Opus 4.8 Advisor is invoked on demand for
   expensive decisions.
-- **Trusted resource kernel:** every Agent call is reserved before launch and charged from Claude's
-  actual usage after return. T0–T4 have hard ceilings, T5/T100 clamp to T4, ten percent is protected
+- **Trusted resource kernel:** root-turn usage is reconciled from Claude's transcript; every Agent
+  call is reserved before launch and charged from actual usage after return. T0–T4 have hard ceilings, T5/T100 clamp to T4, ten percent is protected
   for closeout, and budget exhaustion returns a resumable checkpoint—never an unmetered retry.
 - **Parallel work:** independent workers use isolated Git worktrees instead of fighting over one checkout.
 - **One full-loop Claude observer:** a single watchdog is attached to the root orchestrator with

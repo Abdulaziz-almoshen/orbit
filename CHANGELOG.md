@@ -7,8 +7,9 @@ truth — the update checker compares it against GitHub.
 
 **AgentPrune-inspired resource governance is now enforced on Claude's live Agent path.**
 
-- A trusted, zero-model-call hook opens one immutable budget per session, reserves every Agent edge,
-  forces measurable foreground execution, and reconciles Claude's actual `totalTokens` telemetry.
+- A trusted, zero-model-call hook opens one immutable budget per session, reconciles root-turn usage
+  from Claude's transcript, reserves every Agent edge, forces measurable foreground execution, and
+  charges Claude's actual `totalTokens` telemetry.
 - Every gear is finite: T0 8k, T1 25k, T2 60k, T3 140k, T4 240k; T5/T100 clamp to T4. Ten percent
   stays protected for closeout, and exhaustion yields a resumable checkpoint instead of waiving QA.
 - AgentPrune's graph insight is applied as a protected sparse DAG: role coverage scales by gear,
