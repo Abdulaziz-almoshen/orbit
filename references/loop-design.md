@@ -36,6 +36,9 @@ you get a surprise bill or a real-world mistake. Three categories, all enforced 
 - `cost_budget_usd.per_run` — dollar ceiling; abort on breach.
 - Native Agent admission treats the intake gear as a forecast: measured token/call pressure silently
   raises one governed gear at a time, preserving goal, session, actual spend, closeout reserve, and T4.
+- AgentPrune applies to optional communication edges, not the product/quality spine: route-bound
+  budgets reserve completion capacity for Safety → Review → QA → CPO → Report, and cached transcript
+  history is metered only as the delta produced after the current text goal began.
 - `max_runtime_seconds` — wall-clock ceiling for the whole run.
 
 These need no judgment. The runner checks them mechanically and stops the moment one

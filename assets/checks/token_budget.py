@@ -86,9 +86,19 @@ DEFAULT_CONTRACT = {
     "degrade_ladder": ["trim_packet", "downgrade_model", "budget_pause_with_checkpoint"],
     "warn_at": 0.75,
     "fail_closed": True,
-    "closeout_fraction": 0.10,
+    "closeout_fraction": 0.15,
+    "cache_read_weight": 0.10,
     "role_slice_tokens": DEFAULT_ROLE_SLICE,
     "max_agent_calls": {"T0": 0, "T1": 4, "T2": 6, "T3": 10, "T4": 14},
+    # AgentPrune governs optional edges, never the required product/quality spine. Completion roles
+    # receive the protected closeout pool; all protected roles retain Agent-call admission.
+    "protected_goal_roles": [
+        "product-discovery", "business-analyst", "market-researcher", "planner", "designer",
+        "builder", "frontend-engineer", "backend-engineer", "mobile-developer",
+        "data-engineer", "cli-engineer", "safety-gate", "reviewer", "qa-engineer",
+        "cpo", "reporter",
+    ],
+    "completion_roles": ["safety-gate", "reviewer", "qa-engineer", "cpo", "reporter"],
 }
 
 
@@ -234,6 +244,7 @@ def plan(orbit: Path, gear: str, roles: list, goal: str = "") -> dict:
         "opened_at": _now(),
         "goal": goal[:500],
         "goal_hash": __import__("hashlib").sha256(goal.strip().encode()).hexdigest()[:16],
+        "route_id": "",
         "session_id": "",
         "requested_gear": requested_gear,
         "gear": gear,
@@ -241,7 +252,10 @@ def plan(orbit: Path, gear: str, roles: list, goal: str = "") -> dict:
         "total": total,
         "reserve": reserve,
         "reserve_used": 0,
-        "closeout_fraction": float(c.get("closeout_fraction", 0.10) or 0.0),
+        "closeout_fraction": float(c.get("closeout_fraction", 0.15) or 0.0),
+        "cache_read_weight": float(c.get("cache_read_weight", 0.10)),
+        "protected_goal_roles": list(c.get("protected_goal_roles") or []),
+        "completion_roles": list(c.get("completion_roles") or []),
         "warn_at": float(c.get("warn_at", 0.75)),
         "degrade_ladder": list(c.get("degrade_ladder") or DEFAULT_CONTRACT["degrade_ladder"]),
         "allocations": allocations,
@@ -255,6 +269,8 @@ def plan(orbit: Path, gear: str, roles: list, goal: str = "") -> dict:
                          "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0},
         "parent_usage": {"input_tokens": 0, "output_tokens": 0,
                          "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0},
+        "parent_usage_baseline": {},
+        "parent_usage_baseline_set": False,
     }
     _write(orbit, ledger)
     return ledger
@@ -289,13 +305,32 @@ def remaining(ledger: dict, role: str) -> int | None:
 
 def total_spent(ledger: dict) -> int:
     delegated = sum(int(v or 0) for v in (ledger.get("spent") or {}).values())
-    parent = sum(int(v or 0) for v in (ledger.get("parent_usage") or {}).values())
+    usage = ledger.get("parent_usage") or {}
+    # Cache reads remain visible telemetry but are discounted to their cache-equivalent cost.
+    # Counting the entire reused prefix as fresh work falsely exhausts long, healthy sessions.
+    parent = sum(int(usage.get(key, 0) or 0) for key in
+                 ("input_tokens", "output_tokens", "cache_creation_input_tokens"))
+    weight = max(0.0, min(1.0, float(ledger.get("cache_read_weight", 0.10))))
+    parent += int(round(int(usage.get("cache_read_input_tokens", 0) or 0) * weight))
     return delegated + parent
 
 
 def total_reserved(ledger: dict) -> int:
     return sum(int((v or {}).get("tokens", 0) or 0)
                for v in (ledger.get("reservations") or {}).values())
+
+
+def is_protected_goal_role(orbit_or_ledger, role: str) -> bool:
+    if isinstance(orbit_or_ledger, dict):
+        protected = orbit_or_ledger.get("protected_goal_roles") or DEFAULT_CONTRACT["protected_goal_roles"]
+    else:
+        protected = contract(orbit_or_ledger).get("protected_goal_roles") or []
+    return str(role).strip().lower() in {str(value).strip().lower() for value in protected}
+
+
+def is_completion_role(ledger: dict, role: str) -> bool:
+    roles = ledger.get("completion_roles") or DEFAULT_CONTRACT["completion_roles"]
+    return str(role).strip().lower() in {str(value).strip().lower() for value in roles}
 
 
 def global_remaining(ledger: dict, protect_closeout: bool = False) -> int:
@@ -319,7 +354,9 @@ def sync_gear(orbit: Path, requested_gear: str) -> dict:
     ledger["gear"] = gear
     ledger["total"] = total
     ledger["reserve"] = int(round(total * float(c.get("reserve_fraction", 0.15) or 0.0)))
-    ledger["closeout_fraction"] = float(c.get("closeout_fraction", 0.10) or 0.0)
+    ledger["closeout_fraction"] = float(c.get("closeout_fraction", 0.15) or 0.0)
+    ledger["protected_goal_roles"] = list(c.get("protected_goal_roles") or [])
+    ledger["completion_roles"] = list(c.get("completion_roles") or [])
     roles = list((ledger.get("allocations") or {}).keys())
     weights = {r: float((c.get("allocation") or DEFAULT_ALLOCATION).get(r, 0.05)) for r in roles}
     wsum = sum(weights.values()) or 1.0
@@ -401,7 +438,47 @@ def open_session(orbit: Path, session_id: str, goal: str, gear: str = "T1") -> d
     roles = ["planner", "reviewer", "qa-engineer", "reporter"]
     ledger = plan(orbit, gear, roles, goal)
     ledger["session_id"] = session_id
-    ledger["closeout_fraction"] = float(contract(orbit).get("closeout_fraction", 0.10) or 0.0)
+    ledger["closeout_fraction"] = float(contract(orbit).get("closeout_fraction", 0.15) or 0.0)
+    _write(orbit, ledger)
+    return ledger
+
+
+def open_goal(orbit: Path, session_id: str, route_id: str, goal: str, gear: str = "T1") -> dict:
+    """Open exactly once per deterministic task route; questions reuse the active route.
+
+    Multiple text goals in one Claude session receive independent governed ledgers automatically.
+    The user never resets a file or restarts a session to regain required product roles.
+    """
+    current = load(orbit)
+    route = str(route_id or "").strip()
+    if current and route and current.get("route_id") == route and current.get("status") == "active":
+        return (rebind_active_goal(orbit, goal, "active route owns the goal")
+                if current.get("goal") != str(goal or "").strip() else current)
+    if not route:
+        return open_session(orbit, session_id, goal, gear)
+    roles = ["planner", "reviewer", "qa-engineer", "reporter"]
+    ledger = plan(orbit, gear, roles, goal)
+    ledger["session_id"] = session_id
+    ledger["route_id"] = route
+    ledger["closeout_fraction"] = float(contract(orbit).get("closeout_fraction", 0.15) or 0.0)
+    _write(orbit, ledger)
+    return ledger
+
+
+def rebind_active_goal(orbit: Path, goal: str, cause: str = "unfinished board") -> dict:
+    """Repair a ledger opened from a follow-up while an older native board remains unfinished."""
+    ledger = load(orbit)
+    value = str(goal or "").strip()
+    if not ledger or not value or ledger.get("goal") == value:
+        return ledger
+    old = str(ledger.get("goal") or "")
+    spent = total_spent(ledger)
+    ledger["goal"] = value[:500]
+    ledger["goal_hash"] = __import__("hashlib").sha256(value.encode()).hexdigest()[:16]
+    ledger.setdefault("goal_repairs", []).append({
+        "ts": _now(), "cause": str(cause)[:120], "from": old[:200], "to": value[:200],
+        "spend_preserved": spent,
+    })
     _write(orbit, ledger)
     return ledger
 
@@ -436,7 +513,17 @@ def sync_parent_usage(orbit: Path, transcript_path: str) -> dict:
                 totals[key] += int(usage.get(key, 0) or 0)
     except Exception:
         return ledger
-    ledger["parent_usage"] = totals
+    baseline = ledger.get("parent_usage_baseline")
+    if not isinstance(baseline, dict) or ledger.get("parent_usage_baseline_set") is not True:
+        # The transcript already contains older conversation when a text goal starts. Establish a
+        # per-goal baseline once; only later model work belongs to this goal's resource envelope.
+        ledger["parent_usage_baseline"] = dict(totals)
+        ledger["parent_usage_baseline_set"] = True
+        ledger["parent_usage"] = {key: 0 for key in totals}
+    else:
+        ledger["parent_usage"] = {
+            key: max(0, int(totals.get(key, 0)) - int(baseline.get(key, 0) or 0)) for key in totals
+        }
     ledger["parent_messages_metered"] = len(seen)
     ledger["updated_at"] = _now()
     _write(orbit, ledger)
@@ -453,12 +540,15 @@ def check(orbit_or_ledger, role: str, estimate: int) -> dict:
     if not ledger:
         return {"decision": "deny", "action": "open_ledger", "remaining": 0,
                 "reason": "no budget ledger — governed agent dispatch fails closed"}
-    global_left = global_remaining(ledger, protect_closeout=role not in ("cpo", "reporter"))
+    completion = is_completion_role(ledger, role)
+    global_left = global_remaining(ledger, protect_closeout=not completion)
     if estimate > global_left:
         return {"decision": "deny", "action": "budget_pause", "remaining": global_left,
                 "reason": (f"{role} needs ~{estimate:,} tokens but the governed goal has "
                            f"~{global_left:,} dispatchable tokens left")}
-    left = remaining(ledger, role)
+    # Completion roles share the deliberately protected closeout pool. A private-slice check here
+    # would strand that reserve and recreate the very false stop it exists to prevent.
+    left = None if completion else remaining(ledger, role)
     if left is None:
         return {"decision": "allow", "action": "none", "remaining": global_left,
                 "reason": f"{role} has no private slice; the governed global ceiling still applies"}
@@ -520,11 +610,24 @@ def reconcile(orbit: Path, reservation_id: str, role: str, tokens: int,
         return {}
     ledger.setdefault("reservations", {}).pop(reservation_id, None)
     spent = ledger.setdefault("spent", {})
-    spent[role] = int(spent.get(role, 0)) + max(0, int(tokens or 0))
+    raw_usage = usage or {}
+    measurable = any(int(raw_usage.get(key, 0) or 0) for key in
+                     ("input_tokens", "output_tokens", "cache_creation_input_tokens",
+                      "cache_read_input_tokens"))
+    if measurable:
+        accountable = sum(int(raw_usage.get(key, 0) or 0) for key in
+                          ("input_tokens", "output_tokens", "cache_creation_input_tokens"))
+        weight = max(0.0, min(1.0, float(ledger.get("cache_read_weight", 0.10))))
+        accountable += int(round(int(raw_usage.get("cache_read_input_tokens", 0) or 0) * weight))
+    else:
+        accountable = max(0, int(tokens or 0))
+    spent[role] = int(spent.get(role, 0)) + accountable
+    ledger.setdefault("accounted_usage", {})[role] = (
+        int(ledger.get("accounted_usage", {}).get(role, 0)) + accountable)
     aggregate = ledger.setdefault("actual_usage", {})
     for key in ("input_tokens", "output_tokens", "cache_creation_input_tokens",
                 "cache_read_input_tokens"):
-        aggregate[key] = int(aggregate.get(key, 0)) + int((usage or {}).get(key, 0) or 0)
+        aggregate[key] = int(aggregate.get(key, 0)) + int(raw_usage.get(key, 0) or 0)
     ledger["updated_at"] = _now()
     _write(orbit, ledger)
     return ledger

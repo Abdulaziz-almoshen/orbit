@@ -136,6 +136,16 @@ def main():
                               env={**os.environ, "CLAUDE_PROJECT_DIR": str(root)})
         ck(not proc.stdout.strip(), f"valid evidence should release the pre-CPO Stop gate: {proc.stdout}")
 
+        # A later status question is not a new delivery attempt and must not replay old gate blockers.
+        path.unlink()
+        with (orbit / "activity.jsonl").open("a") as stream:
+            stream.write(json.dumps({"phase": "route", "status": "info", "msg": "routing: question"}) + "\n")
+            stream.write(json.dumps({"phase": "act", "status": "done", "role": "orchestrator"}) + "\n")
+        proc = subprocess.run([sys.executable, str(hook)], input=json.dumps({"cwd": str(root)}),
+                              text=True, capture_output=True,
+                              env={**os.environ, "CLAUDE_PROJECT_DIR": str(root)})
+        ck(not proc.stdout.strip(), f"status question replayed an old delivery blocker: {proc.stdout}")
+
     with tempfile.TemporaryDirectory() as d:
         root = Path(d); orbit = root / ".orbit"; orbit.mkdir()
         (orbit / "loop.config.json").write_text(json.dumps({

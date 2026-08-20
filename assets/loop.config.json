@@ -50,16 +50,23 @@
     "archive_dir": ".orbit/archive"
   },
 
-  "_token_budget_help": "Trusted Resource Kernel contract. Every Claude session gets one goal ledger. Root turns reconcile from Claude's transcript; PreToolUse[Agent] reserves a p90 slice atomically; PostToolUse[Agent] charges Claude's actual totalTokens; missing ledgers fail closed. Every gear, including arbitrary T5/T100 labels, saturates at a hard T4 ceiling. Exhaustion changes execution shape, never the goal or proof bar. Mandatory evidence cannot be waived for cost.",
+  "_token_budget_help": "Trusted Resource Kernel contract. Every deterministic text-goal route gets one ledger automatically; questions reuse it and never reset it. Root and Agent usage are measured as per-goal deltas, with cached reads visible but charged at cache-equivalent weight rather than as fresh work. PreToolUse[Agent] reserves a p90 slice atomically and preserves background execution; PostToolUse[Agent] reconciles measurable completion usage. Every gear saturates at hard T4. Optional communication is pruned before the protected product/quality spine.",
   "token_budget": {
     "enabled": true,
     "unit": "tokens",
     "per_gear": { "T0": 8000, "T1": 25000, "T2": 60000, "T3": 140000, "T4": 240000 },
     "reserve_fraction": 0.15,
-    "closeout_fraction": 0.10,
+    "closeout_fraction": 0.15,
+    "cache_read_weight": 0.10,
     "fail_closed": true,
-    "force_synchronous_agents": true,
+    "force_synchronous_agents": false,
     "max_agent_calls": { "T0": 0, "T1": 4, "T2": 6, "T3": 10, "T4": 14 },
+    "protected_goal_roles": [
+      "product-discovery", "business-analyst", "market-researcher", "planner", "designer",
+      "builder", "frontend-engineer", "backend-engineer", "mobile-developer", "data-engineer",
+      "cli-engineer", "safety-gate", "reviewer", "qa-engineer", "cpo", "reporter"
+    ],
+    "completion_roles": ["safety-gate", "reviewer", "qa-engineer", "cpo", "reporter"],
     "role_slice_tokens": {
       "product-discovery": 7000, "business-analyst": 5000, "market-researcher": 7000,
       "planner": 7000, "designer": 9000, "builder": 12000, "frontend-engineer": 12000,

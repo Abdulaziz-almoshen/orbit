@@ -17,10 +17,14 @@ SL = os.path.join(ROOT, "assets", "orbit-statusline.py")
 SCAFFOLD = os.path.join(ROOT, "scripts", "scaffold.py")
 
 
-def render(claude, run):
+def render(claude, run, tasks=None, agents=None):
     with tempfile.TemporaryDirectory() as d:
         os.makedirs(os.path.join(d, ".orbit"))
         json.dump(run, open(os.path.join(d, ".orbit", "run.json"), "w"))
+        if tasks is not None:
+            json.dump(tasks, open(os.path.join(d, ".orbit", "tasks.json"), "w"))
+        if agents is not None:
+            json.dump(agents, open(os.path.join(d, ".orbit", "agents.json"), "w"))
         c = dict(claude); c["cwd"] = d
         r = subprocess.run([sys.executable, SL], input=json.dumps(c),
                            capture_output=True, text=True, timeout=10)
@@ -36,21 +40,37 @@ def main():
     full = {"context_window": {"used_percentage": 38, "total_input_tokens": 10000,
                                "current_usage": {"cache_read_input_tokens": 6100}},
             "cost": {"total_cost_usd": 0.42}, "model": {"display_name": "Opus"}}
-    run = {"phase": "build", "active_role": "builder", "tasks_done": 5, "tasks_total": 9,
-           "confidence": 76, "last_ts": "2020-01-01T00:00:00Z", "blocked_question": None}
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    run = {"phase": "build", "active_role": "builder", "active_task": "Implement checkout",
+           "tasks_done": 5, "tasks_total": 9, "confidence": 76,
+           "last_ts": now, "blocked_question": None}
 
     line, rc = render(full, run)
-    for needle in ("BUILD", "builder", "5/9", "$0.42"):
+    for needle in ("BUILD", "Implement checkout", "builder", "5/9", "$0.42"):
         if needle not in line:
             fails.append(f"full status line missing '{needle}': {line!r}")
-    for noise in ("ctx", "cache", "conf", "quiet", "\n"):
+    for noise in ("ctx", "cache", "conf", "\n"):
         if noise in line:
             fails.append(f"stable status line contains noisy/multiline '{noise}': {line!r}")
 
     blocked_run = dict(run); blocked_run["blocked_question"] = "Choose path"
     bl, _ = render(full, blocked_run)
-    if "⚠ INPUT" not in bl or "builder" in bl.lower():
-        fails.append(f"blocked run should prioritize INPUT over the owner: {bl!r}")
+    if "⚠ INPUT" not in bl or "builder" not in bl.lower() or "Implement checkout" not in bl:
+        fails.append(f"blocked run hid the board owner/task: {bl!r}")
+
+    # A missing active_task must fall back to the first unfinished native-board item.
+    fallback_run = dict(run); fallback_run["active_task"] = ""; fallback_run["active_role"] = "orchestrator"
+    fb, _ = render(full, fallback_run, [
+        {"id": "U8", "title": "QA evidence", "owner": "qa-engineer", "status": "done"},
+        {"id": "U9", "title": "CPO verdict", "owner": "cpo", "status": "pending"},
+    ])
+    if "U9 CPO verdict" not in fb or "cpo" not in fb.lower():
+        fails.append(f"status line did not recover the next unfinished board task: {fb!r}")
+
+    stale_run = dict(run); stale_run["last_ts"] = "2020-01-01T00:00:00Z"
+    stale, _ = render(full, stale_run)
+    if "STALLED" not in stale:
+        fails.append(f"status line hid a stalled LLM task: {stale!r}")
 
     # QA is a truthful handoff: actors stay fixed; the parcel moves once from real state timing.
     with tempfile.TemporaryDirectory() as d:
@@ -173,7 +193,7 @@ def main():
         for f in fails:
             print("  -", f)
         sys.exit(1)
-    print("PASS: statusline (compact run · truthful animated QA parcel · explicit OpenAI model · fail-safe)")
+    print("PASS: statusline (persistent task board · stall visibility · truthful QA parcel · fail-safe)")
 
 
 if __name__ == "__main__":

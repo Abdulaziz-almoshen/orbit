@@ -19,6 +19,10 @@ def invoke(project: Path, payload: dict):
     return json.loads(proc.stdout) if proc.stdout.strip() else {}
 
 
+def asks(output: dict) -> bool:
+    return (output.get("hookSpecificOutput", {}).get("permissionDecision") == "ask")
+
+
 def main():
     fails = []
     with tempfile.TemporaryDirectory() as td:
@@ -64,23 +68,32 @@ def main():
 
         pre = invoke(project, {"hook_event_name": "PreToolUse", "tool_name": "Agent",
                      "tool_use_id": "edge-1", "cwd": str(project),
-                     "tool_input": {"subagent_type": "reporter", "prompt": "summarize"}})
+                     "tool_input": {"subagent_type": "reporter", "prompt": "summarize",
+                                    "run_in_background": True}})
         out = pre.get("hookSpecificOutput", {})
         if out.get("permissionDecision") != "allow":
             fails.append(f"admissible Agent edge was not allowed: {pre}")
         updated = out.get("updatedInput", {})
-        if updated.get("run_in_background") is not False or updated.get("model") != "haiku":
-            fails.append("Agent edge was not forced measurable and routed to its policy model")
+        if updated.get("run_in_background") is not True or updated.get("model") != "haiku":
+            fails.append("Agent edge did not preserve background execution and policy model routing")
         ledger = json.loads((orbit / "budget.json").read_text())
         if "edge-1" not in ledger.get("reservations", {}):
             fails.append("preflight did not reserve the Agent edge")
+
+        # Async launch keeps its reservation; measurable completion reconciles it later.
+        invoke(project, {"hook_event_name": "PostToolUse", "tool_name": "Agent",
+                         "tool_use_id": "edge-1", "cwd": str(project),
+                         "tool_input": {"subagent_type": "reporter"},
+                         "tool_response": {"status": "async_launched"}})
+        if "edge-1" not in json.loads((orbit / "budget.json").read_text()).get("reservations", {}):
+            fails.append("background launch prematurely dropped its budget reservation")
 
         oversized = invoke(project, {"hook_event_name": "PreToolUse", "tool_name": "Agent",
                      "tool_use_id": "oversized", "cwd": str(project),
                      "tool_input": {"subagent_type": "planner", "prompt": "repository dump " * 1000}})
         if oversized.get("hookSpecificOutput", {}).get("permissionDecision") != "deny":
             fails.append("oversized repository-shaped Agent packet was not hard-denied")
-        if "ask" in json.dumps(oversized).lower():
+        if asks(oversized):
             fails.append("oversized Agent packet exposed a confirmation path")
 
         invoke(project, {"hook_event_name": "PostToolUse", "tool_name": "Agent",
@@ -110,8 +123,7 @@ def main():
         if "RESOURCE CHECKPOINT" not in json.dumps(restored):
             fails.append("PostCompact did not restore the bounded goal checkpoint")
 
-        # T1 allows four Agent edges. A fifth triggers automatic governed reconsideration to T2,
-        # preserving the goal and spend without asking the user.
+        # The T1 call cap prunes optional communication, never a required Planner edge.
         ledger = json.loads((orbit / "budget.json").read_text())
         ledger["gear"] = "T1"; ledger["requested_gear"] = "T1"; ledger["agent_calls"] = 4
         (orbit / "budget.json").write_text(json.dumps(ledger))
@@ -120,20 +132,56 @@ def main():
                           "tool_use_id": "edge-5", "cwd": str(project),
                           "tool_input": {"subagent_type": "planner", "prompt": "more"}})
         if ceiling.get("hookSpecificOutput", {}).get("permissionDecision") != "allow":
-            fails.append("gear-specific Agent-call pressure was not auto-reconsidered")
-        if "ask" in json.dumps(ceiling).lower():
+            fails.append("required Planner edge was pruned by the optional Agent-call ceiling")
+        if asks(ceiling):
             fails.append("Agent-call ceiling exposed a confirmation path")
         ledger = json.loads((orbit / "budget.json").read_text())
-        if ledger.get("gear") != "T2" or not ledger.get("reconsiderations"):
-            fails.append("Agent-call pressure did not produce a recorded T1→T2 reconsideration")
+        if ledger.get("gear") != "T1":
+            fails.append("required Planner edge unnecessarily widened the token envelope")
+
+        # Optional Advisor communication still obeys the call ceiling and expands only when capacity exists.
+        optional = invoke(project, {"hook_event_name": "PreToolUse", "tool_name": "Agent",
+                          "tool_use_id": "optional-advisor", "cwd": str(project),
+                          "tool_input": {"subagent_type": "advisor", "prompt": "second opinion"}})
+        ledger = json.loads((orbit / "budget.json").read_text())
+        if optional.get("hookSpecificOutput", {}).get("permissionDecision") != "allow" or ledger.get("gear") != "T2":
+            fails.append("optional Agent pressure was not governed by one-gear reconsideration")
 
     with tempfile.TemporaryDirectory() as td:
         project = Path(td); (project / ".orbit").mkdir()
         denied = invoke(project, {"hook_event_name": "PreToolUse", "tool_name": "Agent",
                          "cwd": str(project), "tool_input": {"subagent_type": "planner"}})
         decision = denied.get("hookSpecificOutput", {}).get("permissionDecision")
-        if decision != "deny" or "ask" in json.dumps(denied).lower():
+        if decision != "deny" or asks(denied):
             fails.append("missing ledger must deny without a confirmation path")
+
+    # Installing/upgrading the governor during a live board must bind to the unfinished run goal,
+    # never replace it with the next conversational follow-up.
+    with tempfile.TemporaryDirectory() as td:
+        project = Path(td); orbit = project / ".orbit"; orbit.mkdir()
+        (orbit / "loop.config.json").write_text((ROOT / "assets/loop.config.json").read_text())
+        (orbit / "run.json").write_text(json.dumps({"goal": "Ship the original product goal"}))
+        (orbit / "active-goal.json").write_text(json.dumps({
+            "route_id": "route-original", "goal": "Ship the original product goal", "gear": "T1"
+        }))
+        (orbit / "tasks.json").write_text(json.dumps([
+            {"id": "U1", "title": "Build", "status": "done"},
+            {"id": "U2", "title": "Report", "status": "pending"},
+        ]))
+        invoke(project, {"hook_event_name": "UserPromptSubmit", "session_id": "upgrade-session",
+                         "prompt": "what is happening?", "cwd": str(project)})
+        if json.loads((orbit / "budget.json").read_text()).get("goal") != "Ship the original product goal":
+            fails.append("mid-run governor activation replaced the board goal with a follow-up question")
+
+        # A later follow-up also repairs a previously mis-bound active ledger without resetting spend.
+        ledger = json.loads((orbit / "budget.json").read_text())
+        ledger["goal"] = "what is happening?"; ledger["goal_hash"] = "wrong"; ledger["spent"]["reviewer"] = 123
+        (orbit / "budget.json").write_text(json.dumps(ledger))
+        invoke(project, {"hook_event_name": "UserPromptSubmit", "session_id": "upgrade-session",
+                         "prompt": "is CPO back?", "cwd": str(project)})
+        repaired = json.loads((orbit / "budget.json").read_text())
+        if repaired.get("goal") != "Ship the original product goal" or repaired["spent"].get("reviewer") != 123:
+            fails.append("unfinished-board goal repair reset spend or retained the follow-up goal")
 
     # Root model usage shares the same ceiling and repeated hooks do not double count it.
     with tempfile.TemporaryDirectory() as td:
@@ -153,13 +201,18 @@ def main():
         invoke(project, {"hook_event_name": "UserPromptSubmit", **base})
         invoke(project, {"hook_event_name": "UserPromptSubmit", **base})
         ledger = json.loads((orbit / "budget.json").read_text())
-        if sum(ledger.get("parent_usage", {}).values()) != 21000:
-            fails.append("root transcript usage was missing or double-counted")
+        if sum(ledger.get("parent_usage", {}).values()) != 0:
+            fails.append("pre-goal transcript history was charged to the new goal")
+        with transcript.open("a") as stream:
+            stream.write(json.dumps({"type": "assistant", "message": {"id": "m2",
+                "role": "assistant", "usage": {"input_tokens": 18000, "output_tokens": 3000}}}) + "\n")
         resized = invoke(project, {"hook_event_name": "PreToolUse", "tool_name": "Agent",
                          "tool_use_id": "root-edge", "cwd": str(project),
                          "transcript_path": str(transcript),
                          "tool_input": {"subagent_type": "planner", "prompt": "delegate"}})
         ledger = json.loads((orbit / "budget.json").read_text())
+        if sum(ledger.get("parent_usage", {}).values()) != 21000:
+            fails.append("per-goal root usage delta was missing or double-counted")
         if resized.get("hookSpecificOutput", {}).get("permissionDecision") != "allow" or ledger.get("gear") == "T1":
             fails.append("measured root usage did not trigger automatic governed expansion")
         if ledger.get("goal") != "root-heavy goal" or not ledger.get("reconsiderations"):

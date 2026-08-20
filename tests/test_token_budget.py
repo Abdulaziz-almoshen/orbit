@@ -56,13 +56,13 @@ def main() -> int:
             failures.append("the hard global ceiling must deny an impossible dispatch")
 
         # --- the degrade ladder escalates with the size of the overrun ---------------------
-        tb.plan(orbit, "T1", ["planner", "reviewer", "qa-engineer", "reporter"], "small fix")
+        tb.plan(orbit, "T1", ["planner", "advisor", "reviewer", "qa-engineer", "reporter"], "small fix")
         led = tb.load(orbit)
-        left = tb.remaining(led, "reporter")
+        left = tb.remaining(led, "advisor")
         rungs = {
-            "small": tb.check(orbit, "reporter", left + 10)["action"],
-            "medium": tb.check(orbit, "reporter", int(left * 2.5))["action"],
-            "huge": tb.check(orbit, "reporter", left * 100)["action"],
+            "small": tb.check(orbit, "advisor", left + 10)["action"],
+            "medium": tb.check(orbit, "advisor", int(left * 2.5))["action"],
+            "huge": tb.check(orbit, "advisor", left * 100)["action"],
         }
         if rungs["small"] != "trim_packet":
             failures.append(f"a small overrun should trim, got {rungs['small']}")
@@ -144,6 +144,36 @@ def main() -> int:
         stopped = tb.reconsider(orbit, "planner", 10**9, "impossible estimate")
         if stopped.get("decision") != "deny" or stopped.get("gear") != "T4":
             failures.append("T4 must remain the absolute automatic-reconsideration ceiling")
+
+        # Reused prompt-cache tokens are telemetry, not fresh work at full price. Weighting them at
+        # the configured cache-equivalent rate prevents a long healthy session from falsely stopping.
+        ledger = tb.plan(orbit, "T4", ["cpo"], "finish after a cache-heavy session")
+        ledger["parent_usage"] = {"input_tokens": 8, "output_tokens": 3043,
+                                  "cache_creation_input_tokens": 40417,
+                                  "cache_read_input_tokens": 213489}
+        ledger["spent"]["cpo"] = 78016
+        tb._write(orbit, ledger)
+        expected = 8 + 3043 + 40417 + round(213489 * 0.10) + 78016
+        if tb.total_spent(ledger) != expected or tb.global_remaining(ledger) <= 0:
+            failures.append("cache reads still falsely exhausted the governed goal budget")
+
+        ledger = tb.plan(orbit, "T2", ["reviewer"], "review with a warm cache")
+        tb.reserve(orbit, "reviewer", "cached-review", 6000)
+        tb.reconcile(orbit, "cached-review", "reviewer", 100200,
+                     {"input_tokens": 100, "output_tokens": 100,
+                      "cache_creation_input_tokens": 0, "cache_read_input_tokens": 100000})
+        if tb.load(orbit)["spent"]["reviewer"] != 10200:
+            failures.append("Agent cache reads were charged as full fresh-token usage")
+
+        # Completion roles can consume the protected closeout pool; builders cannot consume it early.
+        ledger = tb.plan(orbit, "T1", ["builder", "safety-gate", "reviewer", "qa-engineer", "cpo", "reporter"],
+                         "finish the required product spine")
+        ledger["spent"]["builder"] = int(ledger["total"] * 0.85)
+        tb._write(orbit, ledger)
+        if tb.check(ledger, "builder", 1000)["decision"] == "allow":
+            failures.append("builder consumed the protected completion pool")
+        if tb.check(ledger, "cpo", 1000)["decision"] != "allow":
+            failures.append("CPO could not use the protected completion pool")
 
     if failures:
         print("FAIL: token budget")

@@ -283,7 +283,15 @@ def emit_activity(cwd: Path, kind: str, prompt: str, gear: str = "") -> None:
             return
         run_id = ""
         try:                                     # best-effort: tie the event to the current run
-            run_id = json.loads((orbit / "run.json").read_text()).get("run_id", "")
+            run_path = orbit / "run.json"
+            run = json.loads(run_path.read_text())
+            run_id = run.get("run_id", "")
+            if run.get("blocked_question"):
+                run["blocked_question"] = None               # the user has answered; stale INPUT is gone
+                run["last_ts"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                tmp = run_path.with_suffix(".json.tmp")
+                tmp.write_text(json.dumps(run, indent=2) + "\n")
+                tmp.replace(run_path)
         except Exception:
             pass
         line = {  # schema 2 — same shape activity.py writes, so scripts/orbit-status renders it
@@ -305,6 +313,11 @@ def emit_activity(cwd: Path, kind: str, prompt: str, gear: str = "") -> None:
                 }) + "\n")
         if kind == "task":                       # anchor for the Stop observability hook — touched
             (orbit / ".last-task-route").write_text(line["ts"])   # AFTER the append (newest at route)
+            active_goal = {"schema": 1, "route_id": line["ts"], "goal": _redact(prompt, 500),
+                           "gear": gear or "T1", "status": "active"}
+            tmp = orbit / ".active-goal.json.tmp"
+            tmp.write_text(json.dumps(active_goal, indent=2) + "\n")
+            tmp.replace(orbit / "active-goal.json")
     except Exception:
         pass
 

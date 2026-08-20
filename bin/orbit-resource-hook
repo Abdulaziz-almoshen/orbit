@@ -150,6 +150,23 @@ def _checkpoint(orbit: Path, budget) -> None:
     os.replace(tmp, path)
 
 
+def _active_goal(orbit: Path) -> dict:
+    value = _read_json(orbit / "active-goal.json")
+    if isinstance(value, dict) and value.get("route_id") and value.get("goal"):
+        return value
+    try:
+        for line in reversed((orbit / "activity.jsonl").read_text(errors="ignore").splitlines()):
+            event = json.loads(line)
+            if event.get("phase") == "route" and event.get("status") == "start":
+                message = str(event.get("msg") or "")
+                goal = message.split("—", 1)[-1].strip() if "—" in message else message
+                return {"route_id": str(event.get("ts") or ""), "goal": goal,
+                        "gear": str(event.get("gear") or "")}
+    except Exception:
+        pass
+    return {}
+
+
 def _restore_context(orbit: Path) -> None:
     checkpoint = _read_json(orbit / "context-checkpoint.json")
     if not checkpoint:
@@ -183,9 +200,11 @@ def main() -> int:
 
         if event == "UserPromptSubmit":
             session = str(data.get("session_id") or "unknown-session")
-            goal = _prompt(data)
+            routed = _active_goal(orbit)
+            goal = str(routed.get("goal") or _prompt(data))
             sizing = budget.size_goal(goal)
-            budget.open_session(orbit, session, goal, sizing.get("gear", "T1"))
+            gear = str(routed.get("gear") or sizing.get("gear", "T1"))
+            budget.open_goal(orbit, session, str(routed.get("route_id") or ""), goal, gear)
             budget.sync_parent_usage(orbit, str(data.get("transcript_path") or ""))
             return 0
 
@@ -235,7 +254,8 @@ def main() -> int:
             slices = contract.get("role_slice_tokens") or budget.DEFAULT_ROLE_SLICE
             estimate = int(slices.get(role, 6000) or 6000)
             decision = budget.check(ledger, role, estimate)
-            call_pressure = int(ledger.get("agent_calls", 0)) >= max_calls
+            protected_role = budget.is_protected_goal_role(ledger, role)
+            call_pressure = (int(ledger.get("agent_calls", 0)) >= max_calls and not protected_role)
             reconsidered = None
             if decision.get("decision") != "allow" or call_pressure:
                 cause = "agent-call ceiling" if call_pressure else decision.get("action", "token pressure")
@@ -243,14 +263,15 @@ def main() -> int:
                 ledger = budget.load(orbit)
                 gear = ledger.get("gear", gear)
                 if reconsidered.get("decision") != "allow":
-                    _deny("Orbit resource governor: automatic mid-goal reconsideration stopped at the "
-                          f"hard ceiling: {reconsidered.get('reason', 'capacity exhausted')}. "
-                          "No user confirmation can widen T4; preserve the goal and close out with evidence.")
+                    _deny("Orbit resource governor: optional work stopped at the governed ceiling: "
+                          f"{reconsidered.get('reason', 'capacity exhausted')}. Continue the original "
+                          "goal with the protected product/quality spine; never ask the user to reset it.")
                     return 0
             rid = _reservation_id(data)
             budget.reserve(orbit, role, rid, estimate)
             tool_input = dict(data.get("tool_input") or {})
-            tool_input["run_in_background"] = False  # synchronous response carries exact usage telemetry
+            # Preserve the caller's foreground/background choice. A background launch keeps its
+            # reservation until the measurable completion event; it is never converted to unmetered work.
             if not tool_input.get("model"):
                 if role in ("reporter", "dispatcher", "safety-gate"):
                     tool_input["model"] = "haiku"
@@ -264,7 +285,8 @@ def main() -> int:
             note = (f"\n\n[orbit resource envelope] role={role}; reservation={rid}; "
                     f"slice~{estimate} tokens. Return a compact evidence envelope; persist long logs/artifacts by path. "
                     "Use the role view in `.orbit/intelligence/latest.json`; expand only a named uncertainty with a "
-                    "targeted query. Never ingest the full repository/index. The goal and acceptance criteria are immutable."
+                    "targeted query. Never ingest the full repository/index. Keep the native task board current "
+                    "through launch and completion. The goal and acceptance criteria are immutable."
                     + resized)
             tool_input["prompt"] = str(tool_input.get("prompt") or "") + note
             reason = f"reserved ~{estimate:,} tokens for {role}"

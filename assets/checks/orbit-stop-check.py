@@ -323,6 +323,10 @@ def main():
                   if l.strip()]
     except Exception:
         return
+    latest_route = next((event for event in reversed(events)
+                         if isinstance(event, dict) and event.get("phase") == "route"), None)
+    if latest_route and latest_route.get("status") != "start":
+        return                                              # direct/status question: no delivery-gate noise
     r = -1
     for i, e in enumerate(events):
         if isinstance(e, dict) and e.get("phase") == "route" and e.get("status") == "start":

@@ -43,7 +43,8 @@ def main():
         t = Path(d)
         (t / ".claude").mkdir()
         s = t / ".claude" / "settings.json"
-        s.write_text(json.dumps({"model": "claude-x", "hooks": {"Stop": [{"keep": 1}]}}))
+        s.write_text(json.dumps({"model": "claude-x", "hooks": {"Stop": [{"keep": 1}]},
+                                 "env": {"CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"}}))
         sc.install_hooks(t)
         data = json.loads(s.read_text())
         if data.get("model") != "claude-x":
@@ -59,8 +60,8 @@ def main():
         env = data.get("env", {})
         if env.get("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE") != "70":
             fails.append("proactive compaction threshold was not installed")
-        if env.get("CLAUDE_CODE_DISABLE_BACKGROUND_TASKS") != "1":
-            fails.append("governed Agent calls were not forced measurable")
+        if "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS" in env:
+            fails.append("Orbit did not restore background LLM task execution")
         if data.get("permissions", {}).get("defaultMode") != "acceptEdits":
             fails.append("routine in-repo edits were not made non-interactive")
         if "Bash(*)" not in data.get("permissions", {}).get("allow", []):

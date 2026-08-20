@@ -30,7 +30,8 @@ def main():
             "orbit_version": "0.28.1", "surfaces": ["api"], "domain_skills": ["domain"]
         }))
         # An installed Orbit project must not drift into a present-but-inactive state.
-        settings = {"hooks": {"PreToolUse": [{"matcher": "Edit|Write|MultiEdit"}]}}
+        settings = {"env": {"CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"},
+                    "hooks": {"PreToolUse": [{"matcher": "Edit|Write|MultiEdit"}]}}
         (target / ".claude/settings.json").write_text(json.dumps(settings))
 
         first = run(target)
@@ -58,6 +59,8 @@ def main():
         healed_settings = json.loads((target / ".claude/settings.json").read_text())
         if healed_settings.get("env", {}).get("CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS") != "1":
             failures.append("auto-heal did not enable the observer environment gate")
+        if "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS" in healed_settings.get("env", {}):
+            failures.append("auto-heal did not restore background LLM tasks")
         if "Bash(*)" not in healed_settings.get("permissions", {}).get("allow", []):
             failures.append("auto-heal did not remove routine Bash confirmation prompts")
         if healed_settings.get("sandbox", {}).get("allowUnsandboxedCommands") is not False:

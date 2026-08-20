@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""orbit-statusline — a compact run line plus a truthful Claude → Codex QA handoff.
+"""orbit-statusline — a persistent live task board plus a truthful Claude → Codex QA handoff.
 
-Only state that changes the operator's next decision is shown: phase, progress, active owner, cost,
-blocker, and QA gate. Context/cache/confidence detail belongs in the dashboard. Claude and Codex keep
-fixed positions; the parcel crosses once when real control-plane state hands work between them.
+The first line always answers: what task is active, which LLM owns it, how long it has been working,
+what is next, and whether work is stalled. The second line keeps Claude and Codex in fixed positions;
+the parcel crosses once when real control-plane state hands work between them.
 
-  🛰 BUILD · 5/9 · Builder · $0.42
+  🛰 BUILD · 5/9 · U6 Implement checkout · Builder 42s · $0.42
      Claude ○  ────📦──  ● Codex QA · 5.6 Sol · REVIEW
   🛰 ⚠ INPUT · BUILD · 5/9 · $0.42
 
@@ -49,9 +49,37 @@ def _active_agent(agents: dict):
     if not isinstance(agents, dict):
         return None
     cands = [dict(v, role=k) for k, v in agents.items()
-             if isinstance(v, dict) and v.get("status") in ("active", "blocked")]
+             if k != "human" and isinstance(v, dict) and v.get("status") in ("active", "blocked")]
     cands.sort(key=lambda x: (x.get("seq", 99), x.get("role", "")))
     return cands[0] if cands else None
+
+
+def _age_seconds(iso_ts):
+    try:
+        stamp = time.strptime(str(iso_ts), "%Y-%m-%dT%H:%M:%SZ")
+        return max(0, int(time.time() - time.mktime(stamp) + time.timezone))
+    except Exception:
+        return None
+
+
+def _dur(seconds):
+    if seconds is None:
+        return ""
+    if seconds < 60:
+        return f"{seconds}s"
+    if seconds < 3600:
+        return f"{seconds // 60}m{seconds % 60}s"
+    return f"{seconds // 3600}h{(seconds % 3600) // 60}m"
+
+
+def _next_task(tasks):
+    if not isinstance(tasks, list):
+        return {}
+    for status in ("active", "in_progress", "blocked", "pending", "queued"):
+        for task in tasks:
+            if isinstance(task, dict) and str(task.get("status") or "").lower() == status:
+                return task
+    return {}
 
 
 def _read_json(path, default):
@@ -199,7 +227,8 @@ def build_handoff_line(qa: dict, now: float = None) -> str:
     return f"   Claude ●  {track}  ○ Codex QA{model_bit} · QUEUED"
 
 
-def build_line(claude: dict, run: dict, agents: dict = None, qa: dict = None) -> str:
+def build_line(claude: dict, run: dict, agents: dict = None, qa: dict = None,
+               tasks: list = None) -> str:
     seg = []
     blocked = run.get("blocked_question")
     if blocked:
@@ -214,10 +243,26 @@ def build_line(claude: dict, run: dict, agents: dict = None, qa: dict = None) ->
         seg.append(f"{run.get('tasks_done', 0)}/{total}")
 
     ag = _active_agent(agents or {})
-    if ag and not blocked:
-        seg.append(str(ag.get("display") or ag.get("role") or "agent")[:18])
-    elif run.get("active_role") and not blocked:
-        seg.append(str(run["active_role"])[:18])
+    task = str(run.get("active_task") or (ag or {}).get("task") or "").strip()
+    fallback = _next_task(tasks or [])
+    fallback_used = not task and bool(fallback)
+    if not task:
+        task = str(fallback.get("title") or fallback.get("task") or "").strip()
+    task_id = str(fallback.get("id") or "").strip()
+    if task:
+        label = f"{task_id} {task}".strip()
+        seg.append(label[:48])
+
+    owner = str((ag or {}).get("display") or (ag or {}).get("role") or
+                (fallback.get("owner") if fallback_used else "") or
+                run.get("active_role") or fallback.get("owner") or "").strip()
+    if owner:
+        elapsed = _dur(_age_seconds((ag or {}).get("started_at") or run.get("last_ts")))
+        seg.append((owner + (f" {elapsed}" if elapsed else ""))[:24])
+
+    age = _age_seconds(run.get("last_ts"))
+    if age is not None and age >= 60:
+        seg.append(f"STALLED {_dur(age)}")
 
     cost = _get(claude, "cost", "total_cost_usd")
     if isinstance(cost, (int, float)):
@@ -254,12 +299,18 @@ def main():
     except Exception:
         agents = {}
     try:
+        tasks = json.loads((orbit / "tasks.json").read_text()) if orbit else []
+        if not isinstance(tasks, list):
+            tasks = []
+    except Exception:
+        tasks = []
+    try:
         _record_session(orbit, claude)
     except Exception:
         pass
     try:
         qa = _qa_state(orbit)
-        print(build_line(claude, run, agents, qa))
+        print(build_line(claude, run, agents, qa, tasks))
         handoff = build_handoff_line(qa)
         if handoff:
             print(handoff)

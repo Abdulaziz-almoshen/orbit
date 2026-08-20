@@ -85,6 +85,7 @@ _LEGACY_OLD = {
         "7f4b512f83674863fef70d465ee6a483d78191e21382ef6f34a5c5236b914c49",  # 0.62.0 compact reporter
         "00fbea070a9633c2630fc3da20706ad621c05ee6fb0087720e887d40a40e64dd",  # 0.45.0 session identity
         "812c44c72001f4460b825a9bdb8bcc6a0059719e58f0ae74c863cca30d499cb3",  # 0.62.0 static handoff
+        "623da7505f26d405e496a68eac43254ecb17f4fb370414036dc0efa52a23a80e",  # 0.65.0 compact board
     },
 }
 
@@ -998,8 +999,8 @@ def install_hooks(target: Path, has_ui: bool = False, reporter_only: bool = Fals
         TRUSTED-install resolved = built-in hardened rules + the repo's declarative
         .orbit/security/rules.json. A repo that already wired the legacy project-local guard.py keeps it.
       • UserPromptSubmit → route.py + trusted resource hook — classify the request, open exactly
-        one fail-closed goal ledger per Claude session, and reconcile root-turn transcript usage;
-        follow-ups cannot reset its allowance.
+        one fail-closed ledger per deterministic text-goal route, and reconcile only that goal's
+        root-turn transcript delta; questions cannot replace or reset its allowance.
       • PreToolUse/PostToolUse(Agent) → trusted resource hook — atomically reserve before dispatch,
         force measurable synchronous execution, then charge Claude's actual usage telemetry.
       • PreCompact/PostCompact → trusted resource hook — preserve and restore a bounded goal/budget
@@ -1050,10 +1051,10 @@ def install_hooks(target: Path, has_ui: bool = False, reporter_only: bool = Fals
             if "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE" not in env:
                 env["CLAUDE_AUTOCOMPACT_PCT_OVERRIDE"] = "70"
                 added.append("env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=70   (proactive context rollover)")
-            if "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS" not in env:
-                env["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"] = "1"
-                added.append("env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1   "
-                             "(governed Agent calls return measurable usage)")
+            if env.get("CLAUDE_CODE_DISABLE_BACKGROUND_TASKS") == "1":
+                env.pop("CLAUDE_CODE_DISABLE_BACKGROUND_TASKS")
+                added.append("env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS removed   "
+                             "(independent LLM tasks may continue in the background)")
 
     pre = hooks.setdefault("PreToolUse", [])
     # The safety wall. NEW repos wire the TRUSTED orbit-guard (built-in rules + declarative
@@ -1108,7 +1109,7 @@ def install_hooks(target: Path, has_ui: bool = False, reporter_only: bool = Fals
         added.append("UserPromptSubmit → route.py            (routing: classify task vs question)")
     if not reporter_only and not any("orbit-resource-hook" in json.dumps(e) for e in ups):
         ups.append({"hooks": [{"type": "command", "command": ORBIT_RESOURCE_CMD}]})
-        added.append("UserPromptSubmit → orbit-resource-hook (one immutable goal budget per session)")
+        added.append("UserPromptSubmit → orbit-resource-hook (one immutable budget per text-goal route)")
 
     if not reporter_only:
         post = hooks.setdefault("PostToolUse", [])

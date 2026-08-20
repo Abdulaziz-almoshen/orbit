@@ -67,8 +67,27 @@ def test_smart_mode_optout():
        "smart: questions carry no marker (conservative behavior preserved)")
 
 
+def test_user_reply_clears_stale_input():
+    with tempfile.TemporaryDirectory() as d:
+        orbit = Path(d) / ".orbit"; orbit.mkdir()
+        (orbit / "run.json").write_text(json.dumps({
+            "run_id": "r1", "goal": "finish", "blocked_question": "Claude is waiting",
+            "last_ts": "2020-01-01T00:00:00Z",
+        }))
+        subprocess.run([sys.executable, str(HOOK)], text=True, capture_output=True,
+                       input=json.dumps({"prompt": "is CPO back?", "cwd": d}), check=True)
+        ck(json.loads((orbit / "run.json").read_text()).get("blocked_question") is None,
+           "a user reply did not clear the stale INPUT state from the live board")
+
+        subprocess.run([sys.executable, str(HOOK)], text=True, capture_output=True,
+                       input=json.dumps({"prompt": "deploy Annex A to stage", "cwd": d}), check=True)
+        active = json.loads((orbit / "active-goal.json").read_text())
+        ck(active.get("goal") == "deploy Annex A to stage" and active.get("route_id"),
+           "a text goal did not create a deterministic active-goal route")
+
+
 def main():
-    for fn in (test_always_mode_default, test_smart_mode_optout):
+    for fn in (test_always_mode_default, test_smart_mode_optout, test_user_reply_clears_stale_input):
         try:
             fn()
         except Exception as e:
