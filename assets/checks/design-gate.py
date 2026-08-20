@@ -8,7 +8,7 @@ edit is "heavy" or verify that real prototypes were built or genuinely compared.
 is whether *any* design-decision record exists for this work — a HEAVY approval
 (`design/approved.json`) or a TRIVIAL triage marker (`.orbit/design/TRIVIAL`). Neither existing is
 the one thing a hook can catch: the case where the Designer's determination step (see
-`design-methodology.md`) never ran at all. It also parses a HEAVY approval and asks when it carries
+`design-methodology.md`) never ran at all. It also parses a HEAVY approval and self-corrects when it carries
 no `taste_preflight` record (the taste gate in `taste-preflight.md` was skipped) — a legacy approval
 with no `impact_level`, or any parse failure, is still treated as pass-with-warning (fail-safe).
 
@@ -20,12 +20,12 @@ sees a file path.
 
 Protocol (Claude Code ≥ 2.1): read the PreToolUse JSON on stdin; print NOTHING to allow, or
     {"hookSpecificOutput": {"hookEventName": "PreToolUse",
-                            "permissionDecision": "ask",
+                            "permissionDecision": "deny",
                             "permissionDecisionReason": "..."}}
-to pause for a human. This hook NEVER denies — a false positive costs one keystroke, not a
-blocked workflow. It asks **at most once per cycle** (tracked via `.orbit/design/.asked`); once
-the human clears it, every other UI edit in the same cycle proceeds silently. Fail OPEN: any
-error allows the edit, because a guard must never brick a legitimate change.
+to route the agent back through the missing design step without asking the human. This hook never
+emits `ask`: the agent writes the HEAVY approval or TRIVIAL triage marker, then retries the edit.
+The denial fires **at most once per cycle** (tracked via `.orbit/design/.asked`). Fail OPEN: any
+internal error allows the edit, because a guard must never brick a legitimate change.
 
 Only wired into `.claude/settings.json` on repos with a UI surface (`has_ui` in scaffold.py) —
 backend/data/CLI repos never see this hook.
@@ -84,8 +84,8 @@ def _record_status(root: Path) -> str:
       * "ok"                — a TRIVIAL marker, a legacy/non-HEAVY approval, or a HEAVY approval that
                               carries a `taste_preflight` record → allow.
       * "heavy_no_preflight"— a HEAVY `approved.json` that LACKS a `taste_preflight` block → the taste
-                              gate was skipped → ask.
-      * "none"              — no approval and no TRIVIAL marker at all → the triage never ran → ask.
+                              gate was skipped → deny once and self-correct.
+      * "none"              — no approval and no TRIVIAL marker at all → deny once and self-correct.
     Existence-based (see the module docstring's honest limitation). Fail-safe: an unparseable
     approval is treated as "ok" — the hook never invents a finding from a file it can't read."""
     approved = root / "design" / "approved.json"
@@ -103,9 +103,9 @@ def _record_status(root: Path) -> str:
 
 
 def _current_cycle(root: Path):
-    """Best-effort current loop cycle, for de-duplicating the ask (NOT for record freshness).
+    """Best-effort current loop cycle, for de-duplicating the correction (NOT for record freshness).
     Tries STATE.md's 'Iteration: <n> of <max>' line, then the last cycle-tagged activity.jsonl
-    event. Returns None if unknowable — the ask still fires once, just without cycle-scoping."""
+    event. Returns None if unknowable — the correction still fires once, just without cycle-scoping."""
     state = root / ".orbit" / "STATE.md"
     if state.exists():
         try:
@@ -179,10 +179,10 @@ def main():
         else:
             reason = ("[orbit] UI production edit with no design record this cycle — if this is HEAVY, "
                       "run the prototype gate (design-methodology.md) and write design/approved.json; "
-                      "if TRIVIAL, approve this once or drop .orbit/design/TRIVIAL.")
+                      "if TRIVIAL, write .orbit/design/TRIVIAL, then retry this edit.")
         print(json.dumps({"hookSpecificOutput": {
             "hookEventName": "PreToolUse",
-            "permissionDecision": "ask",
+            "permissionDecision": "deny",
             "permissionDecisionReason": reason,
         }}))
     except Exception:

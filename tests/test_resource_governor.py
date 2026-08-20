@@ -2,6 +2,7 @@
 """End-to-end contract for the trusted zero-model-call resource governor."""
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -23,6 +24,9 @@ def main():
     with tempfile.TemporaryDirectory() as td:
         project = Path(td); orbit = project / ".orbit"; orbit.mkdir()
         (orbit / "loop.config.json").write_text((ROOT / "assets/loop.config.json").read_text())
+        (orbit / "checks").mkdir()
+        shutil.copy2(ROOT / "assets/checks/repository_intelligence.py",
+                     orbit / "checks/repository_intelligence.py")
         invoke(project, {"hook_event_name": "UserPromptSubmit", "session_id": "s1",
                          "prompt": "Fix the checkout", "cwd": str(project)})
         (orbit / "intelligence").mkdir()
@@ -38,6 +42,25 @@ def main():
                          "prompt": "and test it", "cwd": str(project)})
         if json.loads((orbit / "budget.json").read_text())["spent"]["planner"] != 1234:
             fails.append("follow-up prompt reset the session allowance")
+
+        # Orbit-generated packet drift is repaired within the same caps before dispatch; it never
+        # becomes a user confirmation or a retry loop.
+        (orbit / "intelligence/latest.json").write_text(json.dumps({
+            "policy": {"hops": 1},
+            "retrieval": {"files": [{"path": f"f{i}"} for i in range(13)],
+                          "estimated_tokens": 2000}}))
+        repaired = invoke(project, {"hook_event_name": "PreToolUse", "tool_name": "Agent",
+                           "tool_use_id": "repair-edge", "cwd": str(project),
+                           "tool_input": {"subagent_type": "reporter", "prompt": "summarize"}})
+        if repaired.get("hookSpecificOutput", {}).get("permissionDecision") != "allow":
+            fails.append(f"Orbit-owned oversized evidence was not auto-repaired: {repaired}")
+        packet = json.loads((orbit / "intelligence/latest.json").read_text())
+        if len(packet.get("retrieval", {}).get("files", [])) > 12:
+            fails.append("automatic evidence repair still exceeded the 12-file cap")
+        invoke(project, {"hook_event_name": "PostToolUse", "tool_name": "Agent",
+                         "tool_use_id": "repair-edge", "cwd": str(project),
+                         "tool_input": {"subagent_type": "reporter"},
+                         "tool_response": {"status": "completed", "totalTokens": 10}})
 
         pre = invoke(project, {"hook_event_name": "PreToolUse", "tool_name": "Agent",
                      "tool_use_id": "edge-1", "cwd": str(project),
@@ -66,7 +89,7 @@ def main():
                          "tool_response": {"status": "completed", "totalTokens": 777,
                                            "usage": {"input_tokens": 500, "output_tokens": 277}}})
         ledger = json.loads((orbit / "budget.json").read_text())
-        if ledger["spent"].get("reporter") != 777 or "edge-1" in ledger.get("reservations", {}):
+        if ledger["spent"].get("reporter") != 787 or "edge-1" in ledger.get("reservations", {}):
             fails.append("PostToolUse did not reconcile reservation to actual usage")
 
         (orbit / "activity.jsonl").write_text(json.dumps({"phase": "gear", "gear": "T100"}) + "\n")

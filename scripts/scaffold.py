@@ -273,8 +273,8 @@ QA_FRONTEND = [("qa/snapshot.py", ".orbit/qa/snapshot.py"),
                ("qa/extract-tokens.py", ".orbit/qa/extract-tokens.py"),
                ("qa/visual-gate.py", ".orbit/qa/visual-gate.py")]   # REQUIRED visual gate for HEAVY UI
 
-# The design gate hook (Phase 2) — a coarse PreToolUse backstop that asks once per cycle when a
-# UI production file is edited with no design-decision record. Frontend-only (it acts on a
+# The design gate hook (Phase 2) — a coarse PreToolUse backstop that denies once per cycle when a
+# UI production file lacks a design-decision record, so the agent self-corrects without asking. Frontend-only (it acts on a
 # rendered UI); placed and wired on every normal scaffold (see install_hooks below).
 DESIGN_GATE_FRONTEND = [("checks/design-gate.py", ".orbit/checks/design-gate.py")]
 
@@ -1001,8 +1001,8 @@ def install_hooks(target: Path, has_ui: bool = False, reporter_only: bool = Fals
       • PreCompact/PostCompact → trusted resource hook — preserve and restore a bounded goal/budget
         checkpoint instead of paying to replay full temporal history.
       • PreToolUse(Edit|Write|MultiEdit) → design-gate.py — UI repos only (has_ui): a coarse
-        backstop that asks once per cycle if a UI production file has no design-decision record.
-        Never denies; fails open. Not a per-change heavy-redesign blocker — see its own docstring.
+        backstop that denies once per cycle if a UI production file has no design-decision record,
+        routing the agent through design without asking the user. Fails open on internal errors.
       • [SubagentStart/Stop, TaskCreated/Completed, PostToolUse(+Failure/Batch), Stop, Notification,
         PermissionRequest]
         → bin/orbit-hook — the telemetry collector, wired from the TRUSTED install path (not the
@@ -1061,6 +1061,25 @@ def install_hooks(target: Path, has_ui: bool = False, reporter_only: bool = Fals
         pre.append({"matcher": "Bash", "hooks": [{"type": "command", "command": ORBIT_GUARD_CMD}]})
         added.append("PreToolUse[matcher=Bash] → orbit-guard   (TRUSTED non-interactive wall: "
                      "allow/deny only, never confirmation; a repo can't weaken it)")
+    if not reporter_only:
+        # Official Claude sandbox auto-allow replaces repetitive local Bash approvals with an OS-level
+        # project boundary. acceptEdits covers built-in in-repo edits; protected paths, explicit denies,
+        # network expansion, and unsandboxed/destructive work keep their native safety boundaries.
+        permissions = data.setdefault("permissions", {})
+        if isinstance(permissions, dict) and "defaultMode" not in permissions:
+            permissions["defaultMode"] = "acceptEdits"
+            added.append("permissions.defaultMode=acceptEdits   (routine in-repo edits do not pause)")
+        sandbox = data.setdefault("sandbox", {})
+        if isinstance(sandbox, dict):
+            sandbox_changed = False
+            if "enabled" not in sandbox:
+                sandbox["enabled"] = True
+                sandbox_changed = True
+            if "autoAllowBashIfSandboxed" not in sandbox:
+                sandbox["autoAllowBashIfSandboxed"] = True
+                sandbox_changed = True
+            if sandbox_changed:
+                added.append("sandbox auto-allow enabled   (routine local Bash runs inside the project boundary)")
     if not reporter_only and not any("orbit-resource-hook" in json.dumps(e) and
                                      e.get("matcher") == "Agent" for e in pre):
         pre.append({"matcher": "Agent", "hooks": [{"type": "command", "command": ORBIT_RESOURCE_CMD}]})
@@ -1090,7 +1109,7 @@ def install_hooks(target: Path, has_ui: bool = False, reporter_only: bool = Fals
         pre.append({"matcher": "Edit|Write|MultiEdit",
                     "hooks": [{"type": "command", "command": DESIGN_GATE_CMD}]})
         added.append("PreToolUse[matcher=Edit|Write|MultiEdit] → design-gate.py   "
-                     "(design: ask once/cycle if a UI edit has no design record)")
+                     "(design: self-correct once/cycle if a UI edit has no design record)")
 
     # Stop → orbit-stop-check.py: the observability backstop. Fails loudly (blocks once) if a routed
     # task did real work but never made the board visible (no .orbit/tasks.json / set_team) — i.e. it
@@ -1130,7 +1149,7 @@ def install_hooks(target: Path, has_ui: bool = False, reporter_only: bool = Fals
         print(("Installed Orbit reporter hooks" if reporter_only else "Installed Orbit's always-on hooks")
               + " (announced, not silent):")
         for a in added:
-            prefix = "" if a.startswith("env.") else "hooks."
+            prefix = "" if a.startswith(("env.", "permissions.", "sandbox ")) else "hooks."
             print("  + .claude/settings.json  →  " + prefix + a)
         if backed_up:
             print("  (your previous settings.json was backed up alongside it)")

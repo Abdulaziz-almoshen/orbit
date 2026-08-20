@@ -125,7 +125,7 @@ it mechanically rather than by vibe:
 `design_system` is a name from §3 or `"none"` (bespoke) — deliberate either way. `surface` is one of
 `landing` · `app` · `mobile`. QA (`qa-validation.md`) and the Reviewer's Design-Distinctiveness gate
 treat a **HEAVY** `approved.json` with **no `taste_preflight`** as a finding — the taste gate was
-*skipped*, not judged unnecessary. TRIVIAL work is exempt. The `design-gate.py` hook also asks on a
+*skipped*, not judged unnecessary. TRIVIAL work is exempt. The `design-gate.py` hook also self-corrects on a
 HEAVY UI edit whose approval carries no `taste_preflight`.
 
 ## The hard preflight checklist (run mechanically before handing to the Builder — every box)

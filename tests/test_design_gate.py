@@ -2,14 +2,14 @@
 """
 Tests for assets/checks/design-gate.py — the PreToolUse design-gate hook (Phase 2).
 
-Verifies (a) it only acts on Edit/Write/MultiEdit against a UI-production file, (b) it asks
+Verifies (a) it only acts on Edit/Write/MultiEdit against a UI-production file, (b) it denies
 exactly once per cycle when no design-decision record exists, (c) a TRIVIAL marker or a HEAVY
 approved.json *carrying a taste_preflight record* allows silently — while a HEAVY approval with
-NO taste_preflight asks (the taste gate), a legacy approval with no impact_level allows
+NO taste_preflight denies for agent self-correction (the taste gate), a legacy approval with no impact_level allows
 (pass-with-warning), and an unparseable approval fails safe to allow, (d) it never touches .orbit/ previews, docs,
 config, backend, or test files, (e) it fails open on any malformed/unexpected input, and
 (f) the OUTPUT VALIDATES against the same hookSpecificOutput schema as guard.py — and it
-NEVER returns "deny".
+NEVER returns "ask".
 
 Run: python3 tests/test_design_gate.py   (exit 0 = pass)
 """
@@ -35,7 +35,7 @@ def decision_of(out):
     obj = json.loads(out)                                  # must be valid JSON
     hso = obj["hookSpecificOutput"]                         # must use the correct envelope
     assert hso["hookEventName"] == "PreToolUse", hso
-    assert hso["permissionDecision"] == "ask", f"design-gate must NEVER deny, got {hso}"
+    assert hso["permissionDecision"] == "deny", f"design-gate must NEVER ask, got {hso}"
     assert hso.get("permissionDecisionReason"), "reason required"
     assert "permissionDecision" not in obj, "must NOT be top-level"
     return hso["permissionDecision"]
@@ -48,7 +48,7 @@ def edit(tool, file_path, cwd):
 def main():
     failures = []
 
-    # --- 1. no design record anywhere -> ask on a UI production file --------------------
+    # --- 1. no design record anywhere -> deny for self-correction ------------------------
     with tempfile.TemporaryDirectory() as d:
         rc, out = run(edit("Edit", os.path.join(d, "src", "Button.tsx"), d))
         try:
@@ -56,8 +56,8 @@ def main():
         except Exception as e:
             failures.append(f"bad output for no-record case: {e} | out={out!r}")
         else:
-            if got != "ask":
-                failures.append(f"no design record: expected ask, got {got}")
+            if got != "deny":
+                failures.append(f"no design record: expected deny, got {got}")
 
     # --- 2. a HEAVY approved.json WITH a taste_preflight record -> allow -----------------
     with tempfile.TemporaryDirectory() as d:
@@ -71,15 +71,15 @@ def main():
         if decision_of(out) is not None:
             failures.append(f"HEAVY approved.json with taste_preflight but still asked: {out!r}")
 
-    # --- 2a. a HEAVY approved.json with NO taste_preflight -> ask (the taste gate) --------
+    # --- 2a. a HEAVY approved.json with NO taste_preflight -> self-correct ----------------
     with tempfile.TemporaryDirectory() as d:
         os.makedirs(os.path.join(d, "design"))
         with open(os.path.join(d, "design", "approved.json"), "w") as f:
             json.dump({"component": "x", "impact_level": "HEAVY", "cycle": 1}, f)
         rc, out = run(edit("Write", os.path.join(d, "src", "Card.tsx"), d))
         got = decision_of(out)
-        if got != "ask":
-            failures.append(f"HEAVY approval with no taste_preflight should ask, got {got}: {out!r}")
+        if got != "deny":
+            failures.append(f"HEAVY approval with no taste_preflight should deny, got {got}: {out!r}")
         elif "taste_preflight" not in json.loads(out)["hookSpecificOutput"]["permissionDecisionReason"]:
             failures.append(f"the no-preflight ask should name taste_preflight: {out!r}")
 
@@ -135,31 +135,31 @@ def main():
             if decision_of(out) is not None:
                 failures.append(f"non-UI-production file was gated: {p} -> {out!r}")
 
-    # --- 6. ask fires at most ONCE per cycle (second edit same cycle -> silent) ----------
+    # --- 6. correction fires at most ONCE per cycle (second edit same cycle -> silent) ----
     with tempfile.TemporaryDirectory() as d:
         rc1, out1 = run(edit("Edit", os.path.join(d, "src", "A.tsx"), d))
         got1 = decision_of(out1)
         rc2, out2 = run(edit("Edit", os.path.join(d, "src", "B.tsx"), d))
         got2 = decision_of(out2)
-        if got1 != "ask":
-            failures.append(f"first unguarded UI edit should ask, got {got1}")
+        if got1 != "deny":
+            failures.append(f"first unguarded UI edit should deny, got {got1}")
         if got2 is not None:
             failures.append(f"second unguarded UI edit same cycle should be silent, got {got2}")
 
-    # --- 7. a NEW cycle re-arms the ask (STATE.md Iteration bump) ------------------------
+    # --- 7. a NEW cycle re-arms correction (STATE.md Iteration bump) ---------------------
     with tempfile.TemporaryDirectory() as d:
         os.makedirs(os.path.join(d, ".orbit"))
         state = os.path.join(d, ".orbit", "STATE.md")
         with open(state, "w") as f:
             f.write("## Current snapshot\n- Iteration: 1 of 10\n")
         rc, out = run(edit("Edit", os.path.join(d, "src", "A.tsx"), d))
-        if decision_of(out) != "ask":
-            failures.append("cycle 1: expected ask on first unguarded edit")
+        if decision_of(out) != "deny":
+            failures.append("cycle 1: expected deny on first unguarded edit")
         with open(state, "w") as f:
             f.write("## Current snapshot\n- Iteration: 2 of 10\n")
         rc, out = run(edit("Edit", os.path.join(d, "src", "B.tsx"), d))
-        if decision_of(out) != "ask":
-            failures.append("cycle 2 (new iteration): expected the ask to re-arm, got silence")
+        if decision_of(out) != "deny":
+            failures.append("cycle 2 (new iteration): expected correction to re-arm, got silence")
 
     # --- 7b. no "cwd" in the payload -> falls back to the process's actual cwd, no crash ---
     with tempfile.TemporaryDirectory() as d:
@@ -207,7 +207,7 @@ def main():
         for f in failures:
             print("  -", f)
         sys.exit(1)
-    print("PASS: design-gate (ask-only, once per cycle, record-aware, fail-open)")
+    print("PASS: design-gate (non-interactive self-correction · once/cycle · record-aware · fail-open)")
 
 
 if __name__ == "__main__":

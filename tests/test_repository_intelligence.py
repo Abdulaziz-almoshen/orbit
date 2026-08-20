@@ -90,6 +90,22 @@ def reschedule_interview(interview_id, slot):
             failures.append(f"incremental update did not isolate one changed file: {third}")
         if first["files"] != 8:
             failures.append(f"unexpected fixture file count: {first}")
+
+    # Exactly max_files lexical seeds plus a one-hop neighbor must remain exactly capped. This is
+    # the production failure that previously emitted 13 files for a configured maximum of 12.
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d); (root / ".orbit").mkdir()
+        for i in range(12):
+            body = f"def attestation_isolation_version_{i}():\n    return True\n"
+            if i == 0:
+                body = ("from dependency import verify\n"
+                        f"def attestation_isolation_version_{i}():\n    return verify()\n")
+            put(root, f"service/seed_{i:02}.py", body)
+        put(root, "dependency.py", "def verify(): return True\n")
+        intel.build(root)
+        capped = intel.query(root, "attestation isolation version", max_tokens=4000, max_files=12)
+        if len(capped["retrieval"]["files"]) != 12:
+            failures.append("one-hop expansion crossed the exact 12-file cap")
     if failures:
         print("FAIL: repository intelligence")
         for failure in failures: print("  -", failure)

@@ -14,7 +14,7 @@ Covers the step-8 acceptance list end-to-end:
   6. The em-dash ban is scoped to shipped UI copy — NOT Orbit's own internal docs (the adaptation
      that keeps the house style intact).
 
-(The design-gate HOOK behaviour — HEAVY-without-taste_preflight asks — is covered in
+(The design-gate HOOK behaviour — HEAVY-without-taste_preflight self-corrects — is covered in
 test_design_gate.py; the provisioning-count coherence is covered by scripts/check-coherence.py.)
 
 Run: python3 tests/test_taste_preflight.py   (exit 0 = pass)
@@ -166,11 +166,11 @@ def main():
         open(os.path.join(d, ".orbit", "design", "TRIVIAL"), "w").write("trivial: copy fix\n")
         if _gate_decision(d) is not None:
             fails.append("[3] TRIVIAL work is not exempt from the taste gate (hook asked with a TRIVIAL marker)")
-    with tempfile.TemporaryDirectory() as d:                  # HEAVY, no taste_preflight → ask
+    with tempfile.TemporaryDirectory() as d:                  # HEAVY, no taste_preflight → self-correct
         os.makedirs(os.path.join(d, "design"))
         with open(os.path.join(d, "design", "approved.json"), "w") as f:
             json.dump({"component": "x", "impact_level": "HEAVY"}, f)
-        if _gate_decision(d) != "ask":
+        if _gate_decision(d) != "deny":
             fails.append("[5] HEAVY approval with no taste_preflight is not gated by the hook")
 
     # --- 6. em-dash ban is SCOPED to shipped UI copy, not Orbit's own docs -----------------

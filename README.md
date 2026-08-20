@@ -11,7 +11,7 @@
 Orbit maps the repository, selects the smallest qualified team, watches the work, tests the full
 impact, repairs failures, and commits only after the goal is proven.
 
-![version](https://img.shields.io/badge/version-0.62.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.63.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![tests](https://img.shields.io/badge/tests-all%20passing-10a877)
@@ -48,10 +48,11 @@ impact, repairs failures, and commits only after the goal is proven.
 
 | Control | Binding behavior |
 |---|---|
-| Task intake | Every real task enters the loop and creates a visible `⏣ orbit` lane. |
-| Repository evidence | Agent launch is denied if the packet is missing, exceeds one hop, 12 files, ~4,000 evidence tokens, or a 12 KB Agent prompt. There is no confirmation escape. |
+| Task intake | Every real task enters the loop, is sized T1–T4 deterministically, receives its budget, and creates a visible `⏣ orbit` lane before implementation. |
+| Repository evidence | Intake builds a ≤1-hop, ≤12-file, ~4,000-token packet. Orbit-generated drift is repaired automatically before Agent launch; an unrecoverable or >12 KB handoff is denied without asking the user. |
 | Capability graph | T1 requires Plan/Review/QA/Report; T2 adds Safety/CPO; T3/T4 add Discovery/BA/Market; UI adds Designer. |
-| Safety | Routine Bash runs without confirmation. Catastrophic or uninspectable commands are denied; the hook never emits `ask`. |
+| Autonomy | Routine edits auto-accept and routine Bash auto-runs inside [Claude's OS sandbox](https://code.claude.com/docs/en/sandboxing). Design omissions route back to the agent, never to a confirmation dialog. |
+| Safety | Catastrophic or uninspectable commands are denied; irreversible/external-authority actions remain human decisions. Orbit never emits a routine `ask`. |
 | QA | Happy, alternate, negative, boundary, authorization, and failure/recovery scenarios plus dependency regression are required. |
 | UI proof | Baseline, actual, and computed diff at 375×812, 768×1024, and 1440×900, with accessibility and console checks. |
 | Delivery | Stop blocks missing owners, stale user memory, failed QA evidence, or missing commit-bound CPO acceptance. |
@@ -141,6 +142,8 @@ UX, accessibility, the project design system, or the user's source of truth.
   extraction.
 - Business language may not match code vocabulary on the first retrieval. Orbit must run one silent,
   targeted internal query—not ask the user and not widen to the full repository.
+- Sandboxed local work is non-interactive. Commands needing new network or host authority may still
+  need one explicit authorization; Orbit never converts routine implementation into repeated approvals.
 - Role execution is enforceable; expert judgment quality remains model-governed. Validate Recall@K
   against your enterprise task corpus before treating the index as a complete impact oracle.
 - The architecture applies the sparse spatial/temporal communication principle from

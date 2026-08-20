@@ -405,7 +405,11 @@ def query(root: Path, goal: str, max_tokens: int = 4000, max_files: int = 12, ho
     selected = list(seeds)
     if hops > 0:
         for src in list(seeds):
+            if len(selected) >= max_files:
+                break
             for e in con.execute("SELECT src,dst,kind,weight,evidence FROM edges WHERE src=? OR dst=? ORDER BY weight DESC", (src, src)):
+                if len(selected) >= max_files:
+                    break
                 other = e["dst"] if e["src"] == src else e["src"]
                 if other.startswith("owner:") or other in selected:
                     continue
@@ -413,12 +417,8 @@ def query(root: Path, goal: str, max_tokens: int = 4000, max_files: int = 12, ho
                     selected.append(other); scores[other] += e["weight"]
                     reasons[other].append({"line": 1, "kind": "graph:" + e["kind"], "name": src,
                                            "extractor": e["evidence"], "confidence": e["weight"]})
-                if len(selected) >= max_files:
-                    break
-            if len(selected) >= max_files:
-                break
     evidence, used = [], 0
-    for path in sorted(selected, key=lambda p: (-scores[p], p)):
+    for path in sorted(selected, key=lambda p: (-scores[p], p))[:max_files]:
         item = {"path": path, "score": round(scores[path], 3), "evidence": reasons[path][:5]}
         cost = max(12, len(json.dumps(item, separators=(",", ":"))) // 4)
         if used + cost > max_tokens:

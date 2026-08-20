@@ -98,6 +98,32 @@ def _allow_with_input(updated: dict, reason: str) -> None:
           "updatedInput": updated}}))
 
 
+def _packet_exceeds(packet: dict, intelligence: dict) -> bool:
+    retrieval = packet.get("retrieval") if isinstance(packet.get("retrieval"), dict) else {}
+    policy = packet.get("policy") if isinstance(packet.get("policy"), dict) else {}
+    try:
+        return (int(policy.get("hops", 99)) > int(intelligence.get("default_hops", 1))
+                or len(retrieval.get("files") or []) > int(intelligence.get("max_files", 12))
+                or int(retrieval.get("estimated_tokens", 0))
+                > int(intelligence.get("max_evidence_tokens", 4000)))
+    except (TypeError, ValueError):
+        return True
+
+
+def _refresh_evidence(orbit: Path, goal: str, config: dict) -> dict:
+    """Regenerate Orbit-owned evidence inside the same hard limits; fail closed if repair fails."""
+    try:
+        helper = orbit / "checks/repository_intelligence.py"
+        spec = importlib.util.spec_from_file_location("orbit_resource_intelligence", helper)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules["orbit_resource_intelligence"] = module
+        spec.loader.exec_module(module)
+        result = module.prepare_goal(orbit.parent, goal, config)
+        return result.get("packet", {}) if isinstance(result, dict) else {}
+    except Exception:
+        return {}
+
+
 def _usage_total(response: dict) -> tuple[int, dict]:
     usage = response.get("usage") if isinstance(response.get("usage"), dict) else {}
     total = response.get("totalTokens")
@@ -157,7 +183,9 @@ def main() -> int:
 
         if event == "UserPromptSubmit":
             session = str(data.get("session_id") or "unknown-session")
-            budget.open_session(orbit, session, _prompt(data), "T1")
+            goal = _prompt(data)
+            sizing = budget.size_goal(goal)
+            budget.open_session(orbit, session, goal, sizing.get("gear", "T1"))
             budget.sync_parent_usage(orbit, str(data.get("transcript_path") or ""))
             return 0
 
@@ -176,23 +204,24 @@ def main() -> int:
             if not ledger:
                 _deny("Orbit resource governor: no goal ledger. New agent work is blocked, not unmetered.")
                 return 0
-            ledger = budget.sync_gear(orbit, _latest_gear(orbit))
+            observed_gear = budget.normalize_gear(_latest_gear(orbit))
+            current_gear = budget.normalize_gear(ledger.get("gear", "T1"))
+            requested_gear = max((observed_gear, current_gear), key=lambda value: int(value[1:]))
+            ledger = budget.sync_gear(orbit, requested_gear)
             contract = _config(orbit, budget)
             full_config = _read_json(orbit / "loop.config.json")
             intelligence = full_config.get("repository_intelligence", {}) if isinstance(full_config, dict) else {}
             evidence_packet = _read_json(orbit / "intelligence/latest.json")
-            retrieval = evidence_packet.get("retrieval", {}) if isinstance(evidence_packet, dict) else {}
-            policy = evidence_packet.get("policy", {}) if isinstance(evidence_packet, dict) else {}
+            if intelligence.get("enabled", True) and (
+                    not evidence_packet or _packet_exceeds(evidence_packet, intelligence)):
+                evidence_packet = _refresh_evidence(orbit, ledger.get("goal", ""), full_config)
             if intelligence.get("enabled", True) and not evidence_packet:
                 _deny("Orbit repository governor: the required intent-to-impact packet is missing. "
                       "Run `scripts/orbit-intel query --goal <goal>`; do not replace it with a repository dump.")
                 return 0
-            if intelligence.get("enabled", True) and (
-                    int(policy.get("hops", 99) or 99) > int(intelligence.get("default_hops", 1) or 1)
-                    or len(retrieval.get("files", [])) > int(intelligence.get("max_files", 12) or 12)
-                    or int(retrieval.get("estimated_tokens", 0) or 0) > int(intelligence.get("max_evidence_tokens", 4000) or 4000)):
+            if intelligence.get("enabled", True) and _packet_exceeds(evidence_packet, intelligence):
                 _deny("Orbit repository governor: evidence packet exceeds the configured hop/file/token ceiling. "
-                      "Re-query narrowly; full-codebase context has no confirmation escape.")
+                      "Automatic bounded repair failed; full-codebase context remains denied.")
                 return 0
             prompt_bytes = len(str((data.get("tool_input") or {}).get("prompt") or "").encode("utf-8"))
             prompt_cap = int(intelligence.get("max_agent_prompt_bytes", 12000) or 12000)

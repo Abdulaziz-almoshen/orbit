@@ -115,6 +115,16 @@ def main() -> int:
         if not (tb.estimate_tokens("x" * 400) > tb.estimate_tokens("x" * 100) > 0):
             failures.append("estimate_tokens must grow with input")
 
+        # --- goal sizing happens before execution and explicit ceilings remain governed ----
+        sized = {
+            "small": tb.size_goal("fix the button copy")["gear"],
+            "deep": tb.size_goal("implement frontend and backend provisioning architecture across every dependency")["gear"],
+            "mission": tb.size_goal("production migration across repos with billing and compliance")["gear"],
+            "explicit": tb.size_goal("run this as T100")["gear"],
+        }
+        if sized != {"small": "T1", "deep": "T3", "mission": "T4", "explicit": "T4"}:
+            failures.append(f"deterministic goal preflight sized incorrectly: {sized}")
+
     if failures:
         print("FAIL: token budget")
         for f in failures:

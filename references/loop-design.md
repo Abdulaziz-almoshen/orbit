@@ -9,7 +9,7 @@ and the two ways to run it (portable runner vs. Ralph loop).
 1. **READ** — load `CLAUDE.md` then `.orbit/STATE.md`. A fresh agent now knows the
    product, the bar, what's done, and what's next — with no conversation history.
 2. **PLAN** — pick the top task from STATE.md's queue. For anything non-trivial, write
-   the plan before acting (the human can be asked to approve big plans).
+   and internally validate the plan before acting; do not ask the human to approve routine work.
 3. **ACT** — the Orchestrator delegates to the right specialist role(s), parallel where
    independent. Roles write artifacts to known paths and report back.
 4. **EVALUATE** — measure the output against the success criteria (CLAUDE.md §3) via the

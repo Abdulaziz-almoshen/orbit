@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import time
 from pathlib import Path
 
@@ -125,6 +126,57 @@ def normalize_gear(gear: str) -> str:
     except (TypeError, ValueError):
         return "T1"
     return f"T{max(0, min(4, number))}"
+
+
+def size_goal(goal: str) -> dict:
+    """Deterministically size a goal before execution; no model call and no user prompt.
+
+    This is intentionally conservative: explicit gears win, irreversible/production breadth gets
+    T4, and otherwise accumulated breadth/risk/uncertainty signals select T1-T3. The returned
+    reasons make the estimate inspectable on the board and in tests.
+    """
+    text = str(goal or "")
+    lower = text.lower()
+    explicit = re.search(r"\bT(\d+)\b", text, re.IGNORECASE)
+    if explicit:
+        gear = normalize_gear(explicit.group(0))
+        return {"gear": gear, "score": int(gear[1:]), "reasons": ["explicit gear"]}
+
+    signals = {
+        "production/irreversible": re.compile(
+            r"\b(production|prod deploy|rollout|multi[- ]repo|across repos|payment|billing|"
+            r"migration|migrate|compliance|security incident|data loss)\b"),
+        "architecture/data boundary": re.compile(
+            r"\b(architecture|architect|schema|database|auth|permission|provision|isolation|"
+            r"api contract|state machine|infrastructure)\b"),
+        "breadth": re.compile(
+            r"(^|\n)\s*\d+[.)]\s|\b(across|whole|entire|end[- ]to[- ]end|multiple|every|all dependencies|"
+            r"frontend and backend|design and qa)\b"),
+        "research/uncertainty": re.compile(
+            r"\b(research|discovery|compare|evaluate|unknown|uncertain|best practice|market)\b"),
+        "delivery scope": re.compile(
+            r"\b(implement|build|refactor|redesign|integrate|deploy|release|ship|version)\b"),
+    }
+    weights = {"production/irreversible": 3, "architecture/data boundary": 2,
+               "breadth": 3, "research/uncertainty": 2, "delivery scope": 1}
+    reasons = [name for name, pattern in signals.items() if pattern.search(lower)]
+    score = sum(weights[name] for name in reasons)
+    if len(re.findall(r"(^|\n)\s*\d+[.)]\s", lower)) >= 3:
+        score += 2; reasons.append("multi-item goal")
+    words = len(text.split())
+    if words >= 80:
+        score += 2; reasons.append("long multi-constraint goal")
+    elif words >= 30:
+        score += 1; reasons.append("multi-constraint goal")
+    if "production/irreversible" in reasons and ("breadth" in reasons or score >= 7):
+        gear = "T4"
+    elif score >= 5:
+        gear = "T3"
+    elif score >= 2:
+        gear = "T2"
+    else:
+        gear = "T1"
+    return {"gear": gear, "score": score, "reasons": reasons or ["bounded change"]}
 
 
 def estimate_packet(paths, note: str = "", root: Path | None = None,

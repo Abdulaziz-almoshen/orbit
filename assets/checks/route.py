@@ -79,10 +79,11 @@ TASK_CTX = (
     "deliverable against that goal (the run is not done on your feeling; it is done on the CPO's "
     "commit-bound ACCEPT).**COST MODE IS LITE "
     "BY DEFAULT:** before any T2/T3/T4 loop, run `scripts/orbit-context doctor` when available; if it "
-    "reports FAIL, compact and continue inside hard caps. **SIZE THE GEAR FIRST** (the Gearbox — "
-    "`.orbit/skills/loop-tiers.md`): score effort/risk/uncertainty and pick the smallest gear that can "
-    "still prove the result — T0 Direct · T1 Quick · T2 Standard · T3 Deep · T4 Mission — then DECLARE "
-    "the Gear Card (Gear/Why/Budget/Exit) before moving; configured hard caps authorize T3/T4 fan-out. "
+    "reports FAIL, compact and continue inside hard caps. **USE THE GOAL PREFLIGHT GEAR** (the Gearbox — "
+    "`.orbit/skills/loop-tiers.md`): intake already scored effort/risk/uncertainty and selected the smallest "
+    "gear that can prove the result — T0 Direct · T1 Quick · T2 Standard · T3 Deep · T4 Mission. Declare "
+    "its Gear Card (Gear/Why/Budget/Exit) before moving; raise it only for new material evidence and never "
+    "ask the user to reconfirm routine budget or implementation. Configured hard caps authorize fan-out. "
     "**MODEL SWITCHING:** stay on the Executor lane for ordinary work; call the Advisor (Opus 4.8) "
     "only on-demand for architecture forks, safety/compliance uncertainty, repeated gate failure, "
     "expensive-if-wrong decisions, or explicit user request — max one Advisor call per cycle, tiny packet, "
@@ -148,8 +149,8 @@ _INFO_OPENER = re.compile(
     r"where|who|which)\b", re.IGNORECASE,
 )
 
-# Soft GEAR hints — NOT a gear decision (the orchestrator sizes it), just a nudge toward a higher gear
-# when the prompt shows breadth / research-need / mission-scale signals. Keyword-only, best-effort.
+# Back-compatible explainable gear hints. The deterministic `_size_goal` preflight is authoritative;
+# this helper remains for diagnostics and corpus tests, not as a second execution-time decision.
 _BREADTH_PAT = re.compile(r"(^|\n)\s*\d+[.)]\s|\bacross the (product|app|codebase)\b|\bmultiple\b|"
                           r"\beach (of|client|feature)\b|\b(feature|ask|item)s?\b.*\band\b.*\b(feature|ask|item)s?\b",
                           re.IGNORECASE)
@@ -161,8 +162,7 @@ _MISSION_PAT = re.compile(r"\b(migrat|production|prod deploy|multi[-\s]?repo|acr
 
 
 def gear_hint(prompt: str) -> str:
-    """A soft, appendable hint toward a higher gear (T3/T4) when the prompt shows breadth / research /
-    mission signals. Empty when nothing strong shows — the orchestrator still sizes the gear itself."""
+    """Explain obvious T3/T4 breadth or mission signals without changing the intake decision."""
     mission = bool(_MISSION_PAT.search(prompt))
     breadth = bool(_BREADTH_PAT.search(prompt))
     research = bool(_RESEARCH_PAT.search(prompt))
@@ -272,7 +272,7 @@ def _find_orbit(start: Path) -> Path:
     return None
 
 
-def emit_activity(cwd: Path, kind: str, prompt: str) -> None:
+def emit_activity(cwd: Path, kind: str, prompt: str, gear: str = "") -> None:
     """Best-effort: let the system 'act first' visibly — log the routing DECISION to the stream.
     Stores a redacted, secret-scrubbed, control-stripped summary, never the raw prompt."""
     try:
@@ -295,6 +295,12 @@ def emit_activity(cwd: Path, kind: str, prompt: str) -> None:
         }
         with (orbit / "activity.jsonl").open("a") as f:
             f.write(json.dumps(line) + "\n")
+            if kind == "task" and gear:
+                f.write(json.dumps({
+                    "schema": 2, "ts": line["ts"], "run_id": run_id, "role": "dispatcher",
+                    "phase": "gear", "status": "info", "gear": gear,
+                    "msg": f"{gear} sized deterministically at goal intake",
+                }) + "\n")
         if kind == "task":                       # anchor for the Stop observability hook — touched
             (orbit / ".last-task-route").write_text(line["ts"])   # AFTER the append (newest at route)
     except Exception:
@@ -350,6 +356,19 @@ def _prepare_repository_evidence(cwd: Path, prompt: str) -> dict:
         return {}                         # intake never blocks; missing packet remains visible to the loop
 
 
+def _size_goal(cwd: Path, prompt: str) -> dict:
+    """Use the installed deterministic budget kernel to size the goal before implementation."""
+    try:
+        orbit = _find_orbit(cwd)
+        helper = orbit / "checks" / "token_budget.py"
+        spec = importlib.util.spec_from_file_location("orbit_route_budget", helper)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.size_goal(prompt)
+    except Exception:
+        return {"gear": "T1", "score": 0, "reasons": ["bounded fallback"]}
+
+
 MARKER_TASK = ("VISIBILITY (mandatory): the FIRST LINE of your reply must be exactly "
                "'⏣ orbit — loop engaged · T<gear>' (fill in the gear you sized). The user must "
                "always SEE that Orbit took the request. ")
@@ -387,9 +406,16 @@ def main() -> None:
                     + ", ".join(memory["pending_event_ids"]) + ".")
         elif memory.get("review_due"):
             ctx += " REVIEW NOW: the five-request review interval has been reached."
+    sizing = _size_goal(cwd, prompt) if kind in ("task", "ambiguous") else {}
+    gear = sizing.get("gear", "T1")
     if mode == "always":                     # the user must SEE Orbit take every request
-        ctx = (MARKER_TASK if kind == "task" else MARKER_DIRECT) + ctx
+        marker = MARKER_TASK.replace("T<gear>", gear) if kind == "task" else MARKER_DIRECT
+        ctx = marker + ctx
     if kind in ("task", "ambiguous"):
+        reasons = ", ".join(sizing.get("reasons") or ["bounded change"])
+        ctx += (f" [orbit] GOAL PREFLIGHT: {gear} selected deterministically before execution "
+                f"(score {sizing.get('score', 0)}; {reasons}). This is the run budget; routine "
+                "implementation proceeds without asking the user to reconfirm it.")
         repo_evidence = _prepare_repository_evidence(cwd, prompt)
         if repo_evidence:
             packet = repo_evidence["packet"]
@@ -400,10 +426,7 @@ def main() -> None:
                     "tokens, one-hop maximum. Do not scan or send the whole repository to any role. "
                     "Every material scope claim must cite packet file/line evidence; if coverage is "
                     "uncertain, record the uncertainty and run a targeted query, never a blind full scan.")
-        hint = gear_hint(prompt)                  # soft nudge toward a higher gear (breadth/research/mission)
-        if hint:
-            ctx = ctx + " " + hint
-        emit_activity(cwd, kind, prompt)
+        emit_activity(cwd, kind, prompt, gear)
     elif mode == "always":
         emit_activity(cwd, kind, prompt)     # questions show on the board too — full visibility
 

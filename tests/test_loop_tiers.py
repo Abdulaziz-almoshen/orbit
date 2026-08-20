@@ -127,8 +127,8 @@ def main():
         got = "T4" if "T4" in h else ("T3" if "T3" in h else None)
         if got != want:
             fails.append(f"[C] gear_hint({prompt[:30]!r}) → {got}, want {want}")
-    if "size the gear" not in route.TASK_CTX.lower():
-        fails.append("[C] route.py TASK_CTX does not tell the model to size the gear first")
+    if "goal preflight gear" not in route.TASK_CTX.lower() or "never" not in route.TASK_CTX.lower():
+        fails.append("[C] route.py TASK_CTX does not bind the model to intake-sized gear without reconfirmation")
 
     # --- D. loop.config.json gears block ---------------------------------------------------------
     cfg = json.loads(_read("assets", "loop.config.json"))

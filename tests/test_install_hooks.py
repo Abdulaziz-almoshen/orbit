@@ -61,6 +61,11 @@ def main():
             fails.append("proactive compaction threshold was not installed")
         if env.get("CLAUDE_CODE_DISABLE_BACKGROUND_TASKS") != "1":
             fails.append("governed Agent calls were not forced measurable")
+        if data.get("permissions", {}).get("defaultMode") != "acceptEdits":
+            fails.append("routine in-repo edits were not made non-interactive")
+        sandbox = data.get("sandbox", {})
+        if sandbox.get("enabled") is not True or sandbox.get("autoAllowBashIfSandboxed") is not True:
+            fails.append("sandboxed routine Bash was not auto-allowed")
         if not list((t / ".claude").glob("settings.json.bak*")):
             fails.append("valid file was not backed up before edit")
 
