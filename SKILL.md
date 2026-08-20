@@ -489,6 +489,12 @@ End every `/orbit` run with a short, beginner-readable summary — not a file du
 Nothing here needs a restart: the scaffolded files are read live, and the safety hook arms on
 the next command. The user can start working immediately.
 
+`/orbit` and `/orbit-upgrade` are maintenance, never product delivery. Do not run delivery QA/CPO
+gates for them, do not bind them to the repository's current HEAD, and do not ask the user to edit
+`.claude/settings.json` or restart Claude to make Orbit work. If an outward action such as SSH is
+outside the sandbox, report that security boundary once and request authorization for that exact
+action; never recommend weakening the sandbox globally as a workaround.
+
 Then, internally, update `.orbit/STATE.md` and `CLAUDE.md` to reflect what was built — close the
 loop on your own work, the same way the system will.
 

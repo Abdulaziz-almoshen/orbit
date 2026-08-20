@@ -198,6 +198,19 @@ def main():
         if (orbit / ".last-task-route").exists():
             fails.append("question turn retained an old task Stop-gate marker")
 
+        # Slash maintenance emits no new route event, so the trusted hook itself must retire the
+        # previous task marker. Otherwise `/orbit` refresh gets judged as a delivery against whatever
+        # commit a parallel session most recently created.
+        (orbit / ".last-task-route").write_text("old-task")
+        before = json.loads((orbit / "budget.json").read_text())
+        invoke(project, {"hook_event_name": "UserPromptSubmit", "session_id": "upgrade-session",
+                         "prompt": "/orbit", "cwd": str(project)})
+        after = json.loads((orbit / "budget.json").read_text())
+        if (orbit / ".last-task-route").exists():
+            fails.append("/orbit maintenance retained an old task Stop-gate marker")
+        if after.get("goal_hash") != before.get("goal_hash") or after.get("spent") != before.get("spent"):
+            fails.append("/orbit maintenance reopened or mutated the product-goal ledger")
+
     # Root model usage shares the same ceiling and repeated hooks do not double count it.
     with tempfile.TemporaryDirectory() as td:
         project = Path(td); orbit = project / ".orbit"; orbit.mkdir()

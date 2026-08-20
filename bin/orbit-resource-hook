@@ -72,6 +72,11 @@ def _prompt(data: dict) -> str:
     return str(data.get("prompt") or data.get("user_prompt") or "")[:4000]
 
 
+def _maintenance_prompt(data: dict) -> bool:
+    """True for Orbit's own slash commands, which maintain infrastructure but deliver no product."""
+    return bool(re.match(r"^\s*/orbit(?:\s|$|-)", _prompt(data), re.IGNORECASE))
+
+
 def _role(data: dict) -> str:
     tool_input = data.get("tool_input") if isinstance(data.get("tool_input"), dict) else {}
     return str(tool_input.get("subagent_type") or tool_input.get("agent_type") or
@@ -178,7 +183,7 @@ def _latest_route(orbit: Path) -> dict:
     return {}
 
 
-def _acknowledge_user_input(orbit: Path) -> None:
+def _acknowledge_user_input(orbit: Path, maintenance: bool = False) -> None:
     """Clear stale human-block state; question turns cannot replay an older task's Stop gates."""
     run_path = orbit / "run.json"
     run = _read_json(run_path)
@@ -189,7 +194,7 @@ def _acknowledge_user_input(orbit: Path) -> None:
         tmp.write_text(json.dumps(run, indent=2) + "\n")
         os.replace(tmp, run_path)
     latest = _latest_route(orbit)
-    if latest and latest.get("status") != "start":
+    if maintenance or (latest and latest.get("status") != "start"):
         (orbit / ".last-task-route").unlink(missing_ok=True)
 
 
@@ -226,7 +231,12 @@ def main() -> int:
 
         if event == "UserPromptSubmit":
             session = str(data.get("session_id") or "unknown-session")
-            _acknowledge_user_input(orbit)
+            maintenance = _maintenance_prompt(data)
+            _acknowledge_user_input(orbit, maintenance=maintenance)
+            # `/orbit` and `/orbit-upgrade` are control-plane maintenance. They must not reopen a
+            # product ledger or let an older task marker make Stop/CPO/QA judge an unrelated HEAD.
+            if maintenance:
+                return 0
             routed = _active_goal(orbit)
             goal = str(routed.get("goal") or _prompt(data))
             sizing = budget.size_goal(goal)
