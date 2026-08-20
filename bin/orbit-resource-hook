@@ -178,6 +178,29 @@ def main() -> int:
                 return 0
             ledger = budget.sync_gear(orbit, _latest_gear(orbit))
             contract = _config(orbit, budget)
+            full_config = _read_json(orbit / "loop.config.json")
+            intelligence = full_config.get("repository_intelligence", {}) if isinstance(full_config, dict) else {}
+            evidence_packet = _read_json(orbit / "intelligence/latest.json")
+            retrieval = evidence_packet.get("retrieval", {}) if isinstance(evidence_packet, dict) else {}
+            policy = evidence_packet.get("policy", {}) if isinstance(evidence_packet, dict) else {}
+            if intelligence.get("enabled", True) and not evidence_packet:
+                _deny("Orbit repository governor: the required intent-to-impact packet is missing. "
+                      "Run `scripts/orbit-intel query --goal <goal>`; do not replace it with a repository dump.")
+                return 0
+            if intelligence.get("enabled", True) and (
+                    int(policy.get("hops", 99) or 99) > int(intelligence.get("default_hops", 1) or 1)
+                    or len(retrieval.get("files", [])) > int(intelligence.get("max_files", 12) or 12)
+                    or int(retrieval.get("estimated_tokens", 0) or 0) > int(intelligence.get("max_evidence_tokens", 4000) or 4000)):
+                _deny("Orbit repository governor: evidence packet exceeds the configured hop/file/token ceiling. "
+                      "Re-query narrowly; full-codebase context has no confirmation escape.")
+                return 0
+            prompt_bytes = len(str((data.get("tool_input") or {}).get("prompt") or "").encode("utf-8"))
+            prompt_cap = int(intelligence.get("max_agent_prompt_bytes", 12000) or 12000)
+            if intelligence.get("enabled", True) and prompt_bytes > prompt_cap:
+                _deny(f"Orbit repository governor: Agent packet is {prompt_bytes:,} bytes; hard cap is "
+                      f"{prompt_cap:,}. Pass the goal, `.orbit/intelligence/latest.json`, and only "
+                      "the relevant evidence paths—not repository content or full history.")
+                return 0
             gear = ledger.get("gear", "T1")
             max_calls = int((contract.get("max_agent_calls") or {}).get(gear, 0) or 0)
             if int(ledger.get("agent_calls", 0)) >= max_calls:
@@ -204,7 +227,8 @@ def main() -> int:
                     tool_input["model"] = "sonnet"
             note = (f"\n\n[orbit resource envelope] role={role}; reservation={rid}; "
                     f"slice~{estimate} tokens. Return a compact evidence envelope; persist long logs/artifacts by path. "
-                    "The goal and acceptance criteria are immutable.")
+                    "Use the role view in `.orbit/intelligence/latest.json`; expand only a named uncertainty with a "
+                    "targeted query. Never ingest the full repository/index. The goal and acceptance criteria are immutable.")
             tool_input["prompt"] = str(tool_input.get("prompt") or "") + note
             _allow_with_input(tool_input, f"reserved ~{estimate:,} tokens for {role}")
             return 0

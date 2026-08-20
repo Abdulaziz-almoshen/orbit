@@ -14,7 +14,7 @@ Orbit turns a product repository into a durable, observable agentic loop: it rem
 plans the next move, delegates focused tasks, **watches the full role tree live for drift**, checks the
 result, repairs failures, and returns a proven local commit—interrupting only for true blockers.
 
-![version](https://img.shields.io/badge/version-0.61.0-2b6cb0)
+![version](https://img.shields.io/badge/version-0.62.0-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![observable](https://img.shields.io/badge/observable-live%20dashboard-e8590c)
@@ -32,6 +32,10 @@ gives the work a durable operating system:
   Orbit reviews memory at least every five requests and again after the latest request before shipping.
   Pending or stale memory blocks CPO/Stop; a no-new-signal checkpoint is valid, invented preferences are not.
 - **Plan and progress:** every run has a visible checklist, owner, phase, gate, and next action.
+- **Repository intelligence without repository prompts:** install builds a deterministic local index
+  of topology, build targets, symbols, dependencies, APIs, events, schemas, config, tests, ownership,
+  and Git co-change. Every task receives a provenance-bearing one-hop impact packet capped at 12 files
+  and roughly 4,000 tokens; roles never ingest the raw repository or the SQLite index.
 - **Enforced capabilities without ceremonial fan-out:** Orbit chooses a protected role graph by gear.
   T1 proves with Planner/Reviewer/QA/Reporter; T2 adds Safety/CPO; T3/T4 add Discovery/BA/Market;
   UI adds Design. Every required owner is machine-gated, but irrelevant roles are pruned.
@@ -85,6 +89,11 @@ gives the work a durable operating system:
 <picture>
   <img src="assets/orbit-loop-observer.svg" alt="The Orbit loop: one goal flows through every enforced specialist while a real Claude watchdog surrounds and observes the full role tree; green work ends in a proven commit." width="100%">
 </picture>
+
+> **New in Orbit 0.62:** Orbit separates repository-wide computation from model context. A zero-LLM,
+> zero-network index is built once and incrementally refreshed by metadata plus SHA-256. Intent retrieves
+> a bounded, evidence-backed one-hop impact packet with role-specific product/engineering/QA/ownership
+> views. Weak coverage is reported; it never silently becomes a whole-codebase prompt.
 
 > **New in Orbit 0.61:** AgentPrune's spatial-temporal graph insight is now an enforceable resource
 > kernel. One root observer watches the descendant tree; gear selects the smallest protected role DAG;
@@ -171,6 +180,8 @@ and skips projects under an active writer lock.
 | `scripts/orbit-worktree create --task <slug>` | Create an isolated worker branch and checkout. |
 | `scripts/orbit-worktree finish <worktree>` | Submit changed files, tests, summary, and budget to the merge queue. |
 | `scripts/orbit-memory review` | Review the learning ledger before promoting anything durable. |
+| `scripts/orbit-intel update` | Incrementally refresh the deterministic repository-intelligence index. |
+| `scripts/orbit-intel query --goal "…"` | Produce the bounded, provenance-bearing impact packet used by the loop. |
 | `/orbit-upgrade` | Upgrade the installed plugin. |
 
 ## Parallel work
@@ -253,6 +264,7 @@ regression tests. When Claude withholds the capability, roles continue and the f
 | Writer lease | One writer per checkout; reads remain available. `takeover` verifies the new owner before writes resume. |
 | Worktree isolation | Separate workers can write concurrently in separate Git worktrees. |
 | Runtime and budget caps | The trusted Agent hook enforces per-session token/call ceilings on native Claude sessions; `ralph_loop.sh` and `loop.py` retain iteration, runtime, token, and dollar limits. |
+| Repository context | The deterministic index sees the repository; agents receive a one-hop evidence file by path. Oversized Agent prompts are hard-denied without a confirmation escape. |
 | Checkpointing | Durable runner state persists budget and progress across resume. |
 | Telemetry | Hooks observe and redact activity; they fail open and never block work. |
 | Capability completion | Strict Stop contract blocks substantial work when a mandatory role has no completed post-route event; UI projects additionally require Designer. |
@@ -262,6 +274,13 @@ judgment remains model-governed. Advisor invocation and the portable runner's mo
 also remain model-governed. The
 Claude Code path is the complete default path; wire `dispatch()` before using `loop.py` with another
 orchestrator.
+
+Repository retrieval is mechanically bounded, but relevance is not magically solved. Python receives
+real AST symbols/calls; other shipped extractors are conservative and carry lower confidence. Exact
+product vocabulary performs best. A business-language alias may return weak or empty first-pass
+coverage; Orbit must translate that uncertainty into one internal targeted query and continue—not ask
+the user and not widen to the whole repository. Validate Recall@K on your own enterprise corpus before
+treating the index as a complete impact oracle.
 
 ## Model and cost policy
 

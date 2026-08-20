@@ -23,6 +23,8 @@ sliced and sequenced so the build team can execute it cleanly and prove each ste
 ## Inputs
 - `.orbit/artifacts/<cycle>/discovery-brief.md` (the bet) + `market-brief.md` (reuse-vs-build), CLAUDE.md §3
   success criteria, STATE.md, accepted ADRs in `.orbit/decisions/` (settled direction — don't relitigate).
+- `.orbit/intelligence/latest.json` — the bounded, provenance-bearing product impact map. Use its
+  engineering/QA/ownership views; never request the raw repository or full index.
 - Skills: `.orbit/skills/planning-and-decision-briefs.md`; on a **goal-sized ask** also
   `.orbit/skills/goal-pipeline.md` (spec → story DAG → run-until-green; every requirement gets an
   **EARS acceptance criterion** — the QA Engineer's oracle); on architectural forks

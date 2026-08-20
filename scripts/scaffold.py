@@ -53,6 +53,7 @@ MANAGED_CHECKS = {
     ".orbit/checks/orbit-stop-check.py":("checks/orbit-stop-check.py", b"observability backstop"),
     ".orbit/checks/delivery-quality-gate.py":("checks/delivery-quality-gate.py", b"delivery-quality gate"),
     ".orbit/checks/token_budget.py":    ("checks/token_budget.py",    b"token budget allocator"),
+    ".orbit/checks/repository_intelligence.py":("checks/repository_intelligence.py", b"Orbit repository intelligence"),
     "scripts/orbit-dashboard":          ("orbit-dashboard",            b"orbit-dashboard"),
     "scripts/orbit-statusline":         ("orbit-statusline.py",        b"orbit-statusline"),
 }
@@ -227,6 +228,7 @@ FILE_PLAN = [
     ("orbit-qa-hook",   "scripts/orbit-qa-hook",      0o755),   # opt-in native Git post-commit QA trigger
     ("orbit-memory",     "scripts/orbit-memory",      0o755),   # review/promote/forget the learning ledger
     ("orbit-context",    "scripts/orbit-context",     0o755),   # context budget doctor + safe compactor
+    ("orbit-intel",      "scripts/orbit-intel",       0o755),   # deterministic repo index + bounded retrieval
     ("orbit-status",     "scripts/orbit-status",      0o755),
     ("orbit-dashboard",  "scripts/orbit-dashboard",   0o755),   # read-only local web board over .orbit/
     ("orbit-pet",        "scripts/orbit-pet",         0o755),   # macOS always-on-top board reporter
@@ -240,6 +242,7 @@ FILE_PLAN = [
     ("checks/delivery-quality-gate.py", ".orbit/checks/delivery-quality-gate.py", 0o755),
     ("checks/learn.py",  ".orbit/checks/learn.py",    0o755),  # the active-learning ledger helper
     ("checks/token_budget.py", ".orbit/checks/token_budget.py", 0o755),  # per-goal token allocator
+    ("checks/repository_intelligence.py", ".orbit/checks/repository_intelligence.py", 0o755),
     ("qa/independent-review-request.schema.json", ".orbit/qa/independent-review-request.schema.json", None),
     ("qa/independent-review-result.schema.json", ".orbit/qa/independent-review-result.schema.json", None),
     ("qa/review-request.template.json", ".orbit/review-requests/TEMPLATE.json", None),
@@ -255,6 +258,7 @@ PLAYBOOKS_ALWAYS = ["clarify-and-challenge.md", "autonomous-delivery.md",
                     "safety-rules.md", "deliverable-reports.md", "loop-tiers.md",
                     "counterfactual-regret.md", "iterative-repair.md", "product-acceptance.md"]
 PLAYBOOKS_ALWAYS.append("user-memory-architecture.md")
+PLAYBOOKS_ALWAYS.append("repository-intelligence.md")
 PLAYBOOKS_FRONTEND = ["design-methodology.md", "anti-ai-aesthetics.md", "design-styles.md",
                       "taste-preflight.md", "design-taste-frontend.md"]
 THIRD_PARTY_FRONTEND = [
@@ -330,6 +334,7 @@ DIRS = [
     ".orbit", ".orbit/roles", ".orbit/skills",
     ".orbit/artifacts", ".orbit/checks", ".orbit/decisions", ".orbit/locks", ".orbit/security",
     ".orbit/qa", ".orbit/review-requests", ".orbit/reviews", ".orbit/cpo", ".orbit/memory",
+    ".orbit/intelligence",
     ".claude/agents", "scripts",
 ]
 
@@ -605,7 +610,8 @@ def _merge_loop_config_defaults(target: Path, created: list, warnings: list) -> 
         changed = []
         for key in ("_independent_qa_help", "independent_qa",
                     "_capability_enforcement_help", "capability_enforcement",
-                    "delivery_quality", "_user_memory_help", "user_memory"):
+                    "delivery_quality", "_user_memory_help", "user_memory",
+                    "_repository_intelligence_help", "repository_intelligence"):
             if key not in current:
                 current[key] = defaults[key]
                 changed.append(key)
@@ -654,6 +660,25 @@ def _seed_user_memory(target: Path, created: list, skipped: list) -> None:
     events = target / ".orbit/memory/user-events.jsonl"
     if not events.exists():
         _emit(events, "", created, skipped)
+
+
+def _refresh_repository_intelligence(target: Path, created: list, warnings: list) -> None:
+    """Build once on install and perform a metadata-fast incremental refresh on updates."""
+    helper = target / ".orbit/checks/repository_intelligence.py"
+    if not helper.exists():
+        return
+    try:
+        proc = subprocess.run([sys.executable, str(helper), "update", "--root", str(target)],
+                              cwd=target, text=True, capture_output=True, timeout=120)
+        if proc.returncode:
+            warnings.append("Repository intelligence index was not refreshed: " + proc.stderr[-240:])
+            return
+        result = json.loads(proc.stdout)
+        if result.get("changed") or result.get("removed"):
+            created.append(".orbit/intelligence/index.sqlite3  "
+                           f"(indexed {result.get('files', 0)} files; {result.get('changed', 0)} changed)")
+    except Exception as exc:
+        warnings.append(f"Repository intelligence index was not refreshed: {exc}")
 
 
 def _detect_arabic_surface(target: Path) -> bool:
@@ -905,6 +930,7 @@ def _auto_heal(target: Path) -> str:
     for pb in playbooks:
         _place(PLAYBOOKS / pb, target / ".orbit/skills" / pb, created, skipped)
     _seed_user_memory(target, created, skipped)
+    _refresh_repository_intelligence(target, created, warnings)
     # Capability additions must reach already-installed projects. Missing shipped roles are safe to
     # add; existing/customized role files remain byte-for-byte untouched.
     for role in ROLES_CORE:
@@ -1190,6 +1216,7 @@ def main():
             "## Vocabulary\n\n(none yet)\n"), created, skipped)
 
     _seed_user_memory(target, created, skipped)
+    _refresh_repository_intelligence(target, created, warnings)
 
     # 3b. the 67-style design catalog (UI surfaces only) -> .orbit/skills/design-styles/
     styles_src = PLAYBOOKS / "design-styles"

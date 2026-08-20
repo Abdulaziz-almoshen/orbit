@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
   <title id="title">Orbit protected sparse delivery graph</title>
-  <desc id="desc">A goal sits at the center of a gear-scaled expert orbit. One Claude watchdog observes the complete descendant tree, while a trusted resource kernel meters every agent edge. Quality gates form a protected path to a proven commit.</desc>
+  <desc id="desc">User intent enters a deterministic repository index and becomes a bounded evidence packet before reaching a gear-scaled expert orbit. One Claude watchdog observes the complete descendant tree, while a trusted resource kernel meters every agent edge. Quality gates form a protected path to a proven commit.</desc>
   <defs>
     <radialGradient id="bg" cx="50%" cy="46%" r="74%"><stop offset="0" stop-color="#14243a"/><stop offset=".55" stop-color="#09111d"/><stop offset="1" stop-color="#04070b"/></radialGradient>
     <linearGradient id="cyan" x1="0" x2="1"><stop stop-color="#68e4ff"/><stop offset="1" stop-color="#4776ff"/></linearGradient>
@@ -16,11 +16,20 @@
   <text x="70" y="72" font-size="18" font-weight="800" fill="#68e4ff" letter-spacing="3">ORBIT / GOVERNED DELIVERY</text>
   <text x="70" y="112" font-size="34" font-weight="800">The goal stays fixed. The execution graph earns every token.</text>
 
+  <!-- deterministic intent-to-impact intake: repository-wide compute, tiny model context -->
+  <rect x="70" y="136" width="1460" height="80" rx="22" fill="#091827" stroke="#31506f"/>
+  <text x="98" y="168" class="micro" fill="#68e4ff">INTENT → IMPACT · ZERO LLM CALLS</text>
+  <g><rect x="356" y="151" width="190" height="50" rx="15" fill="#111d2b" stroke="#4776ff"/><text x="451" y="181" text-anchor="middle" class="label">USER INTENT</text></g>
+  <path d="M555 176h84" fill="none" stroke="#68e4ff" stroke-width="2" marker-end="url(#arrow)"/>
+  <g><rect x="650" y="145" width="300" height="62" rx="16" fill="#10261f" stroke="#28c98c" stroke-width="2"/><text x="800" y="172" text-anchor="middle" class="label">REPOSITORY INTELLIGENCE</text><text x="800" y="193" text-anchor="middle" class="small">index once · refresh changed files</text></g>
+  <path d="M960 176h84" fill="none" stroke="#68e4ff" stroke-width="2" marker-end="url(#arrow)"/>
+  <g><rect x="1055" y="145" width="312" height="62" rx="16" fill="#1b1827" stroke="#b77cff" stroke-width="2"/><text x="1211" y="172" text-anchor="middle" class="label">BOUNDED IMPACT PACKET</text><text x="1211" y="193" text-anchor="middle" class="small">≤12 files · 1 hop · provenance</text></g>
+
   <!-- one real observer, spanning the complete descendant tree -->
-  <path d="M282 240 C430 148 1170 148 1318 240" fill="none" stroke="url(#amber)" stroke-width="3" stroke-dasharray="8 9"/>
-  <rect x="606" y="142" width="388" height="74" rx="37" fill="#25180e" stroke="#ff9850" stroke-width="2.5" filter="url(#glow)"/>
-  <circle cx="651" cy="179" r="19" fill="none" stroke="#ffd166" stroke-width="3"/><circle cx="651" cy="179" r="6" fill="#ffd166"/>
-  <text x="686" y="174" class="micro" fill="#ffb365">ONE CLAUDE OBSERVER</text><text x="686" y="196" class="label">watches the whole descendant tree</text>
+  <path d="M282 326 C430 234 1170 234 1318 326" fill="none" stroke="url(#amber)" stroke-width="3" stroke-dasharray="8 9"/>
+  <rect x="606" y="228" width="388" height="74" rx="37" fill="#25180e" stroke="#ff9850" stroke-width="2.5" filter="url(#glow)"/>
+  <circle cx="651" cy="265" r="19" fill="none" stroke="#ffd166" stroke-width="3"/><circle cx="651" cy="265" r="6" fill="#ffd166"/>
+  <text x="686" y="260" class="micro" fill="#ffb365">ONE CLAUDE OBSERVER</text><text x="686" y="282" class="label">watches the whole descendant tree</text>
 
   <!-- sparse expert orbit -->
   <ellipse cx="800" cy="472" rx="550" ry="242" fill="none" stroke="#20364e" stroke-width="2"/>
@@ -59,7 +68,7 @@
 
   <!-- trusted kernel -->
   <rect x="238" y="772" width="1124" height="82" rx="24" fill="#081a18" stroke="#21c58a" stroke-width="2"/>
-  <text x="278" y="804" class="micro" fill="#63f3b0">TRUSTED RESOURCE KERNEL · ZERO MODEL CALLS</text>
-  <text x="278" y="834" class="label">reserve before Agent  →  force measurable return  →  charge actual usage  →  protect closeout  →  checkpoint</text>
+  <text x="278" y="804" class="micro" fill="#63f3b0">TRUSTED RESOURCE KERNEL · BUDGET + EVIDENCE GOVERNANCE</text>
+  <text x="278" y="834" class="label">retrieve narrowly  →  reserve before Agent  →  charge actual usage  →  protect proof  →  checkpoint</text>
   <circle cx="1317" cy="813" r="20" fill="#0e382b" stroke="#63f3b0"/><path d="M1308 813l7 7 13-17" fill="none" stroke="#63f3b0" stroke-width="3"/>
 </svg>

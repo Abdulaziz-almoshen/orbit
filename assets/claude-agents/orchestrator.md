@@ -17,7 +17,8 @@ observeSubagents: true
 
 # Role: Orchestrator / PM (Claude Code subagent)
 
-Mirrors `.orbit/roles/orchestrator.md`; loads `.orbit/skills/autonomous-delivery.md` first,
+Mirrors `.orbit/roles/orchestrator.md`; loads `.orbit/skills/autonomous-delivery.md` and
+`.orbit/skills/repository-intelligence.md` first,
 `.orbit/skills/loop-tiers.md` (the Gearbox — size the
 loop first), `.orbit/skills/planning-and-decision-briefs.md` (and `clarify-and-challenge.md` on the
 task path, and `active-learning.md` for the UPDATE phase). Reads `.orbit/loop.config.json` →
@@ -41,7 +42,11 @@ something more accurate, stable, and scalable than the literal ask.
    architecture forks, safety/compliance uncertainty, repeated gate failure, expensive-if-wrong decisions,
    or an explicit user request for deeper judgment. It is max one call per cycle, read-only, and must get
    a tiny decision packet plus a written `advisor_reason`; it returns advice, not edits.
-1. **Plan (per the gear).** Read CLAUDE.md + STATE.md. **On T3 Deep, run the fan-out ON THE BOARD**
+1. **Plan (per the gear).** Read CLAUDE.md + STATE.md and `.orbit/intelligence/latest.json` first.
+   Treat it as the bounded impact map: cite its file/line provenance, select role-specific evidence,
+   and never hand a role the raw index or repository. Empty/weak coverage triggers one internal,
+   targeted `scripts/orbit-intel query --goal "<code vocabulary hypothesis>"`; record the uncertainty
+   and continue without asking the user. **On T3 Deep, run the fan-out ON THE BOARD**
    (set_team the whole roster FIRST, then Task-tool sub-agents per phase) —
    **Map → Research → Plan → Critique → Synthesize → Build**, all **existing roles, no new role types**:
    Map = the Product-Discovery role read-only per surface; Research = the Market-Researcher role, one per

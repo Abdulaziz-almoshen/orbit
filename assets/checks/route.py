@@ -334,6 +334,22 @@ def _record_user_memory(cwd: Path, prompt: str) -> dict:
         return {}                         # routing is fail-open; delivery enforcement is fail-closed
 
 
+def _prepare_repository_evidence(cwd: Path, prompt: str) -> dict:
+    """Refresh deterministic facts and create a bounded one-hop packet for this goal."""
+    try:
+        orbit = _find_orbit(cwd)
+        if orbit is None:
+            return {}
+        helper = orbit / "checks" / "repository_intelligence.py"
+        cfg = json.loads((orbit / "loop.config.json").read_text())
+        spec = importlib.util.spec_from_file_location("orbit_repository_intelligence", helper)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.prepare_goal(orbit.parent, prompt, cfg)
+    except Exception:
+        return {}                         # intake never blocks; missing packet remains visible to the loop
+
+
 MARKER_TASK = ("VISIBILITY (mandatory): the FIRST LINE of your reply must be exactly "
                "'⏣ orbit — loop engaged · T<gear>' (fill in the gear you sized). The user must "
                "always SEE that Orbit took the request. ")
@@ -374,6 +390,16 @@ def main() -> None:
     if mode == "always":                     # the user must SEE Orbit take every request
         ctx = (MARKER_TASK if kind == "task" else MARKER_DIRECT) + ctx
     if kind in ("task", "ambiguous"):
+        repo_evidence = _prepare_repository_evidence(cwd, prompt)
+        if repo_evidence:
+            packet = repo_evidence["packet"]
+            retrieval = packet["retrieval"]
+            ctx += (" [orbit] REPOSITORY EVIDENCE READY: use `.orbit/intelligence/latest.json` as the "
+                    "bounded impact map before planning. It contains "
+                    f"{len(retrieval['files'])} evidence-backed files / ~{retrieval['estimated_tokens']} "
+                    "tokens, one-hop maximum. Do not scan or send the whole repository to any role. "
+                    "Every material scope claim must cite packet file/line evidence; if coverage is "
+                    "uncertain, record the uncertainty and run a targeted query, never a blind full scan.")
         hint = gear_hint(prompt)                  # soft nudge toward a higher gear (breadth/research/mission)
         if hint:
             ctx = ctx + " " + hint

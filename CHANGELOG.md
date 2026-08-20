@@ -3,6 +3,20 @@
 All notable changes to the `orbit` skill are documented here. `VERSION` is the single source of
 truth — the update checker compares it against GitHub.
 
+## 0.62.0
+
+Repository intelligence without whole-codebase prompting.
+
+- **Build once, refresh incrementally.** A deterministic, zero-LLM/zero-network SQLite index records
+  topology, targets, symbols, imports, APIs, events, schemas, config, tests, CODEOWNERS, and bounded
+  Git co-change evidence. Unchanged files are rejected by size/mtime before content hashing.
+- **Bounded intent-to-impact retrieval.** Every routed task creates a provenance-bearing, one-hop
+  evidence packet capped by file and token budgets, with product, engineering, QA, and ownership views.
+- **AgentPrune separation.** Retrieval controls evidence entering the graph; AgentPrune controls sparse
+  role communication. Neither can prune the goal or protected quality gates.
+- **Measured simulation.** A controlled enterprise-shaped fixture checks Recall@10, precision, packet
+  tokens, context reduction, deterministic provenance, and single-file incremental refresh.
+
 ## 0.61.0
 
 **AgentPrune-inspired resource governance is now enforced on Claude's live Agent path.**

@@ -107,6 +107,8 @@ execution engine. See `references/durable-execution.md`.)
   run one cheap probe, and route failures back to the correct phase.
 - `.orbit/skills/iterative-repair.md` — post-build repair packets: target the failure, retest it,
   prevent blind retries, and escalate repeated failures.
+- `.orbit/skills/repository-intelligence.md` — deterministic intent→impact retrieval: build once,
+  incrementally refresh, and send bounded one-hop evidence instead of repository-wide prompts.
 
 **Design playbooks** (frontend repos only, provisioned when a UI surface is detected):
 - `.orbit/skills/design-methodology.md` — the Designer's process, including the **impact

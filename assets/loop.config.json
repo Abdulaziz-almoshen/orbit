@@ -99,6 +99,22 @@
     "optional_edge_admission": "new_requirement_or_risk_or_external_evidence"
   },
 
+  "_repository_intelligence_help": "Deterministic, local repository map. Install builds it once; task intake refreshes only files whose size/mtime changed plus co-change edges when Git HEAD moves, then retrieves a provenance-bearing one-hop evidence packet. The LLM never reads the full index or raw repository. Expansion beyond one hop requires an explicit uncertainty reason and is not automatic.",
+  "repository_intelligence": {
+    "enabled": true,
+    "mode": "enforce_bounded_packet",
+    "indexer": "deterministic_no_llm_no_network",
+    "refresh": "size_mtime_then_sha256",
+    "default_hops": 1,
+    "max_files": 12,
+    "max_evidence_tokens": 4000,
+    "max_agent_prompt_bytes": 12000,
+    "max_file_bytes": 2000000,
+    "require_provenance": true,
+    "forbid_full_repository_prompt": true,
+    "uncertainty_expansion": "explicit_only"
+  },
+
   "_eval_gates_help": "Proceed only if all pass. A single failure routes a fix task into the queue; gate_failure_streak consecutive failures trips a hard stop (the loop is thrashing). Thresholds are domain-specific; fit them to your product.",
   "eval_gates": {
     "input":   { "require_complete": true, "max_staleness_seconds": 3600 },

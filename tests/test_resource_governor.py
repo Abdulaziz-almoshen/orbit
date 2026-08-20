@@ -25,6 +25,9 @@ def main():
         (orbit / "loop.config.json").write_text((ROOT / "assets/loop.config.json").read_text())
         invoke(project, {"hook_event_name": "UserPromptSubmit", "session_id": "s1",
                          "prompt": "Fix the checkout", "cwd": str(project)})
+        (orbit / "intelligence").mkdir()
+        (orbit / "intelligence/latest.json").write_text(json.dumps({
+            "policy": {"hops": 1}, "retrieval": {"files": [], "estimated_tokens": 0}}))
         ledger = json.loads((orbit / "budget.json").read_text())
         if ledger.get("total") != 25000 or ledger.get("goal") != "Fix the checkout":
             fails.append("session intake did not open the default governed T1 ledger")
@@ -48,6 +51,14 @@ def main():
         ledger = json.loads((orbit / "budget.json").read_text())
         if "edge-1" not in ledger.get("reservations", {}):
             fails.append("preflight did not reserve the Agent edge")
+
+        oversized = invoke(project, {"hook_event_name": "PreToolUse", "tool_name": "Agent",
+                     "tool_use_id": "oversized", "cwd": str(project),
+                     "tool_input": {"subagent_type": "planner", "prompt": "repository dump " * 1000}})
+        if oversized.get("hookSpecificOutput", {}).get("permissionDecision") != "deny":
+            fails.append("oversized repository-shaped Agent packet was not hard-denied")
+        if "ask" in json.dumps(oversized).lower():
+            fails.append("oversized Agent packet exposed a confirmation path")
 
         invoke(project, {"hook_event_name": "PostToolUse", "tool_name": "Agent",
                          "tool_use_id": "edge-1", "cwd": str(project),
@@ -122,7 +133,7 @@ def main():
         print("FAIL: resource governor")
         for failure in fails: print("  -", failure)
         return 1
-    print("PASS: resource governor (immutable session budget + reservation + actual charge + checkpoint)")
+    print("PASS: resource governor (immutable budget + bounded evidence packet + reservation + actual charge + checkpoint)")
     return 0
 
 

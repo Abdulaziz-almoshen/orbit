@@ -1,0 +1,5 @@
+#!/bin/sh
+# orbit-intel — deterministic repository index and bounded retrieval CLI.
+set -eu
+ROOT=${CLAUDE_PROJECT_DIR:-$(pwd)}
+exec python3 "$ROOT/.orbit/checks/repository_intelligence.py" "$@" --root "$ROOT"
