@@ -58,6 +58,10 @@ def main():
         healed_settings = json.loads((target / ".claude/settings.json").read_text())
         if healed_settings.get("env", {}).get("CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS") != "1":
             failures.append("auto-heal did not enable the observer environment gate")
+        if "Bash(*)" not in healed_settings.get("permissions", {}).get("allow", []):
+            failures.append("auto-heal did not remove routine Bash confirmation prompts")
+        if healed_settings.get("sandbox", {}).get("allowUnsandboxedCommands") is not False:
+            failures.append("auto-heal did not enforce the Bash sandbox boundary")
         setup = json.loads((target / ".orbit/setup.json").read_text())
         if setup.get("orbit_version") != (ROOT / "VERSION").read_text().strip():
             failures.append("setup metadata was not stamped to plugin version")

@@ -1066,13 +1066,22 @@ def install_hooks(target: Path, has_ui: bool = False, reporter_only: bool = Fals
         added.append("PreToolUse[matcher=Bash] → orbit-guard   (TRUSTED non-interactive wall: "
                      "allow/deny only, never confirmation; a repo can't weaken it)")
     if not reporter_only:
-        # Official Claude sandbox auto-allow replaces repetitive local Bash approvals with an OS-level
-        # project boundary. acceptEdits covers built-in in-repo edits; protected paths, explicit denies,
-        # network expansion, and unsandboxed/destructive work keep their native safety boundaries.
+        # Official Claude sandboxing replaces repetitive local Bash approvals with an OS-level project
+        # boundary. Bash(*) removes the residual permission prompt for test runners and compound commands;
+        # the sandbox cannot be bypassed, while the trusted PreToolUse guard still denies destructive work.
         permissions = data.setdefault("permissions", {})
-        if isinstance(permissions, dict) and "defaultMode" not in permissions:
-            permissions["defaultMode"] = "acceptEdits"
-            added.append("permissions.defaultMode=acceptEdits   (routine in-repo edits do not pause)")
+        if isinstance(permissions, dict):
+            if "defaultMode" not in permissions:
+                permissions["defaultMode"] = "acceptEdits"
+                added.append("permissions.defaultMode=acceptEdits   (routine in-repo edits do not pause)")
+            allow = permissions.get("allow")
+            if allow is None:
+                allow = permissions["allow"] = []
+            if isinstance(allow, list) and "Bash(*)" not in allow:
+                allow.append("Bash(*)")
+                added.append("permissions.allow+=Bash(*)   (sandboxed Bash never asks for confirmation)")
+            elif not isinstance(allow, list):
+                print("  Note: .claude/settings.json permissions.allow is not a list — Bash auto-approval left untouched.")
         sandbox = data.setdefault("sandbox", {})
         if isinstance(sandbox, dict):
             sandbox_changed = False
@@ -1082,8 +1091,11 @@ def install_hooks(target: Path, has_ui: bool = False, reporter_only: bool = Fals
             if "autoAllowBashIfSandboxed" not in sandbox:
                 sandbox["autoAllowBashIfSandboxed"] = True
                 sandbox_changed = True
+            if "allowUnsandboxedCommands" not in sandbox:
+                sandbox["allowUnsandboxedCommands"] = False
+                sandbox_changed = True
             if sandbox_changed:
-                added.append("sandbox auto-allow enabled   (routine local Bash runs inside the project boundary)")
+                added.append("sandbox auto-allow enforced   (Bash stays inside the project boundary)")
     if not reporter_only and not any("orbit-resource-hook" in json.dumps(e) and
                                      e.get("matcher") == "Agent" for e in pre):
         pre.append({"matcher": "Agent", "hooks": [{"type": "command", "command": ORBIT_RESOURCE_CMD}]})

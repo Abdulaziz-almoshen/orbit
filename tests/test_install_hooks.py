@@ -63,9 +63,13 @@ def main():
             fails.append("governed Agent calls were not forced measurable")
         if data.get("permissions", {}).get("defaultMode") != "acceptEdits":
             fails.append("routine in-repo edits were not made non-interactive")
+        if "Bash(*)" not in data.get("permissions", {}).get("allow", []):
+            fails.append("sandboxed Bash was not made non-interactive")
         sandbox = data.get("sandbox", {})
         if sandbox.get("enabled") is not True or sandbox.get("autoAllowBashIfSandboxed") is not True:
             fails.append("sandboxed routine Bash was not auto-allowed")
+        if sandbox.get("allowUnsandboxedCommands") is not False:
+            fails.append("Bash was allowed to escape the enforced sandbox")
         if not list((t / ".claude").glob("settings.json.bak*")):
             fails.append("valid file was not backed up before edit")
 
@@ -76,6 +80,8 @@ def main():
         data2 = json.loads(s.read_text())
         if len(data2["hooks"]["PreToolUse"]) != n_pre or len(data2["hooks"]["UserPromptSubmit"]) != n_ups:
             fails.append("re-running install_hooks double-added a hook")
+        if data2.get("permissions", {}).get("allow", []).count("Bash(*)") != 1:
+            fails.append("re-running install_hooks duplicated Bash auto-approval")
 
     # 4. Reporter-only activation observes permissions but never installs the Bash safety/ask hook.
     with tempfile.TemporaryDirectory() as d:
