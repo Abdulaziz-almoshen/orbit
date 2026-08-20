@@ -215,188 +215,225 @@ def build_handoff_line(qa: dict, now: float = None) -> str:
     track = _parcel_track(status, now - changed_at)
     model_bit = f" · {_model_label(model)}" if model else ""
     if status == "changes_required":
-        return f"   Claude ●  {track}  ● Codex QA{model_bit} · FEEDBACK ←"
+        return f"   Claude ●  {track}  ● Codex QA{model_bit} · " + _c("33", "FEEDBACK ←")
     if status == "pass":
-        return f"   Claude ○  {track}  ● Codex QA{model_bit} · PASS"
+        return f"   Claude ○  {track}  ● Codex QA{model_bit} · " + _c("32", "PASS")
     if status in ("blocked", "error"):
-        return f"   Claude ●  {track}  ● Codex QA{model_bit} · BLOCKED"
+        return f"   Claude ●  {track}  ● Codex QA{model_bit} · " + _c("1;31", "BLOCKED")
     if status == "awaiting_deploy_approval":
-        return f"   Claude ○  {track}  ● Codex QA{model_bit} · DEPLOY GATE"
+        return f"   Claude ○  {track}  ● Codex QA{model_bit} · " + _c("33", "DEPLOY GATE")
     if status == "reviewing":
-        return f"   Claude ○  {track}  ● Codex QA{model_bit} · REVIEW →"
-    return f"   Claude ●  {track}  ○ Codex QA{model_bit} · QUEUED"
+        return f"   Claude ○  {track}  ● Codex QA{model_bit} · " + _c("36", "REVIEW →")
+    return f"   Claude ●  {track}  ○ Codex QA{model_bit} · " + _c("2", "QUEUED")
 
 
-def build_line(claude: dict, run: dict, agents: dict = None, qa: dict = None,
-               tasks: list = None, indent: bool = False) -> str:
-    seg = []
-    blocked = run.get("blocked_question")
-    if blocked:
-        seg.append("⚠ INPUT")
-
-    phase = str(run.get("phase") or run.get("mode") or "").strip().upper()
-    if phase:
-        seg.append(phase[:10])
-
-    total = run.get("tasks_total")
-    if isinstance(total, int) and total > 0:
-        seg.append(f"{run.get('tasks_done', 0)}/{total}")
-
-    ag = _active_agent(agents or {})
-    task = str(run.get("active_task") or (ag or {}).get("task") or "").strip()
-    fallback = _next_task(tasks or [])
-    fallback_used = not task and bool(fallback)
-    if not task:
-        task = str(fallback.get("title") or fallback.get("task") or "").strip()
-    task_id = str(fallback.get("id") or "").strip()
-    if task:
-        label = f"{task_id} {task}".strip()
-        seg.append(label[:48])
-
-    owner = str((ag or {}).get("display") or (ag or {}).get("role") or
-                (fallback.get("owner") if fallback_used else "") or
-                run.get("active_role") or fallback.get("owner") or "").strip()
-    if owner:
-        elapsed = _dur(_age_seconds((ag or {}).get("started_at") or run.get("last_ts")))
-        seg.append((owner + (f" {elapsed}" if elapsed else ""))[:24])
-
-    age = _age_seconds(run.get("last_ts"))
-    if age is not None and age >= 60:
-        seg.append(f"STALLED {_dur(age)}")
-
-    cost = _get(claude, "cost", "total_cost_usd")
-    if isinstance(cost, (int, float)):
-        seg.append(f"${cost:.2f}")
-
-    prefix = "   " if indent else "🛰 "
-    return prefix + " · ".join(seg) if seg else ""
+def _trim(text: str, limit: int) -> str:
+    """Trim at a word boundary, never mid-word — a goal cut to 'the iso…' reads as a glitch."""
+    text = " ".join(str(text).split())
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    space = cut.rfind(" ")
+    if space > limit - 24:
+        cut = cut[:space]
+    return cut + "…"
 
 
-def build_goal_line(run: dict, active_goal: dict = None, budget: dict = None) -> str:
+def _c(code: str, text: str) -> str:
+    """Color a WHOLE token (never split a mark from its label, so plain-text grep still works).
+
+    Claude Code renders ANSI in the status area; NO_COLOR opts out. 2=dim, 32=green, 33=yellow,
+    31=red, 36=cyan, 1;31=bold red. Color is the glance layer: the eye finds the one amber ▸ or
+    the red ⚠ without reading a word.
+    """
+    if os.environ.get("NO_COLOR"):
+        return text
+    return f"\x1b[{code}m{text}\x1b[0m"
+
+
+def _bar(done: int, total: int, cells: int = 8) -> str:
+    filled = max(0, min(cells, round(cells * done / max(1, total))))
+    return _c("32", "▰" * filled) + _c("2", "▱" * (cells - filled))
+
+
+def _budget_percent(budget: dict) -> tuple:
+    """(percent, pressure_hint) from the ledger, or (None, '') when no ledger is open.
+
+    Display-only: sums recorded role spend, the parent session's own usage (cache reads at the
+    configured weight), and outstanding reservations — so this number can never sit at 0% while a
+    task's envelope shows tokens moving, which is exactly the contradiction users reported.
+    """
+    total = (budget or {}).get("total")
+    if not isinstance(total, int) or total <= 0:
+        return None, ""
+    spent = sum(int(v or 0) for v in ((budget or {}).get("spent") or {}).values())
+    parent = (budget or {}).get("parent_usage") or {}
+    spent += sum(int(parent.get(k, 0) or 0) for k in
+                 ("input_tokens", "output_tokens", "cache_creation_input_tokens"))
+    weight = max(0.0, min(1.0, float((budget or {}).get("cache_read_weight", 0.10) or 0.0)))
+    spent += int(round(int(parent.get("cache_read_input_tokens", 0) or 0) * weight))
+    for value in ((budget or {}).get("reservations") or {}).values():
+        if isinstance(value, dict):
+            spent += int(value.get("tokens", 0) or 0)
+        elif isinstance(value, (int, float)):
+            spent += int(value)
+    pct = round(100 * spent / total)
+    gear = str((budget or {}).get("gear") or "")
+    return pct, (" → auto-resize" if pct > 100 and gear != "T4" else "")
+
+
+def build_goal_line(run: dict, active_goal: dict = None, budget: dict = None,
+                    cost=None) -> str:
     run_goal = str(run.get("goal") or "").strip()
     budget_goal = str((budget or {}).get("goal") or "").strip()
     goal = str((active_goal or {}).get("goal") or run_goal or budget_goal).strip()
     if not goal:
         return ""
-    goal = " ".join(goal.split())
-    if len(goal) > 96:
-        goal = goal[:95] + "…"
     gear = str((budget or {}).get("gear") or (active_goal or {}).get("gear") or "").strip()
     drift = bool(run_goal and budget_goal and " ".join(run_goal.lower().split()) !=
                  " ".join(budget_goal.lower().split()))
-    return f"🛰 GOAL · {goal}" + (f" · {gear}" if gear else "") + (" · ⚠ ALIGN" if drift else "")
+    tail = (" · " + _c("36", gear) if gear else "")
+    if drift:
+        tail += " · " + _c("1;31", "⚠ ALIGN")
+    if isinstance(cost, (int, float)):
+        tail += " · " + _c("2", f"${cost:.2f}")
+    return f"🛰 GOAL · {_trim(goal, 84)}" + tail
 
 
-def build_queue_line(tasks: list, budget: dict = None) -> str:
+def _active_board_task(run: dict, tasks: list):
+    """The board task that matches what's running: id + token envelope come from here.
+
+    Matching by title (or taking the first unfinished item when the run names nothing) is what
+    fixes the 'U9 U9' doubling — the id is only ever prefixed when the label doesn't carry it.
+    """
+    named = " ".join(str(run.get("active_task") or "").split()).lower()
+    board = _next_task(tasks or [])
+    if named and isinstance(board, dict):
+        title = " ".join(str(board.get("title") or board.get("task") or "").split()).lower()
+        if title and title not in named and named not in title:
+            for task in tasks or []:
+                if isinstance(task, dict):
+                    cand = " ".join(str(task.get("title") or task.get("task") or "").split()).lower()
+                    if cand and (cand in named or named in cand):
+                        return task
+            return {}
+    return board if isinstance(board, dict) else {}
+
+
+def build_now_line(claude: dict, run: dict, agents: dict = None, tasks: list = None,
+                   budget: dict = None, minimal: bool = False) -> str:
+    """One line answering: is Orbit waiting on ME — and if not, what is it doing right now.
+
+    When the run is blocked, the QUESTION leads the line. Burying '⚠ INPUT' between counters,
+    with the actual question only findable by scrolling the transcript, was the single worst part
+    of the old surface.
+    """
+    seg = []
+    blocked = run.get("blocked_question")
+    if blocked:
+        seg.append(_c("1;31", "⚠ INPUT") + " · " + _c("33", _trim(str(blocked), 48)))
+    if minimal:
+        phase = str(run.get("phase") or run.get("mode") or "").strip().upper()
+        if phase:
+            seg.append(phase[:10])
+
+    total = run.get("tasks_total")
+    if isinstance(total, int) and total > 0:
+        done = int(run.get("tasks_done", 0) or 0)
+        seg.append(f"{_bar(done, total)} {done}/{total}")
+
+    ag = _active_agent(agents or {})
+    board = _active_board_task(run, tasks or [])
+    task = " ".join(str(run.get("active_task") or (ag or {}).get("task") or
+                        board.get("title") or board.get("task") or "").split())
+    task_id = str(board.get("id") or "").strip()
+    if task:
+        label = task if (not task_id or task.startswith(task_id)) else f"{task_id} {task}"
+        seg.append(_trim(label, 46))
+
+    owner = str((ag or {}).get("display") or (ag or {}).get("role") or
+                run.get("active_role") or board.get("owner") or "").strip()
+    if owner:
+        seconds = _age_seconds((ag or {}).get("started_at") or run.get("last_ts"))
+        elapsed = _dur(seconds) if seconds is not None and seconds >= 5 else ""
+        seg.append(_c("36", (owner + (f" {elapsed}" if elapsed else ""))[:24]))
+
+    envelope = board.get("token_budget") if isinstance(board.get("token_budget"), dict) else {}
+    if envelope:
+        used = int(envelope.get("spent", 0) or 0) + int(envelope.get("reserved", 0) or 0)
+        limit = int(envelope.get("limit", 0) or 0)
+        ratio = used / limit if limit else 0
+        token_text = f"tok {used / 1000:.1f}/{limit / 1000:.1f}k"
+        seg.append(_c("31", token_text) if ratio >= 0.9 else
+                   _c("33", token_text) if ratio >= 0.75 else token_text)
+
+    # A blocked run is already alarmed (and its question shown); STALLED on top is a double siren.
+    age = _age_seconds(run.get("last_ts"))
+    if not blocked and age is not None and age >= 60:
+        seg.append(_c("1;31", f"STALLED {_dur(age)}"))
+
     open_tasks = [t for t in (tasks or []) if isinstance(t, dict) and
                   str(t.get("status") or "").lower() not in ("done", "completed", "skipped")]
-    if not open_tasks and not budget:
-        return ""
-    parts = []
-    for index, task in enumerate(open_tasks[:2]):
-        label = " ".join(str(task.get("title") or task.get("task") or task.get("id") or "task").split())
-        if len(label) > 46:
-            label = label[:45] + "…"
-        owner = str(task.get("owner") or "").replace("-", " ")
-        envelope = task.get("token_budget") if isinstance(task.get("token_budget"), dict) else {}
-        tok = ""
-        if envelope:
-            spent = int(envelope.get("spent", 0) or 0)
-            reserved = int(envelope.get("reserved", 0) or 0)
-            limit = int(envelope.get("limit", 0) or 0)
-            tok = f" · tok {(spent + reserved) / 1000:.1f}/{limit / 1000:.1f}k"
-        parts.append(("NOW" if index == 0 else "NEXT") + f" {task.get('id', '')} {label}".rstrip()
-                     + (f" [{owner}{tok}]" if owner else (f" [{tok[3:]}]" if tok else "")))
-    if len(open_tasks) > 2:
-        parts.append(f"+{len(open_tasks) - 2} queued")
-    total = (budget or {}).get("total")
-    if isinstance(total, int) and total > 0:
-        spent_map = (budget or {}).get("spent") or {}
-        parent = (budget or {}).get("parent_usage") or {}
-        spent = sum(int(v or 0) for v in spent_map.values())
-        spent += sum(int(parent.get(k, 0) or 0) for k in
-                     ("input_tokens", "output_tokens", "cache_creation_input_tokens"))
-        weight = max(0.0, min(1.0, float((budget or {}).get("cache_read_weight", 0.10) or 0.0)))
-        spent += int(round(int(parent.get("cache_read_input_tokens", 0) or 0) * weight))
-        pct = round(100 * spent / total)
-        gear = str((budget or {}).get("gear") or "")
-        pressure = " → auto-resize" if pct > 100 and gear != "T4" else ""
-        parts.append(f"budget {gear + ' ' if gear else ''}{pct}%{pressure}")
-    return "   " + " · ".join(parts) if parts else ""
+    upcoming = [t for t in open_tasks if t is not board and t.get("id") != board.get("id")]
+    if blocked:
+        upcoming = []                  # the alarm line stays about the alarm; the queue can wait
+    if upcoming:
+        head = upcoming[0]
+        nxt = " ".join(str(head.get("title") or head.get("task") or "").split())
+        seg.append(_c("2", _trim(f"next {head.get('id', '')} {nxt}".replace("next  ", "next "), 40)))
+        if len(upcoming) > 1:
+            seg.append(_c("2", f"+{len(upcoming) - 1} queued"))
+
+    pct, pressure = _budget_percent(budget)
+    if pct is not None:
+        tone = "31" if pct >= 100 else ("33" if pct >= 75 else "32")
+        seg.append(_c(tone, f"budget {pct}%{pressure}"))
+
+    if minimal:
+        cost = _get(claude, "cost", "total_cost_usd")
+        if isinstance(cost, (int, float)):
+            seg.append(f"${cost:.2f}")
+
+    prefix = "🛰 " if minimal else "   "
+    return prefix + " · ".join(seg) if seg else ""
 
 
-def build_pipeline_line(tasks: list) -> str:
+def build_stage_line(tasks: list, agents: dict = None) -> str:
+    """The single role-state strip. The old surface said the same thing four times — active role
+    in the run line, again in the queue line, a stage strip, then a two-line 15-role bench of
+    mostly idle dots. One strip carries it all; the full bench stays on `orbit-status --team`
+    and the web dashboard, which are the right surfaces for that depth."""
     stages = [
-        ("PLAN", {"product-discovery", "business-analyst", "market-researcher", "planner"}),
-        ("BUILD", {"designer", "builder", "frontend-engineer", "backend-engineer",
+        ("Plan", {"product-discovery", "business-analyst", "market-researcher", "planner"}),
+        ("Build", {"designer", "builder", "frontend-engineer", "backend-engineer",
                    "mobile-developer", "data-engineer", "cli-engineer"}),
-        ("SAFE", {"safety-gate"}), ("REVIEW", {"reviewer"}),
-        ("QA", {"qa-engineer"}), ("CPO", {"cpo"}), ("REPORT", {"reporter"}),
+        ("Safe", {"safety-gate"}), ("Review", {"reviewer"}),
+        ("QA", {"qa-engineer"}), ("CPO", {"cpo"}), ("Report", {"reporter"}),
     ]
+    agents = agents if isinstance(agents, dict) else {}
     rendered = []
     for label, owners in stages:
-        relevant = [t for t in (tasks or []) if isinstance(t, dict) and str(t.get("owner") or "") in owners]
-        states = {str(t.get("status") or "").lower() for t in relevant}
-        if not relevant:
+        states = {str(t.get("status") or "").lower() for t in (tasks or [])
+                  if isinstance(t, dict) and str(t.get("owner") or "") in owners}
+        # live agent truth counts too — a SubagentStart lights the stage before any board write
+        for role in owners:
+            detail = agents.get(role)
+            if isinstance(detail, dict) and detail.get("status"):
+                states.add(str(detail.get("status")).lower())
+        states.discard("available"); states.discard("idle")
+        if not states:
             mark = "·"
         elif states & {"active", "in_progress"}:
             mark = "▸"
-        elif "blocked" in states or "failed" in states:
+        elif states & {"blocked", "failed"}:
             mark = "!"
         elif states <= {"done", "completed", "skipped"}:
             mark = "✓"
         else:
             mark = "○"
-        rendered.append(f"{mark}{label}")
-    return "   " + "  ".join(rendered) + " · 👁 observer"
-
-
-def build_team_lines(agents: dict, tasks: list = None) -> list[str]:
-    """Keep the whole configured bench visible; status controls spend, visibility never does."""
-    order = ["product-discovery", "business-analyst", "market-researcher", "planner", "designer",
-             "frontend-engineer", "backend-engineer", "mobile-developer", "data-engineer",
-             "cli-engineer", "safety-gate", "reviewer", "qa-engineer", "cpo", "reporter"]
-    labels = {"product-discovery": "Discovery", "business-analyst": "BA",
-              "market-researcher": "Market", "planner": "Plan", "designer": "Design",
-              "frontend-engineer": "Frontend", "backend-engineer": "Backend",
-              "mobile-developer": "Mobile", "data-engineer": "Data", "cli-engineer": "CLI",
-              "safety-gate": "Safety", "reviewer": "Review", "qa-engineer": "QA",
-              "cpo": "CPO", "reporter": "Report"}
-    configured = []
-    team = agents.get("team") if isinstance(agents, dict) else []
-    if isinstance(team, list):
-        configured.extend(str(x.get("role")) for x in team if isinstance(x, dict) and x.get("role"))
-    configured.extend(k for k, v in (agents or {}).items() if k not in ("schema", "cycle", "updated", "team")
-                      and isinstance(v, dict))
-    roles = [r for r in order if r in set(configured)]
-    if not roles:
-        return []
-    marks = {"active": "▸", "queued": "○", "blocked": "!", "failed": "!",
-             "done": "✓", "available": "·", "idle": "·"}
-    entries = []
-    for role in roles:
-        detail = (agents or {}).get(role) if isinstance((agents or {}).get(role), dict) else {}
-        fallback = next((x for x in team if isinstance(x, dict) and x.get("role") == role), {})
-        role_tasks = [t for t in (tasks or []) if isinstance(t, dict) and str(t.get("owner") or "") == role]
-        task_states = {str(t.get("status") or "").lower() for t in role_tasks}
-        if task_states & {"active", "in_progress"}:
-            status = "active"
-        elif task_states & {"blocked", "failed"}:
-            status = "blocked"
-        elif role_tasks and task_states <= {"done", "completed", "skipped"}:
-            status = "done"
-        elif role_tasks:
-            status = "queued"
-        elif str(detail.get("status") or "").lower() in ("active", "blocked", "failed"):
-            status = str(detail.get("status")).lower()
-        else:
-            status = "available"
-        entries.append(f"{marks.get(status, '·')}{labels[role]}")
-    lines = []
-    for index in range(0, len(entries), 8):
-        prefix = "   TEAM · " if index == 0 else "          "
-        lines.append(prefix + "  ".join(entries[index:index + 8]))
-    return lines
+        tone = {"✓": "32", "▸": "33", "!": "1;31", "○": "0", "·": "2"}[mark]
+        rendered.append(_c(tone, f"{mark}{label}") if tone != "0" else f"{mark}{label}")
+    return "   " + "  ".join(rendered)
 
 
 def main():
@@ -440,17 +477,13 @@ def main():
         pass
     try:
         qa = _qa_state(orbit)
-        goal_line = build_goal_line(run, active_goal, budget)
+        goal_line = build_goal_line(run, active_goal, budget,
+                                    cost=_get(claude, "cost", "total_cost_usd"))
         if goal_line:
             print(goal_line)
-        print(build_line(claude, run, agents, qa, tasks, indent=bool(goal_line)))
-        queue = build_queue_line(tasks, budget)
-        if queue:
-            print(queue)
+        print(build_now_line(claude, run, agents, tasks, budget, minimal=not goal_line))
         if tasks:
-            print(build_pipeline_line(tasks))
-        for team_line in build_team_lines(agents, tasks):
-            print(team_line)
+            print(build_stage_line(tasks, agents))
         handoff = build_handoff_line(qa)
         if handoff:
             print(handoff)

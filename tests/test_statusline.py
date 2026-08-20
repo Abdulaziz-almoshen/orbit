@@ -64,11 +64,22 @@ def main():
                     "designer", "frontend-engineer", "backend-engineer", "safety-gate",
                     "reviewer", "qa-engineer", "cpo", "reporter")],
         "builder": {"display": "Builder", "status": "active", "task": "Implement checkout"}})
-    for needle in ("GOAL · Ship the checkout safely", "NOW U2 Implement checkout", "NEXT U3 Regression QA",
-                   "tok 0.0/12.0k", "✓PLAN", "▸BUILD", "○QA", "○CPO", "observer",
-                   "Discovery", "Market", "Design", "Frontend", "Backend", "Review"):
+    # The glance contract: goal, live task with its envelope, what's next, queue depth, and ONE
+    # role-state strip. The old surface repeated role state four times across seven lines (run
+    # line + NOW/NEXT + stage strip + a two-line 15-role bench of idle dots) — that wall is what
+    # the ≤4-line cap below prevents from growing back. The full bench lives on
+    # `orbit-status --team` and the web dashboard, which are the right surfaces for that depth.
+    for needle in ("GOAL · Ship the checkout safely", "U2 Implement checkout",
+                   "tok 0.0/12.0k", "next U3 Regression QA", "+1 queued",
+                   "✓Plan", "▸Build", "○QA", "○CPO", "5/9", "$0.42"):
         if needle not in visible:
             fails.append(f"persistent goal/queue/pipeline visibility missing '{needle}': {visible!r}")
+    if "U2 U2" in visible:
+        fails.append(f"task id doubled (the 'U9 U9' bug): {visible!r}")
+    if len(visible.splitlines()) > 4:
+        fails.append(f"status surface must stay <=4 lines, got {len(visible.splitlines())}: {visible!r}")
+    if "TEAM" in visible or "observer" in visible:
+        fails.append(f"idle-bench/observer decoration crept back into the glance surface: {visible!r}")
     with tempfile.TemporaryDirectory() as d:
         os.makedirs(os.path.join(d, ".orbit"))
         json.dump({"goal": "Goal A"}, open(os.path.join(d, ".orbit", "run.json"), "w"))
@@ -83,6 +94,10 @@ def main():
     bl, _ = render(full, blocked_run)
     if "⚠ INPUT" not in bl or "builder" not in bl.lower() or "Implement checkout" not in bl:
         fails.append(f"blocked run hid the board owner/task: {bl!r}")
+    if "Choose path" not in bl:
+        fails.append(f"blocked run hid the QUESTION itself — the user had to scroll for it: {bl!r}")
+    if "STALLED" in bl:
+        fails.append(f"blocked run double-alarmed with STALLED on top of ⚠ INPUT: {bl!r}")
 
     # A missing active_task must fall back to the first unfinished native-board item.
     fallback_run = dict(run); fallback_run["active_task"] = ""; fallback_run["active_role"] = "orchestrator"
