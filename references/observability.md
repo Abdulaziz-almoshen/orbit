@@ -143,6 +143,10 @@ at a glance. Stdlib only — nothing to install.
 - A **human checkpoint** emits `role:"human", status:"blocked", msg:"awaiting approval: …"`
   so the dashboard makes it obvious the loop is paused on *you*.
 
+The floating pet stays compact even when attention is required. A small state pill (`INPUT`,
+`BLOCKED`, `CHECK`, `QA`, or `DONE`) and the pet's one-shot transition signal announce new information;
+the full card opens only when the user clicks the pet, so it never covers the working terminal by itself.
+
 ## Why this shape
 
 - **One source of truth.** The same events drive TaskCreate/TaskUpdate, the dashboard, and STATE.md's

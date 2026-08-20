@@ -17,9 +17,15 @@ def main():
     dashboard = (ROOT / "assets/orbit-dashboard").read_text()
     for required in ("PET_PAGE", "fetch('/data'", "reporter", "event_key", "progress_percent",
                      "elapsed_seconds", "quiet_seconds", "question_available", "Focus session",
-                     "Open board", "orbit-action://focus-session", "messageHandlers?.orbit"):
+                     "Open board", "orbit-action://focus-session", "messageHandlers?.orbit",
+                     "noticeLabel", "id=notice", "only a pet click opens details"):
         if required not in dashboard:
             fails.append(f"pet narration is missing state input: {required}")
+    tick = dashboard[dashboard.find("async function tick()") : dashboard.find("dismiss.onclick")]
+    if "setSize(false)" in tick:
+        fails.append("attention events still auto-expand the pet over the user's screen")
+    if "pet.addEventListener('click',function(){if(!moved)setSize(!collapsed)})" not in dashboard:
+        fails.append("collapsed pet does not explicitly toggle details open on click")
     swift = (ROOT / "assets/orbit-pet.swift").read_text()
     for required in ("NSPanel", ".floating", ".canJoinAllSpaces", "WKWebView", ".nonPersistent()",
                      "WKNavigationDelegate", "orbit-action", "focusSession", "openBoard",
@@ -48,7 +54,7 @@ def main():
         print(f"FAIL: pet ({len(fails)})")
         for fail in fails: print("  -", fail)
         return 1
-    print("PASS: pet (truthful narration · redacted local data · floating macOS shell · scaffold wrapper)")
+    print("PASS: pet (compact attention pill · click-only details · truthful/redacted · floating shell)")
     return 0
 
 

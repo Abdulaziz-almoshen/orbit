@@ -562,6 +562,12 @@ PET_PAGE = """<!doctype html><html lang=en><head><meta charset=utf-8>
 [data-mood=blocked] .badge,[data-mood=stalled] .badge{background:var(--red);animation:ping .85s infinite}
 [data-mood=stopped] .badge{background:var(--dim)}
 .plabel{font-size:9px;color:var(--dim);margin-top:8px;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;overflow:hidden}
+.notice{position:absolute;z-index:20;top:0;left:-2px;min-width:36px;padding:3px 6px;border:1px solid rgba(224,161,58,.65);border-radius:8px 8px 2px 8px;background:#221b10;color:#ffc45b;font:800 8px/1 ui-sans-serif,system-ui;letter-spacing:.08em;text-transform:uppercase;box-shadow:0 5px 14px rgba(0,0,0,.45);pointer-events:none}
+.notice:after{content:"";position:absolute;right:-4px;bottom:-1px;border-width:4px 0 0 5px;border-style:solid;border-color:transparent transparent transparent rgba(224,161,58,.65)}
+.notice[hidden]{display:none}
+[data-mood=blocked] .notice,[data-mood=stalled] .notice{color:#ff8b85;background:#281414;border-color:rgba(248,81,73,.65)}
+[data-mood=done] .notice,[data-mood=task_done] .notice{color:#78dc8c;background:#102416;border-color:rgba(63,185,80,.65)}
+[data-mood=qa] .notice{color:#68ddbb;background:#0d2420;border-color:rgba(16,163,127,.65)}
 .card{flex:1 1 auto;min-width:0;order:1;background:rgba(22,27,34,.98);border:1px solid var(--line);border-radius:14px;box-shadow:0 16px 36px rgba(0,0,0,.5)}
 body.collapsed .card{display:none}
 .bar{display:flex;align-items:center;gap:8px;padding:8px 8px 8px 11px;border-bottom:1px solid var(--line);cursor:grab}
@@ -590,7 +596,7 @@ body.collapsed .card{display:none}
 @keyframes whipCrack{0%{transform:translateY(0) rotate(0deg)}20%{transform:translateY(-20px) rotate(-55deg)}40%{transform:translateY(-18px) rotate(35deg)}60%{transform:translateY(-16px) rotate(-25deg)}80%{transform:translateY(-8px) rotate(12deg)}100%{transform:translateY(0) rotate(0deg)}}
 </style></head><body class=collapsed data-mood=working>
 <div class=wrap>
- <div class=pet id=pet title="drag to move · click to open"><div class=pbody><i class="ear l"></i><i class="ear r"></i><i class="eye l"></i><i class="eye r"></i><i class=mouth></i><i class=badge></i><i class=hand></i><i class=whip id=whip></i></div><div class=plabel id=plabel>Orbit</div></div>
+ <div class=pet id=pet title="drag to move · click to open"><span class=notice id=notice role=status aria-live=polite hidden></span><div class=pbody><i class="ear l"></i><i class="ear r"></i><i class="eye l"></i><i class="eye r"></i><i class=mouth></i><i class=badge></i><i class=hand></i><i class=whip id=whip></i></div><div class=plabel id=plabel>Orbit</div></div>
  <div class=card id=card>
   <div class=bar id=bar><span class=grip>drag</span><span class=proj id=proj>Orbit</span><button class=dismiss id=dismiss title="Dismiss (Esc)">&times;</button></div>
   <div class=inner>
@@ -619,6 +625,7 @@ function whip(){
 }
 function setSize(c){collapsed=c;document.body.classList.toggle('collapsed',c);post({type:'resize',w:(c?COLL.w:EXP.w),h:(c?COLL.h:EXP.h)})}
 function bind(b,a){b.hidden=!a;if(!a)return;b.textContent=a.label;b.onclick=function(){location.href=a.url}}
+function noticeLabel(x){return ({needs_action:'INPUT',blocked:'BLOCKED',stalled:'CHECK',slow:'SLOW',qa:'QA',task_done:'DONE',done:'DONE'})[x.state]||''}
 function render(x){
  document.body.dataset.mood=x.state||'working';
  var p=x.project||'Orbit'; proj.textContent=p; plabel.textContent=p;
@@ -630,6 +637,8 @@ function render(x){
  timing.className='chip'+((x.quiet_seconds||0)>=180?' w':'');
  commit.hidden=!x.commit; commit.textContent=x.commit?('commit '+x.commit):'';
  next.textContent=x.next_action||'';
+ var nl=noticeLabel(x);notice.hidden=!nl;notice.textContent=nl;
+ pet.title=nl?(nl.toLowerCase()+' · click for details · drag to move'):'drag to move · click to open';
  bind(primary,x.primary_action); bind(secondary,x.secondary_action);
 }
 async function tick(){
@@ -641,7 +650,7 @@ async function tick(){
    var notify=['critical','high'].indexOf(x.urgency)>=0||x.state==='task_done'||x.state==='done';
    if(notify && x.event_key!==dismissedKey){
     if(!initial){post({type:'transition',urgency:x.urgency});whip();}
-    setSize(false);
+    // Attention is compact by default. The badge/pill announces it; only a pet click opens details.
    }
   }
  }catch(e){ document.body.dataset.mood='blocked'; title.textContent='Board connection lost'; say.textContent='Cannot reach the local Orbit board. Restart scripts/orbit-dashboard.'; }
@@ -656,7 +665,7 @@ function drag(h){h.addEventListener('mousedown',function(e){ if(e.target===dismi
   document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);
 })}
 drag(pet); drag(bar);
-pet.addEventListener('click',function(){if(!moved)setSize(collapsed)});
+pet.addEventListener('click',function(){if(!moved)setSize(!collapsed)});
 setSize(true);
 tick(); setInterval(tick,2000);
 </script></body></html>"""

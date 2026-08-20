@@ -16,8 +16,8 @@ final class ReporterDelegate: NSObject, NSApplicationDelegate, WKNavigationDeleg
         let raw = CommandLine.arguments.dropFirst().first ?? "http://127.0.0.1:8765/pet"
         guard let url = URL(string: raw) else { NSApp.terminate(nil); return }
         reporterURL = url
-        // Launch small (just the pet). The page grows the window to the full card only when Claude
-        // needs the user, and shrinks it back on dismiss — so the reporter stays out of the way.
+        // Launch and remain small for attention events. The page shows a compact badge/pill and grows
+        // to the full card only after an explicit pet click, then shrinks on dismiss.
         let frame = NSRect(x: 0, y: 0, width: 132, height: 150)
         panel = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel],
                         backing: .buffered, defer: false)
@@ -104,7 +104,7 @@ final class ReporterDelegate: NSObject, NSApplicationDelegate, WKNavigationDeleg
               let type = payload["type"] as? String else { return }
         switch type {
         case "transition":
-            // Attention only: bring the card forward. Never a native OS notification (card-only).
+            // Attention only: keep the compact pet visible. The web view never auto-expands the card.
             panel.orderFrontRegardless()
         case "drag":
             // The WKWebView covers the panel, so isMovableByWindowBackground never fires. The page
