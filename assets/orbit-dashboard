@@ -575,6 +575,7 @@ body.collapsed .card{display:none}
 .proj{flex:1;font-size:10px;font-weight:750;letter-spacing:.06em;text-transform:uppercase;color:var(--blue);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dismiss{width:24px;height:24px;border:0;background:transparent;color:var(--dim);font-size:19px;line-height:1;border-radius:6px;cursor:pointer}
 .dismiss:hover{background:rgba(255,255,255,.09);color:var(--fg)}
+.mute{width:27px;height:24px;border:0;background:transparent;color:var(--dim);font-size:13px;line-height:1;border-radius:6px;cursor:pointer}.mute:hover{background:rgba(255,255,255,.09);color:var(--fg)}
 .inner{padding:11px 14px 13px}
 .hl{font-size:15px;font-weight:720;line-height:1.25;margin:0 0 6px;overflow:hidden;text-overflow:ellipsis}
 .trow{display:flex;gap:7px;align-items:baseline;margin:0 0 5px}
@@ -598,7 +599,7 @@ body.collapsed .card{display:none}
 <div class=wrap>
  <div class=pet id=pet title="drag to move · click to open"><span class=notice id=notice role=status aria-live=polite hidden></span><div class=pbody><i class="ear l"></i><i class="ear r"></i><i class="eye l"></i><i class="eye r"></i><i class=mouth></i><i class=badge></i><i class=hand></i><i class=whip id=whip></i></div><div class=plabel id=plabel>Orbit</div></div>
  <div class=card id=card>
-  <div class=bar id=bar><span class=grip>drag</span><span class=proj id=proj>Orbit</span><button class=dismiss id=dismiss title="Dismiss (Esc)">&times;</button></div>
+  <div class=bar id=bar><span class=grip>drag</span><span class=proj id=proj>Orbit</span><button class=mute id=muteButton title="Mute sound" aria-label="Mute sound">🔊</button><button class=dismiss id=dismiss title="Dismiss (Esc)">&times;</button></div>
   <div class=inner>
    <div class=hl id=title>Reading state...</div>
    <div class=trow id=trow hidden><span class=tk>Task</span><span class=tn id=current></span></div>
@@ -610,11 +611,12 @@ body.collapsed .card{display:none}
  </div>
 </div>
 <script>
-var COLL={w:132,h:150}, EXP={w:600,h:300}, lastKey='', dismissedKey='', collapsed=true;
+var COLL={w:132,h:150}, EXP={w:600,h:300}, lastKey='', dismissedKey='', collapsed=true,muted=window.ORBIT_PET_MUTED===true;
 function post(m){try{window.webkit?.messageHandlers?.orbit?.postMessage(m)}catch(e){}}
 function whip(){
   var w=document.getElementById('whip'); w.classList.remove('crack');
   setTimeout(function(){w.classList.add('crack')},10);
+  if(muted)return;
   var ctx=new (window.AudioContext||window.webkitAudioContext)();
   var osc=ctx.createOscillator(), env=ctx.createGain(), filter=ctx.createBiquadFilter();
   osc.type='square'; osc.frequency.setValueAtTime(400,ctx.currentTime); osc.frequency.exponentialRampToValueAtTime(80,ctx.currentTime+.15);
@@ -624,6 +626,8 @@ function whip(){
   osc.start(ctx.currentTime); osc.stop(ctx.currentTime+.25);
 }
 function setSize(c){collapsed=c;document.body.classList.toggle('collapsed',c);post({type:'resize',w:(c?COLL.w:EXP.w),h:(c?COLL.h:EXP.h)})}
+function paintMute(){muteButton.textContent=muted?'🔇':'🔊';muteButton.title=muted?'Unmute sound':'Mute sound';muteButton.setAttribute('aria-label',muteButton.title)}
+function setMuted(value){muted=!!value;paintMute();post({type:'mute',muted:muted})}
 function bind(b,a){b.hidden=!a;if(!a)return;b.textContent=a.label;b.onclick=function(){location.href=a.url}}
 function noticeLabel(x){return ({needs_action:'INPUT',blocked:'BLOCKED',stalled:'CHECK',slow:'SLOW',qa:'QA',task_done:'DONE',done:'DONE'})[x.state]||''}
 function render(x){
@@ -656,7 +660,8 @@ async function tick(){
  }catch(e){ document.body.dataset.mood='blocked'; title.textContent='Board connection lost'; say.textContent='Cannot reach the local Orbit board. Restart scripts/orbit-dashboard.'; }
 }
 dismiss.onclick=function(ev){ev.stopPropagation();dismissedKey=lastKey;setSize(true)};
-document.addEventListener('keydown',function(e){if(e.key==='Escape'){dismissedKey=lastKey;setSize(true)}});
+muteButton.onclick=function(ev){ev.stopPropagation();setMuted(!muted)};
+document.addEventListener('keydown',function(e){if(e.key==='Escape'){dismissedKey=lastKey;setSize(true)}else if(e.key==='m'&&!collapsed){setMuted(!muted)}});
 var moved=false;
 function drag(h){h.addEventListener('mousedown',function(e){ if(e.target===dismiss)return; e.preventDefault();
   var lx=e.screenX, ly=e.screenY; moved=false;
@@ -666,6 +671,7 @@ function drag(h){h.addEventListener('mousedown',function(e){ if(e.target===dismi
 })}
 drag(pet); drag(bar);
 pet.addEventListener('click',function(){if(!moved)setSize(!collapsed)});
+paintMute();
 setSize(true);
 tick(); setInterval(tick,2000);
 </script></body></html>"""

@@ -5,6 +5,7 @@ final class ReporterDelegate: NSObject, NSApplicationDelegate, WKNavigationDeleg
     private var panel: NSPanel!
     private var web: WKWebView!
     private var reporterURL: URL!
+    private var muted = false
 
     private let terminalBundles = [
         "Apple_Terminal": "com.apple.Terminal", "iTerm.app": "com.googlecode.iterm2",
@@ -16,6 +17,7 @@ final class ReporterDelegate: NSObject, NSApplicationDelegate, WKNavigationDeleg
         let raw = CommandLine.arguments.dropFirst().first ?? "http://127.0.0.1:8765/pet"
         guard let url = URL(string: raw) else { NSApp.terminate(nil); return }
         reporterURL = url
+        muted = loadMuted()
         // Launch and remain small for attention events. The page shows a compact badge/pill and grows
         // to the full card only after an explicit pet click, then shrinks on dismiss.
         let frame = NSRect(x: 0, y: 0, width: 132, height: 150)
@@ -32,6 +34,10 @@ final class ReporterDelegate: NSObject, NSApplicationDelegate, WKNavigationDeleg
 
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
+        let mutedJavaScript = muted ? "true" : "false"
+        config.userContentController.addUserScript(WKUserScript(
+            source: "window.ORBIT_PET_MUTED = \(mutedJavaScript);",
+            injectionTime: .atDocumentStart, forMainFrameOnly: true))
         config.userContentController.add(self, name: "orbit")
         web = WKWebView(frame: frame, configuration: config)
         web.navigationDelegate = self
@@ -128,6 +134,9 @@ final class ReporterDelegate: NSObject, NSApplicationDelegate, WKNavigationDeleg
             f.origin = clamp(NSPoint(x: right - w, y: bottom), size: f.size)
             panel.setFrame(f, display: true)
             savePosition()
+        case "mute":
+            muted = (payload["muted"] as? NSNumber)?.boolValue ?? false
+            saveMuted()
         default:
             break
         }
@@ -146,6 +155,25 @@ final class ReporterDelegate: NSObject, NSApplicationDelegate, WKNavigationDeleg
         let home = ProcessInfo.processInfo.environment["ORBIT_HOME"]
             ?? (NSHomeDirectory() as NSString).appendingPathComponent(".orbit")
         return URL(fileURLWithPath: home).appendingPathComponent("pet-pos.json")
+    }
+
+    private var prefsURL: URL {
+        let home = ProcessInfo.processInfo.environment["ORBIT_HOME"]
+            ?? (NSHomeDirectory() as NSString).appendingPathComponent(".orbit")
+        return URL(fileURLWithPath: home).appendingPathComponent("pet-prefs.json")
+    }
+
+    private func loadMuted() -> Bool {
+        guard let data = try? Data(contentsOf: prefsURL),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
+        return (obj["muted"] as? NSNumber)?.boolValue ?? false
+    }
+
+    private func saveMuted() {
+        let data = try? JSONSerialization.data(withJSONObject: ["muted": muted])
+        try? FileManager.default.createDirectory(at: prefsURL.deletingLastPathComponent(),
+                                                 withIntermediateDirectories: true)
+        try? data?.write(to: prefsURL, options: .atomic)
     }
 
     private func savePosition() {

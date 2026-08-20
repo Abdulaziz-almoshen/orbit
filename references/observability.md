@@ -146,6 +146,9 @@ at a glance. Stdlib only — nothing to install.
 The floating pet stays compact even when attention is required. A small state pill (`INPUT`,
 `BLOCKED`, `CHECK`, `QA`, or `DONE`) and the pet's one-shot transition signal announce new information;
 the full card opens only when the user clicks the pet, so it never covers the working terminal by itself.
+The speaker control in that card mutes/unmutes attention audio without hiding visual alerts; the choice
+is persisted in `$ORBIT_HOME/pet-prefs.json` and restored when the native pet restarts. Press `m` while
+the card is open for the same toggle.
 
 ## Why this shape
 

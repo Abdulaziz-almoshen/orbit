@@ -18,7 +18,8 @@ def main():
     for required in ("PET_PAGE", "fetch('/data'", "reporter", "event_key", "progress_percent",
                      "elapsed_seconds", "quiet_seconds", "question_available", "Focus session",
                      "Open board", "orbit-action://focus-session", "messageHandlers?.orbit",
-                     "noticeLabel", "id=notice", "only a pet click opens details"):
+                     "noticeLabel", "id=notice", "only a pet click opens details", "id=muteButton",
+                     "setMuted", "ORBIT_PET_MUTED", "if(muted)return"):
         if required not in dashboard:
             fails.append(f"pet narration is missing state input: {required}")
     tick = dashboard[dashboard.find("async function tick()") : dashboard.find("dismiss.onclick")]
@@ -32,6 +33,9 @@ def main():
                      "terminalBundles", "activateAllWindows", "WKScriptMessageHandler"):
         if required not in swift:
             fails.append(f"native floating shell is missing: {required}")
+    for required in ('case "mute"', "pet-prefs.json", "loadMuted", "saveMuted", "ORBIT_PET_MUTED"):
+        if required not in swift:
+            fails.append(f"persistent pet mute control is missing: {required}")
     with tempfile.TemporaryDirectory() as d:
         env = {**os.environ, "ORBIT_HOME": d}
         status = subprocess.run([sys.executable, str(ROOT / "bin/orbit-pet"), "status"],
@@ -54,7 +58,7 @@ def main():
         print(f"FAIL: pet ({len(fails)})")
         for fail in fails: print("  -", fail)
         return 1
-    print("PASS: pet (compact attention pill · click-only details · truthful/redacted · floating shell)")
+    print("PASS: pet (compact attention · click-only details · persistent audio mute · floating shell)")
     return 0
 
 
