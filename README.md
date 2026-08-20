@@ -6,172 +6,114 @@
 
 # Orbit
 
-### Give it the goal. Get back a proven commit.
+### A Claude Code plugin that turns a repo into a governed agentic loop.
 
-Orbit maps the repository, selects the smallest qualified team, watches the work, tests the full
-impact, repairs failures, and commits only after the goal is proven.
+You give it a goal. It sizes the work, dispatches a small team of subagents through
+hard quality gates, keeps a live board in your terminal, and refuses to call the
+work done until the gates have evidence.
 
-![version](https://img.shields.io/badge/version-0.66.4-2b6cb0)
+![version](https://img.shields.io/badge/version-0.67.1-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
-![tests](https://img.shields.io/badge/tests-all%20passing-10a877)
 
 </div>
 
-## One goal, one governed delivery
+## How a goal runs
 
-<picture>
-  <img src="assets/orbit-loop-observer.svg" alt="User intent becomes a bounded repository-impact packet, enters a gear-selected expert loop watched by one Claude observer, passes protected quality gates, and exits as a proven commit." width="100%">
-</picture>
-
-| 1 · Understand | 2 · Select | 3 · Deliver | 4 · Prove | 5 · Ship |
-|---|---|---|---|---|
-| Map intent to repository evidence | Choose the smallest expert graph | Design and build autonomously | Safety → Review → QA → CPO | Commit the exact proven snapshot |
-
-## What Orbit changes
-
-- **No whole-codebase prompts.** A local, zero-LLM index maps topology, symbols, calls, APIs,
-  events, schemas, tests, ownership, and Git co-change. Agents receive a one-hop evidence packet,
-  not the repository.
-- **No ceremonial agent swarm.** Gear determines the mandatory roles. Irrelevant roles are pruned;
-  required roles must actually run.
-- **No “tests passed” shortcut.** QA covers six scenario types, direct and transitive dependencies,
-  and relevant regression journeys. UI work adds three-viewport pixel evidence.
-- **No rubber-stamped finish.** A CPO compares the exact deliverable with the original goal. Missing
-  evidence or a rejected verdict returns the work to repair.
-- **No silent drift.** One propagated Claude watchdog observes the complete role tree and reports
-  shallow discovery, scope drift, stalled work, weakened tests, or unsupported completion.
-- **No unmetered fan-out.** Root and agent usage share hard token/call ceilings. T5/T100 labels clamp
-  to T4; closeout budget remains protected. If measured work outgrows the intake forecast, Orbit
-  automatically reconsiders one gear at a time without resetting spend, changing the goal, or asking.
-
-## What is mechanically enforced
-
-| Control | Binding behavior |
-|---|---|
-| Live board | The terminal always shows the active or next unfinished task, owning LLM, elapsed/stalled time, and checklist progress; the native task list remains the source of truth. |
-| Task budget | Every text goal gets a deterministic route-bound T1–T4 ledger automatically. Cached history is charged only as the per-goal delta; optional communication is pruned first, while 15% capacity and Agent-call admission remain protected for Safety, Review, QA, CPO, and Report. |
-| Repository evidence | Intake builds a ≤1-hop, ≤12-file, ~4,000-token packet. Orbit-generated drift is repaired automatically before Agent launch; an unrecoverable or >12 KB handoff is denied without asking the user. |
-| Capability graph | T1 requires Plan/Review/QA/Report; T2 adds Safety/CPO; T3/T4 add Discovery/BA/Market; UI adds Designer. |
-| Autonomy | Independent LLM tasks may run in the background with reservations held until measurable completion. Routine local work auto-runs inside [Claude's OS sandbox](https://code.claude.com/docs/en/sandboxing), while Orbit's trusted destructive-command wall remains binding. |
-| Safety | Catastrophic or uninspectable commands are denied; irreversible/external-authority actions remain human decisions. Orbit never emits a routine `ask`. |
-| QA | Happy, alternate, negative, boundary, authorization, and failure/recovery scenarios plus dependency regression are required. |
-| UI proof | Baseline, actual, and computed diff at 375×812, 768×1024, and 1440×900, with accessibility and console checks. |
-| Delivery | Stop blocks missing owners, stale user memory, failed QA evidence, or missing commit-bound CPO acceptance. |
-| Updates | Every scaffold and safe auto-heal installs missing managed components and refreshes repository intelligence without overwriting custom project files. |
+1. **Route** — a deterministic hook classifies every message (task / question) and sizes a gear, T0–T4.
+2. **Evidence** — intake builds a bounded repository packet (≤1 hop, ≤12 files, ~4k tokens), not a whole-codebase prompt.
+3. **Deliver** — the gear's mandatory roles run as real subagents on a visible board; a token ledger meters each dispatch.
+4. **Prove** — Safety, Review, and QA return verdicts with evidence; a CPO subagent compares the deliverable to your original goal.
+5. **Ship** — the Stop hook blocks the finish until required owners ran, QA evidence exists, and the CPO wrote a commit-bound ACCEPT.
 
 ## The gear decides the team
 
-| Gear | Use | Required quality spine |
+| Gear | Fires on | Mandatory roles |
 |---|---|---|
-| T0 · Direct | No project work | Direct answer |
-| T1 · Quick | Small, low-risk change | Planner → Builder → Reviewer → QA → Reporter |
-| T2 · Standard | Normal product work | T1 + Safety + CPO |
-| T3 · Deep | Broad or uncertain work | T2 + Discovery + BA + Market Research |
-| T4 · Mission | Production/migration/irreversible risk | T3 + durable checkpoints and human gates |
+| T0 | questions, trivial patches | none — direct answer |
+| T1 | small, clear, reversible | Planner · Builder · Reviewer · QA · Reporter |
+| T2 | normal product work | T1 + Safety + CPO |
+| T3 | broad or uncertain work | T2 + Discovery + BA + Market Research |
+| T4 | production / irreversible | T3 + checkpoints + human gates |
 
-UI work always adds the Designer. Orbit runs required owners sequentially in Lite mode and widens
-only when evidence and the configured budget justify it.
+UI work adds a Designer. Each gear carries a token budget (T1 25k → T4 240k hard ceiling);
+on pressure the loop trims packets, downgrades models, or pauses with a checkpoint — it
+never silently drops a quality gate. Everyday work runs on the Sonnet 5 Executor; the
+Opus 4.8 Advisor is on-demand only, for expensive forks and repeated gate failures.
 
-Sonnet 5 is the everyday Executor; the Opus 4.8 Advisor is on-demand only for expensive forks,
-safety uncertainty, or repeated gate failure.
+## What is mechanically enforced vs. what isn't
+
+**Enforced by hooks and scripts** (works regardless of model mood): message routing, the
+gear-scaled role contract, per-goal token ledgers with pre-dispatch reservations, the
+destructive-command wall, QA scenario/viewport evidence checks, the CPO/Stop finish gate,
+and the live status board.
+
+**Model judgment** (not enforceable): the *quality* of plans, reviews, and verdicts. Orbit
+can force a reviewer to run and to cite evidence; it cannot force the review to be smart.
 
 ## Install
 
-Choose one path—do not install both.
+Pick one:
 
 ```bash
-git clone --single-branch --depth 1 https://github.com/Abdulaziz-almoshen/orbit.git \
-  ~/.claude/skills/orbit
+git clone --single-branch --depth 1 https://github.com/Abdulaziz-almoshen/orbit.git ~/.claude/skills/orbit
 cd ~/.claude/skills/orbit && ./setup
 ```
-
-Or:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Abdulaziz-almoshen/orbit/main/install.sh | bash
 ```
 
-Then open a product repository and run:
+Then, in a product repo:
 
 ```text
 /orbit
 ```
 
-Orbit detects the project surfaces, provisions the relevant roles and playbooks, enables the hooks,
-builds the repository index, and preserves existing custom files.
+The scaffolder detects surfaces, provisions roles/playbooks/hooks, and never overwrites your
+customized files. It also **never writes sandbox or permission restrictions** — your capability
+envelope stays yours (v0.62–0.67.0 briefly violated this; 0.67.1 removed it and migrates it away).
 
-## Daily commands
+## Daily use
 
 | Command | Purpose |
 |---|---|
-| `/orbit:orbit-run <goal>` | Deliver a goal through the governed loop. |
-| `scripts/orbit-status --follow` | Watch owner, phase, gates, confidence, and budget. |
-| `scripts/orbit-dashboard --port 8765` | Open the read-only local board. |
-| `scripts/orbit-intel query --goal "…"` | Inspect the bounded repository-impact packet. |
-| `scripts/orbit-memory review` | Review captured user corrections before promotion. |
-| `scripts/orbit-worktree create --task <slug>` | Isolate an independent worker. |
-| `orbit-doctor --fix` | Diagnose and safely repair managed scaffold drift. |
-| `/orbit-upgrade` | Update Orbit and safely heal installed projects. |
+| `/orbit:orbit-run <goal>` | Run a goal through the loop |
+| `scripts/orbit-status --follow` | Watch owners, gates, budget |
+| `scripts/orbit-dashboard --port 8765` | Read-only local web board |
+| `scripts/orbit-context doctor` | Context-bloat stoplight (compact / digest to fix) |
+| `scripts/orbit-budget status` | Inspect the per-goal token ledger |
+| `orbit-doctor --fix` | Repair managed scaffold drift |
+| `/orbit-upgrade` | Update the plugin, then heal projects |
 
-## Live supervision
+The terminal board is ≤4 lines: goal + gear + cost · what's running now (the question itself,
+in red, when Orbit is blocked on you) · one role-state strip · the Claude→Codex QA relay.
 
-```text
-Goal → repository evidence → gear-selected team → Safety → Review → QA → CPO → Commit
-                    └────────── Watchdog observes the descendant tree ──────────┘
-```
+## Optional: independent QA
 
-The observer is a drift tripwire, not a worker or security boundary. Healthy work is silent. Orbit
-enables `CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS=1`, attaches one watchdog to the root Orchestrator,
-and propagates it to descendants. Anthropic still remotely gates this experimental Claude capability;
-when it is unavailable, the deterministic Safety, QA, CPO, budget, and Stop gates continue to bind.
+With `independent_qa` enabled and export approved, a second provider (Codex or a fresh Claude)
+reviews the exact committed snapshot and returns a verdict. Off by default; nothing leaves your
+machine until you approve it.
 
-When Codex QA is enabled, `📦` crosses from Claude to the real OpenAI reviewer and returns only with
-feedback. Orbit routes T1 → Luna/low, T2 → Terra/medium, and T3/T4 → Sol/high; security, auth, money,
-privacy, compliance, or dangerous migrations force Sol. Failed review promotes the next attempt.
+## Honest limits
 
-## Frontend standard
-
-Frontend projects add a mandatory Designer, the canonical [TasteSkill](https://www.tasteskill.dev/)
-method where appropriate, a 67-style design catalog, prototype-before-build discipline, and pixel
-verification on every UI delivery. Marketing-page art direction never overrides functional product
-UX, accessibility, the project design system, or the user's source of truth.
-
-## Honest boundaries
-
-- Repository packet size is mechanically enforced; semantic relevance is not perfect. Python uses
-  real AST symbols/calls, while other languages currently use conservative confidence-labeled
-  extraction.
-- Business language may not match code vocabulary on the first retrieval. Orbit must run one silent,
-  targeted internal query—not ask the user and not widen to the full repository.
-- Sandboxed local work is non-interactive. Commands needing new network or host authority may still
-  need one explicit authorization; Orbit never converts routine implementation into repeated approvals.
-- Role execution is enforceable; expert judgment quality remains model-governed. Validate Recall@K
-  against your enterprise task corpus before treating the index as a complete impact oracle.
-- The architecture applies the sparse spatial/temporal communication principle from
-  [AgentPrune, ICLR 2025](https://proceedings.iclr.cc/paper_files/paper/2025/file/bbc461518c59a2a8d64e70e2c38c4a0e-Paper-Conference.pdf);
-  it never prunes the goal, Safety, Review, QA, CPO, or proof.
+- **The Claude Code path is the product.** The portable runner (`loop.py`) still has a stub
+  `dispatch()`; wiring another orchestrator is yours to do.
+- **Token numbers are estimates** (bytes ÷ 4), used as stoplights and ledgers — not billing truth.
+- **The watchdog observer** rides an experimental, remotely-gated Claude capability. When it's
+  unavailable, the deterministic gates still bind; the tripwire doesn't.
+- **Repository evidence is bounded, not omniscient.** Python gets real AST extraction; other
+  languages get conservative, confidence-labeled extraction. Validate against your own repos.
+- **Gates guarantee process, not brilliance.** A forced review with citations is still only as
+  good as the model writing it.
+- Dev channel is checksum-verifiable (`python3 bin/orbit-verify --root .`) but **unsigned**.
 
 ## Repository
 
 ```text
-bin/                  trusted hooks and commands
-assets/               scaffolded engines, checks, roles, and visual assets
-references/           playbooks and project templates
-scripts/scaffold.py   deterministic install and migration
-tests/                safety, quality, budget, lifecycle, and retrieval contracts
+bin/         trusted hooks and CLIs      assets/      scaffolded engines, checks, roles
+references/  playbooks and templates     scripts/     deterministic install + migration
+tests/       57 contract test files      → bash tests/run.sh
 ```
 
-```bash
-bash tests/run.sh
-python3 scripts/check-coherence.py
-python3 bin/orbit-verify --root .
-```
-
-The development channel is checksum-verifiable but unsigned. See [CHANGELOG.md](CHANGELOG.md) for
-release history and [references/playbooks/repository-intelligence.md](references/playbooks/repository-intelligence.md)
-for the evidence-retrieval contract.
-
-## License
-
-MIT
+History in [CHANGELOG.md](CHANGELOG.md). License: MIT.
