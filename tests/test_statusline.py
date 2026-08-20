@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Tests the stable Claude Code status surface and its scaffold wiring: a compact run line and a fixed
-Claude-to-Codex QA handoff line; malformed input never crashes.
+Tests the Claude Code status surface and its scaffold wiring: a compact run line and a state-driven,
+one-way Claude-to-Codex QA parcel; malformed input never crashes.
 
 Run: python3 tests/test_statusline.py   (exit 0 = pass)
 """
@@ -10,6 +10,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 SL = os.path.join(ROOT, "assets", "orbit-statusline.py")
@@ -30,8 +31,8 @@ def main():
     fails = []
     scaffold_source = open(SCAFFOLD).read()
     if ('"scripts/orbit-statusline"' not in scaffold_source or
-            "7f4b512f83674863fef70d465ee6a483d78191e21382ef6f34a5c5236b914c49" not in scaffold_source):
-        fails.append("existing <=0.44 projects cannot safely migrate the shipped one-line reporter")
+            "812c44c72001f4460b825a9bdb8bcc6a0059719e58f0ae74c863cca30d499cb3" not in scaffold_source):
+        fails.append("existing 0.62 projects cannot safely migrate the shipped static handoff")
     full = {"context_window": {"used_percentage": 38, "total_input_tokens": 10000,
                                "current_usage": {"cache_read_input_tokens": 6100}},
             "cost": {"total_cost_usd": 0.42}, "model": {"display_name": "Opus"}}
@@ -51,7 +52,7 @@ def main():
     if "⚠ INPUT" not in bl or "builder" in bl.lower():
         fails.append(f"blocked run should prioritize INPUT over the owner: {bl!r}")
 
-    # QA is a fixed-position handoff contract: Claude left, Codex right, with no traveling animation.
+    # QA is a truthful handoff: actors stay fixed; the parcel moves once from real state timing.
     with tempfile.TemporaryDirectory() as d:
         orbit = os.path.join(d, ".orbit"); os.makedirs(orbit)
         subprocess.run(["git", "init", "-q"], cwd=d, check=True)
@@ -62,7 +63,8 @@ def main():
         subprocess.run(["git", "commit", "-qm", "x"], cwd=d, check=True)
         head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=d, text=True).strip()
         json.dump(run, open(os.path.join(orbit, "run.json"), "w"))
-        json.dump({"independent_qa": {"enabled": True, "provider": {"mode": "both"}}},
+        json.dump({"independent_qa": {"enabled": True, "provider": {"mode": "both", "adapters": {
+                      "codex": {"model": "gpt-5.6-sol"}, "claude": {}}}}},
                   open(os.path.join(orbit, "loop.config.json"), "w"))
         control = os.path.join(d, ".git", "orbit-independent-qa"); os.makedirs(control)
         json.dump({"schema_version": 1, "status": "reviewing", "target_commit": head,
@@ -78,18 +80,26 @@ def main():
         lines = rendered.splitlines()
         if len(lines) != 2 or "Claude" not in lines[1] or "Codex QA" not in lines[1]:
             fails.append(f"QA must render one explicit Claude/Codex handoff row: {rendered!r}")
-        if "📦" not in rendered or "REVIEW" not in rendered or "▶" not in rendered:
+        if "📦" not in rendered or "REVIEW" not in rendered or "5.6 Sol" not in rendered:
             fails.append(f"reviewing must show a Claude-to-Codex code/content review: {rendered!r}")
-        again = subprocess.run([sys.executable, SL], input=json.dumps(payload),
-                               env={**os.environ, "TERM_PROGRAM": "iTerm.app",
-                                    "TERM_SESSION_ID": "term-window-42"},
-                               capture_output=True, text=True, timeout=10).stdout.strip()
-        if rendered != again:
-            fails.append(f"handoff must not move between refreshes: {rendered!r} != {again!r}")
+        def at_age(age):
+            stamp = time.time() - age
+            os.utime(os.path.join(control, "current.json"), (stamp, stamp))
+            return subprocess.run([sys.executable, SL], input=json.dumps(payload),
+                                  env={**os.environ, "TERM_PROGRAM": "iTerm.app",
+                                       "TERM_SESSION_ID": "term-window-42"},
+                                  capture_output=True, text=True, timeout=10).stdout.strip()
+        review_frames = [at_age(age).splitlines()[-1] for age in (.1, 2.2, 8)]
+        parcel_positions = [frame.find("📦") for frame in review_frames]
+        if not parcel_positions[0] < parcel_positions[1] < parcel_positions[2]:
+            fails.append(f"review parcel did not move once toward Codex: {review_frames}")
+        if any(frame.find("Claude") != review_frames[0].find("Claude") or
+               frame.find("Codex QA") != review_frames[0].find("Codex QA") for frame in review_frames):
+            fails.append(f"actors moved while parcel animated: {review_frames}")
         states = {
-            "changes_required": ("◀", "💬", "FEEDBACK"),
-            "pass": ("✓", "PASS"),
-            "blocked": ("⛔", "BLOCKED"),
+            "changes_required": ("FEEDBACK", "←"),
+            "pass": ("PASS",),
+            "blocked": ("BLOCKED",),
         }
         for state, expected in states.items():
             json.dump({"schema_version": 1, "status": state, "target_commit": head,
@@ -104,6 +114,15 @@ def main():
                 fails.append(f"{state} handoff is unclear: {handoff!r}")
             if handoff.find("Claude") >= handoff.find("Codex QA"):
                 fails.append(f"{state} moved Claude/Codex positions: {handoff!r}")
+            if "5.6 Sol" not in handoff:
+                fails.append(f"{state} hid Orbit's selected OpenAI model: {handoff!r}")
+        json.dump({"schema_version": 1, "status": "changes_required", "target_commit": head,
+                   "providers": {"codex": {"status": "changes_required"}}},
+                  open(os.path.join(control, "current.json"), "w"))
+        feedback_frames = [at_age(age).splitlines()[-1] for age in (.1, 2.2, 8)]
+        feedback_positions = [frame.find("📦") for frame in feedback_frames]
+        if not feedback_positions[0] > feedback_positions[1] > feedback_positions[2]:
+            fails.append(f"feedback parcel did not return once to Claude: {feedback_frames}")
         sessions = json.load(open(os.path.join(orbit, "sessions.json")))
         if sessions.get("session-qa-123", {}).get("model") != "Opus 4.8":
             fails.append(f"statusline did not record session/model identity: {sessions}")
@@ -154,7 +173,7 @@ def main():
         for f in fails:
             print("  -", f)
         sys.exit(1)
-    print("PASS: statusline (compact run · fixed Claude/Codex QA handoff · fail-safe · non-overwrite)")
+    print("PASS: statusline (compact run · truthful animated QA parcel · explicit OpenAI model · fail-safe)")
 
 
 if __name__ == "__main__":

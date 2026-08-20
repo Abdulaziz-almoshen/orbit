@@ -49,6 +49,10 @@ def main():
     except qa.QAError as exc:
         if "will not silently fall back" not in str(exc):
             fails.append(f"wrong missing-provider failure: {exc}")
+    shipped = json.loads((ROOT / "assets/loop.config.json").read_text())["independent_qa"]["provider"]["adapters"]["codex"]
+    if (shipped.get("model") != "gpt-5.6-sol" or "--model" not in shipped.get("argv", [])
+            or "gpt-5.6-sol" not in shipped.get("argv", [])):
+        fails.append(f"Orbit does not explicitly select its OpenAI Codex QA model: {shipped}")
 
     # A fresh scaffold installs the stage; a reinstall additively migrates old config.
     with tempfile.TemporaryDirectory() as d:
@@ -72,6 +76,9 @@ def main():
             fails.append("global QA preference improperly granted project export approval")
         if cfg["independent_qa"].get("provider", {}).get("mode") != "codex":
             fails.append("global QA preference did not preselect the provider")
+        installed_codex = cfg["independent_qa"].get("provider", {}).get("adapters", {}).get("codex", {})
+        if installed_codex.get("model") != "gpt-5.6-sol" or "--model" not in installed_codex.get("argv", []):
+            fails.append(f"fresh scaffold did not pin Orbit's Codex QA model: {installed_codex}")
         cfg.pop("independent_qa", None); cfg.pop("_independent_qa_help", None)
         cfg["custom_project_value"] = "preserve-me"
         cfg.get("paths", {}).pop("independent_reviews", None)
@@ -86,13 +93,15 @@ def main():
 
         # Stock v0.41 Codex adapter upgrades to the selectable map; custom commands stay untouched.
         legacy = json.loads((ROOT / "assets/loop.config.json").read_text())
-        codex_argv = legacy["independent_qa"]["provider"]["adapters"]["codex"]["argv"]
+        codex_argv = ["codex", "exec", "--ephemeral", "--sandbox", "read-only",
+                      "--output-schema", "{schema}", "-o", "{output}", "-"]
         legacy["independent_qa"]["provider"] = {"name": "codex", "argv": codex_argv}
         cfg_path.write_text(json.dumps(legacy))
         subprocess.run([sys.executable, str(ROOT / "scripts/scaffold.py"), "--target", str(target)],
                        text=True, capture_output=True, check=True)
         upgraded = json.loads(cfg_path.read_text())["independent_qa"]["provider"]
-        if upgraded.get("mode") != "codex" or "claude" not in upgraded.get("adapters", {}):
+        if (upgraded.get("mode") != "codex" or "claude" not in upgraded.get("adapters", {})
+                or upgraded.get("adapters", {}).get("codex", {}).get("model") != "gpt-5.6-sol"):
             fails.append(f"stock v0.41 provider was not safely migrated: {upgraded}")
 
     # Install preference preselects only; project consent stays off and later project choices survive.

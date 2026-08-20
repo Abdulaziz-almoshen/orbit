@@ -123,8 +123,9 @@ enables `CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS=1`, attaches one watchdog to t
 and propagates it to descendants. Anthropic still remotely gates this experimental Claude capability;
 when it is unavailable, the deterministic Safety, QA, CPO, budget, and Stop gates continue to bind.
 
-The terminal keeps Claude fixed on the left and Codex QA fixed on the right: `📦 →` means code and
-content are under review; `← 💬` means Codex returned feedback. The state changes, never the layout.
+When Codex QA is enabled, the terminal keeps Claude fixed left and Codex fixed right while `📦` crosses
+once with real ownership, then settles. Orbit pins Codex QA to OpenAI `gpt-5.6-sol` (medium reasoning);
+feedback sends the parcel back. Setup choices are Codex, Claude-only QA, both, or later.
 
 ## Frontend standard
 

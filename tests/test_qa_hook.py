@@ -45,7 +45,8 @@ json.dump({'schema_version':1,'verdict':'PASS','score':9.3,'summary':'proved','f
             "external_export": {"approved": True, "approved_by": "owner",
                 "approved_at": "2026-07-15T00:00:00Z", "scope": "committed_snapshot_only"},
             "provider": {"mode": "both", "adapters": {
-                "codex": {"argv": [sys.executable, "{repo}/reviewer.py", "{output}"]},
+                "codex": {"model": "gpt-5.6-sol",
+                          "argv": [sys.executable, "{repo}/reviewer.py", "{output}"]},
                 "claude": {"argv": [sys.executable, "{repo}/reviewer.py", "{output}"]}}}},
             "paths": {"independent_reviews": ".orbit/reviews"}}
         (repo / ".orbit/loop.config.json").write_text(json.dumps(config))
@@ -81,6 +82,8 @@ json.dump({'schema_version':1,'verdict':'PASS','score':9.3,'summary':'proved','f
         providers = state.get("providers", {})
         if set(providers) != {"codex", "claude"} or any(x.get("status") != "pass" for x in providers.values()):
             fails.append(f"dual-provider final states missing: {providers}")
+        if providers.get("codex", {}).get("model") != "gpt-5.6-sol":
+            fails.append(f"Codex QA model was not published in live state: {providers}")
         events_path = common / "orbit-independent-qa/events.jsonl"
         events = [json.loads(x) for x in events_path.read_text().splitlines() if x.strip()]
         if not any(e.get("status") == "queued" for e in events):

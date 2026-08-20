@@ -309,7 +309,9 @@
       "fallback_requires_human_approval": true,
       "adapters": {
         "codex": {
-          "argv": ["codex", "exec", "--ephemeral", "--sandbox", "read-only", "--output-schema", "{schema}", "-o", "{output}", "-"]
+          "model": "gpt-5.6-sol",
+          "reasoning_effort": "medium",
+          "argv": ["codex", "exec", "--model", "gpt-5.6-sol", "-c", "model_reasoning_effort=\"medium\"", "--ephemeral", "--sandbox", "read-only", "--output-schema", "{schema}", "-o", "{output}", "-"]
         },
         "claude": {
           "output": "stdout_json",

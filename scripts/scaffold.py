@@ -80,6 +80,7 @@ _LEGACY_OLD = {
     "scripts/orbit-statusline": {
         "7f4b512f83674863fef70d465ee6a483d78191e21382ef6f34a5c5236b914c49",  # 0.62.0 compact reporter
         "00fbea070a9633c2630fc3da20706ad621c05ee6fb0087720e887d40a40e64dd",  # 0.45.0 session identity
+        "812c44c72001f4460b825a9bdb8bcc6a0059719e58f0ae74c863cca30d499cb3",  # 0.62.0 static handoff
     },
 }
 
@@ -232,7 +233,7 @@ FILE_PLAN = [
     ("orbit-status",     "scripts/orbit-status",      0o755),
     ("orbit-dashboard",  "scripts/orbit-dashboard",   0o755),   # read-only local web board over .orbit/
     ("orbit-pet",        "scripts/orbit-pet",         0o755),   # macOS always-on-top board reporter
-    ("orbit-statusline.py", "scripts/orbit-statusline", 0o755),  # compact run + fixed Claude/Codex QA handoff
+    ("orbit-statusline.py", "scripts/orbit-statusline", 0o755),  # compact run + truthful animated QA handoff
 
     ("security/rules.json", ".orbit/security/rules.json", None),  # declarative repo rules for the trusted guard
     ("checks/guard.py",  ".orbit/checks/guard.py",    0o755),  # built-in ruleset reference (the wired wall is the trusted orbit-guard)
@@ -620,14 +621,23 @@ def _merge_loop_config_defaults(target: Path, created: list, warnings: list) -> 
             qa["auto_review"] = json.loads(json.dumps(defaults["independent_qa"]["auto_review"]))
             changed.append("independent_qa.auto_review")
         provider = qa.get("provider", {}) if isinstance(qa, dict) else {}
-        shipped_codex_argv = defaults["independent_qa"]["provider"]["adapters"]["codex"]["argv"]
+        shipped_codex = defaults["independent_qa"]["provider"]["adapters"]["codex"]
+        shipped_codex_argv = shipped_codex["argv"]
+        previous_stock_codex_argv = ["codex", "exec", "--ephemeral", "--sandbox", "read-only",
+                                     "--output-schema", "{schema}", "-o", "{output}", "-"]
         if (isinstance(provider, dict) and provider.get("name") == "codex"
-                and provider.get("argv") == shipped_codex_argv):
+                and provider.get("argv") in (previous_stock_codex_argv, shipped_codex_argv)):
             replacement = json.loads(json.dumps(defaults["independent_qa"]["provider"]))
             replacement["mode"] = "codex"
             qa["provider"] = replacement
             qa.setdefault("arabic_content_qa", defaults["independent_qa"]["arabic_content_qa"])
             changed.append("independent_qa.provider(v0.41→v0.42)")
+            provider = replacement
+        adapters = provider.get("adapters", {}) if isinstance(provider, dict) else {}
+        codex_adapter = adapters.get("codex") if isinstance(adapters, dict) else None
+        if isinstance(codex_adapter, dict) and codex_adapter.get("argv") == previous_stock_codex_argv:
+            adapters["codex"] = json.loads(json.dumps(shipped_codex))
+            changed.append("independent_qa.codex_model(gpt-5.6-sol)")
         paths = current.setdefault("paths", {})
         for key in ("independent_reviews", "independent_qa_runner", "delivery_evidence",
                     "delivery_quality_gate", "user_memory_checkpoint", "user_memory_events"):
@@ -1097,7 +1107,7 @@ def install_hooks(target: Path, has_ui: bool = False, reporter_only: bool = Fals
     statusline_manual = False
     if "statusLine" not in data:
         data["statusLine"] = {"type": "command", "command": STATUSLINE_CMD, "refreshInterval": 2}
-        added.append("statusLine → orbit-statusline   (run summary + fixed Claude/Codex QA handoff)")
+        added.append("statusLine → orbit-statusline   (truthful animated Claude/Codex QA handoff)")
     else:
         statusline_manual = True
 

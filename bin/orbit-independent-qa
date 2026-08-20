@@ -201,6 +201,7 @@ def _publish_report_state(repo: Path, report: dict, gate: dict, authoritative: P
     result = report.get("result", {})
     pipeline_status = "blocked" if result.get("verdict") == "BLOCKED" else gate.get("status", "changes_required")
     provider_results = report.get("provider_results", {})
+    provider_models = report.get("provider_models", {})
     providers = {}
     if isinstance(provider_results, dict):
         for name, one in provider_results.items():
@@ -210,6 +211,8 @@ def _publish_report_state(repo: Path, report: dict, gate: dict, authoritative: P
             providers[name] = {"status": "pass" if verdict == "PASS" else (
                 "blocked" if verdict == "BLOCKED" else "changes_required"),
                 "verdict": verdict, "score": one.get("score"), "summary": one.get("summary", "")}
+            if isinstance(provider_models, dict) and provider_models.get(name):
+                providers[name]["model"] = provider_models[name]
     _write_pipeline_state(repo, {
         "stage": "independent_qa",
         "status": pipeline_status,
@@ -403,8 +406,12 @@ def run_review(repo: Path, request_path: Path, ref: str) -> dict:
     round_no = len(rounds) + 1
     provider_name = "+".join(x.get("name") or qa.get("provider", {}).get("name") or "command"
                              for x in providers)
-    provider_states = {x.get("name") or qa.get("provider", {}).get("name") or "command":
-                       {"status": "queued"} for x in providers}
+    provider_states = {}
+    for spec in providers:
+        name = spec.get("name") or qa.get("provider", {}).get("name") or "command"
+        provider_states[name] = {"status": "queued"}
+        if spec.get("model"):
+            provider_states[name]["model"] = spec["model"]
     _write_pipeline_state(repo, {
         "stage": "independent_qa", "status": "reviewing",
         "request_id": request["id"], "request_sha256": request_hash,
@@ -430,6 +437,8 @@ def run_review(repo: Path, request_path: Path, ref: str) -> dict:
             for spec in providers:
                 one_name = spec.get("name") or qa.get("provider", {}).get("name") or "command"
                 provider_states[one_name] = {"status": "reviewing"}
+                if spec.get("model"):
+                    provider_states[one_name]["model"] = spec["model"]
                 _write_pipeline_state(repo, {
                     "stage": "independent_qa", "status": "reviewing",
                     "request_id": request["id"], "request_sha256": request_hash,
@@ -458,6 +467,8 @@ def run_review(repo: Path, request_path: Path, ref: str) -> dict:
                 provider_states[one_name] = {"status": "pass" if one["verdict"] == "PASS" else (
                     "blocked" if one["verdict"] == "BLOCKED" else "changes_required"),
                     "verdict": one["verdict"], "score": one["score"], "summary": one["summary"]}
+                if spec.get("model"):
+                    provider_states[one_name]["model"] = spec["model"]
                 _write_pipeline_state(repo, {
                     "stage": "independent_qa", "status": "reviewing",
                     "request_id": request["id"], "request_sha256": request_hash,
@@ -475,6 +486,8 @@ def run_review(repo: Path, request_path: Path, ref: str) -> dict:
     envelope = {"schema_version": 1, "request_id": request["id"], "request_sha256": request_hash,
                 "baseline_commit": baseline, "target_commit": commit, "round": round_no,
                 "provider": provider_name,
+                "provider_models": {str(spec.get("name")): spec.get("model") for spec in providers
+                                    if spec.get("name") and spec.get("model")},
                 "provider_results": {name: value for name, value in provider_results},
                 "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "result": result}
     report_path = review_dir / f"round-{round_no}.json"

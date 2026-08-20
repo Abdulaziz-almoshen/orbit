@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""orbit-statusline — a stable Claude Code run line plus a fixed QA handoff line.
+"""orbit-statusline — a compact run line plus a truthful Claude → Codex QA handoff.
 
 Only state that changes the operator's next decision is shown: phase, progress, active owner, cost,
-blocker, and QA gate. Context/cache/confidence detail belongs in the dashboard. The second line is a
-fixed-position contract: Claude builds on the left; Codex reviews code and content on the right.
+blocker, and QA gate. Context/cache/confidence detail belongs in the dashboard. Claude and Codex keep
+fixed positions; the parcel crosses once when real control-plane state hands work between them.
 
   🛰 BUILD · 5/9 · Builder · $0.42
-     Claude ○  ──📦──▶  ● Codex QA · REVIEW
+     Claude ○  ────📦──  ● Codex QA · 5.6 Sol · REVIEW
   🛰 ⚠ INPUT · BUILD · 5/9 · $0.42
 
 Install: `.claude/settings.json` → {"statusLine": {"type":"command",
@@ -118,40 +118,84 @@ def _qa_state(orbit: Path) -> dict:
     except Exception:
         control = {}
     exact = bool(head and control.get("target_commit") == head)
+    adapters = pcfg.get("adapters") if isinstance(pcfg.get("adapters"), dict) else {}
+
+    def providers_with_models(states):
+        enriched = {}
+        for name, value in states.items():
+            item = dict(value) if isinstance(value, dict) else {"status": "queued"}
+            adapter = adapters.get(name) if isinstance(adapters.get(name), dict) else {}
+            if adapter.get("model") and not item.get("model"):
+                item["model"] = adapter["model"]
+            enriched[name] = item
+        return enriched
+
     if not exact:
         names = ["codex", "claude"] if mode == "both" else [mode]
         return {"status": "awaiting_review", "provider": mode, "head": head,
-                "providers": {name: {"status": "queued"} for name in names}}
+                "providers": providers_with_models({name: {"status": "queued"} for name in names})}
+    states = control.get("providers") if isinstance(control.get("providers"), dict) else {}
+    try:
+        changed_at = (cp / "orbit-independent-qa" / "current.json").stat().st_mtime
+    except Exception:
+        changed_at = 0
     return {"status": control.get("status") or "awaiting_review", "provider": mode, "head": head,
-            "providers": control.get("providers") if isinstance(control.get("providers"), dict) else {},
+            "providers": providers_with_models(states), "_changed_at": changed_at,
             "reason": control.get("reason", ""), "verdict": control.get("verdict")}
 
 
-def _codex_status(qa: dict) -> str:
-    """Return Codex's state when available; the aggregate state is a safe fallback."""
+def _codex_view(qa: dict) -> tuple[str, str]:
+    """Return the real Codex provider state/model; no Codex configuration means no fake handoff."""
+    mode = str((qa or {}).get("provider") or "")
+    if mode not in ("codex", "both"):
+        return "", ""
     providers = (qa or {}).get("providers")
     codex = providers.get("codex") if isinstance(providers, dict) else None
-    if isinstance(codex, dict) and codex.get("status"):
-        return str(codex["status"])
-    return str((qa or {}).get("status") or "")
+    if not isinstance(codex, dict):
+        return str((qa or {}).get("status") or ""), ""
+    return str(codex.get("status") or (qa or {}).get("status") or ""), str(codex.get("model") or "")
 
 
-def build_handoff_line(qa: dict) -> str:
-    """Fixed Claude/Codex positions. State may change; the box never travels or animates."""
-    status = _codex_status(qa)
+def _model_label(model: str) -> str:
+    return {"gpt-5.6-sol": "5.6 Sol", "gpt-5.6-terra": "5.6 Terra",
+            "gpt-5.6-luna": "5.6 Luna"}.get(model, model[:18])
+
+
+def _parcel_track(status: str, elapsed: float, width: int = 7) -> str:
+    """Animate only a real state transition, then settle. No decorative back-and-forth loop."""
+    last = width - 1
+    step_seconds = .7
+    if status == "reviewing":
+        pos = min(last, int(max(0, elapsed) / step_seconds))
+    elif status == "changes_required":
+        pos = max(0, last - int(max(0, elapsed) / step_seconds))
+    elif status in ("awaiting_review", "queued"):
+        pos = 0
+    else:
+        pos = last
+    return "─" * pos + "📦" + "─" * (last - pos)
+
+
+def build_handoff_line(qa: dict, now: float = None) -> str:
+    """Claude stays left and Codex stays right; the parcel follows actual QA ownership."""
+    status, model = _codex_view(qa)
     if status in ("", "off", "awaiting_project_approval"):
         return ""
+    now = time.time() if now is None else now
+    changed_at = float((qa or {}).get("_changed_at") or now)
+    track = _parcel_track(status, now - changed_at)
+    model_bit = f" · {_model_label(model)}" if model else ""
     if status == "changes_required":
-        return "   Claude ●  ◀─💬────  ● Codex QA · FEEDBACK"
+        return f"   Claude ●  {track}  ● Codex QA{model_bit} · FEEDBACK ←"
     if status == "pass":
-        return "   Claude ○  ───✓───  ● Codex QA · PASS"
+        return f"   Claude ○  {track}  ● Codex QA{model_bit} · PASS"
     if status in ("blocked", "error"):
-        return "   Claude ●  ───⛔───  ● Codex QA · BLOCKED"
+        return f"   Claude ●  {track}  ● Codex QA{model_bit} · BLOCKED"
     if status == "awaiting_deploy_approval":
-        return "   Claude ○  ───✓───  ● Codex QA · DEPLOY GATE"
+        return f"   Claude ○  {track}  ● Codex QA{model_bit} · DEPLOY GATE"
     if status == "reviewing":
-        return "   Claude ○  ──📦──▶  ● Codex QA · REVIEW"
-    return "   Claude ●  ──📦──▶  ○ Codex QA · QUEUED"
+        return f"   Claude ○  {track}  ● Codex QA{model_bit} · REVIEW →"
+    return f"   Claude ●  {track}  ○ Codex QA{model_bit} · QUEUED"
 
 
 def build_line(claude: dict, run: dict, agents: dict = None, qa: dict = None) -> str:
