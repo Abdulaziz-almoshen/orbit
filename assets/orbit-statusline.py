@@ -1,17 +1,12 @@
 #!/usr/bin/env python3
-"""
-orbit-statusline — the one-line Claude Code status line for an Orbit run.
+"""orbit-statusline — one stable, compact Claude Code status line.
 
-Claude Code runs this every couple of seconds with its status-line JSON on stdin. We fuse that
-(context %, cost, cache reuse, model) with the project's .orbit/run.json (phase, active role,
-task progress, confidence, blocked state) into a single compact line, e.g.:
+Only state that changes the operator's next decision is shown: phase, progress, active owner, cost,
+blocker, and QA gate. Context/cache/confidence detail belongs in the dashboard. No animation and no
+second line: terminal height must not jump every refresh.
 
-  🛰 build · builder · 5/9 · ctx 38% · $0.42 · cache 61% · conf 76%
-  🛰 ⚠ needs input · build · 5/9 · ctx 38% · $0.42            (when a decision is pending)
-
-Design rules: FAST (runs on a 2s refresh) and FAIL-SAFE — any missing/renamed field just drops
-that one segment; a total failure prints an empty line, never a traceback. Cache reuse is labeled
-honestly ("cache") — it's cache_read / total_input, NOT a fabricated "tokens saved".
+  🛰 BUILD · 5/9 · Builder · $0.42
+  🛰 ⚠ INPUT · BUILD · 5/9 · $0.42
 
 Install: `.claude/settings.json` → {"statusLine": {"type":"command",
 "command":"python3 \"$CLAUDE_PROJECT_DIR/scripts/orbit-statusline\"", "refreshInterval": 2}}.
@@ -48,15 +43,6 @@ def _find_orbit(start):
     return None
 
 
-def _age_seconds(iso_ts):
-    """Seconds since an ISO 'YYYY-MM-DDTHH:MM:SSZ', or None if unparseable."""
-    try:
-        t = time.strptime(str(iso_ts), "%Y-%m-%dT%H:%M:%SZ")
-        return max(0, int(time.time() - time.mktime(t) + time.timezone))
-    except Exception:
-        return None
-
-
 def _active_agent(agents: dict):
     """The agent working now (first with status active/blocked), or None."""
     if not isinstance(agents, dict):
@@ -65,12 +51,6 @@ def _active_agent(agents: dict):
              if isinstance(v, dict) and v.get("status") in ("active", "blocked")]
     cands.sort(key=lambda x: (x.get("seq", 99), x.get("role", "")))
     return cands[0] if cands else None
-
-
-def _dur(secs):
-    if secs is None:
-        return ""
-    return f"{secs}s" if secs < 60 else f"{secs // 60}m{secs % 60}s" if secs < 3600 else f"{secs // 3600}h"
 
 
 def _read_json(path, default):
@@ -146,114 +126,50 @@ def _qa_state(orbit: Path) -> dict:
             "reason": control.get("reason", ""), "verdict": control.get("verdict")}
 
 
-def build_qa_line(qa: dict) -> str:
-    """A compact two-character QA scene for Claude Code's supported multi-line status area."""
-    if not qa or qa.get("status") in (None, "off", "awaiting_project_approval"):
+def _qa_badge(qa: dict) -> str:
+    """One fixed vocabulary badge; provider choreography stays in the dashboard."""
+    status = str((qa or {}).get("status") or "")
+    if status in ("", "off", "awaiting_project_approval"):
         return ""
-    providers = qa.get("providers") if isinstance(qa.get("providers"), dict) else {}
-    names = ["codex", "claude"] if qa.get("provider") == "both" else list(providers)
-    if not names:
-        names = [str(qa.get("provider") or "reviewer")]
-    labels = {"queued": "queued", "reviewing": "reviewing", "pass": "PASS ✓",
-              "changes_required": "changes requested 💬", "blocked": "blocked", "error": "error"}
-    actors = []
-    for name in names:
-        state = providers.get(name) if isinstance(providers.get(name), dict) else {}
-        status = str(state.get("status") or "queued")
-        who = "Codex" if name == "codex" else "Claude QA" if name == "claude" else name.title()
-        icon = "🟢" if name == "codex" else "🟠"
-        summary = str(state.get("summary") or "").replace("\n", " ").strip()
-        tail = (" — " + summary[:42] + ("…" if len(summary) > 42 else "")) if summary else ""
-        actors.append(f"{icon} {who}: {labels.get(status, status)}{tail}")
-    # The track leads to whoever currently HOLDS the work: the first reviewer that hasn't passed.
-    # That is what makes this a relay rather than a decoration — Builder hands the box to Codex,
-    # and a changes_required verdict sends it back down the track instead of onward.
-    lead = "queued"
-    for name in names:
-        status = str((providers.get(name) or {}).get("status") or "queued")
-        if status != "pass":
-            lead = status
-            break
-    else:
-        lead = "pass"
-    return "   🟠 Builder " + _handoff(lead, int(time.time() / 2)) + "  " + "  ⚔  ".join(actors)
+    return {
+        "awaiting_review": "QA QUEUED",
+        "queued": "QA QUEUED",
+        "reviewing": "QA REVIEW",
+        "pass": "QA PASS",
+        "changes_required": "QA FIX",
+        "blocked": "QA BLOCK",
+        "error": "QA BLOCK",
+        "awaiting_deploy_approval": "DEPLOY GATE",
+    }.get(status, "QA")
 
 
-_TRACK = 7          # cells between the Builder and the reviewer
-
-
-def _lay(mark: str, pos: int, back: bool) -> str:
-    cells = ["─"] * _TRACK
-    cells[max(0, min(_TRACK - 1, pos))] = mark
-    return ("◀" + "".join(cells)) if back else ("".join(cells) + "▶")
-
-
-def _handoff(status: str, tick: int) -> str:
-    """The parcel's position on the track, derived from the stage; `tick` animates within it.
-
-    The statusline refreshes every 2s and `tick` advances once per refresh, so the parcel moves a
-    cell per frame — visible motion rather than the two-glyph flicker this replaced. Motion means
-    "work is in flight", not "progress was just made"; it stops dead on a terminal verdict, which
-    is the honest signal (a spinner that never rests reads as progress that isn't happening).
-    """
-    if status == "pass":
-        return "──────✓"                       # delivered — nothing in flight
-    if status in ("blocked", "error"):
-        return "───⛔───"                       # stuck: the parcel is not moving, and says so
-    if status == "changes_required":
-        return _lay("💬", _TRACK - 1 - (tick % _TRACK), back=True)   # returning with comments
-    if status == "reviewing":
-        return _lay("📦", _TRACK - 1 - (tick % 2), back=False)       # arrived; being worked on
-    return _lay("📦", tick % _TRACK, back=False)                     # queued — still travelling out
-
-
-def build_line(claude: dict, run: dict, agents: dict = None) -> str:
+def build_line(claude: dict, run: dict, agents: dict = None, qa: dict = None) -> str:
     seg = []
     blocked = run.get("blocked_question")
     if blocked:
-        seg.append("⚠ needs input")
+        seg.append("⚠ INPUT")
 
-    # slice/task first, then the human-readable active agent + how long it's been at it
-    slice_ = run.get("active_task")
-    ag = _active_agent(agents or {})
-    if slice_ or (ag and ag.get("task")):
-        seg.append(str(slice_ or ag.get("task")))
-    if ag and not blocked:
-        name = ag.get("display") or ag.get("role") or "agent"
-        el = _dur(_age_seconds(ag.get("started_at")))
-        seg.append(f"{name}{(' ' + el) if el else ''}")
-    elif run.get("active_role") and not blocked:
-        seg.append(str(run["active_role"]))
-    elif run.get("phase") or run.get("mode"):
-        seg.append(str(run.get("phase") or run.get("mode")))
+    phase = str(run.get("phase") or run.get("mode") or "").strip().upper()
+    if phase:
+        seg.append(phase[:10])
 
     total = run.get("tasks_total")
     if isinstance(total, int) and total > 0:
         seg.append(f"{run.get('tasks_done', 0)}/{total}")
 
-    # quiet: surface it once it's meaningful (the run may be waiting on the active agent)
-    age = _age_seconds(run.get("last_ts"))
-    if age is not None and age >= 60:
-        seg.append(f"quiet {_dur(age)}")
-
-    ctx = _get(claude, "context_window", "used_percentage")
-    if isinstance(ctx, (int, float)):
-        seg.append(f"ctx {int(ctx)}%")
+    ag = _active_agent(agents or {})
+    if ag and not blocked:
+        seg.append(str(ag.get("display") or ag.get("role") or "agent")[:18])
+    elif run.get("active_role") and not blocked:
+        seg.append(str(run["active_role"])[:18])
 
     cost = _get(claude, "cost", "total_cost_usd")
     if isinstance(cost, (int, float)):
         seg.append(f"${cost:.2f}")
 
-    # cache reuse = cache_read / total_input (honest label — not "tokens saved")
-    cur = _get(claude, "context_window", "current_usage", default={})
-    total_in = _get(claude, "context_window", "total_input_tokens")
-    cache_read = cur.get("cache_read_input_tokens") if isinstance(cur, dict) else None
-    if isinstance(total_in, (int, float)) and total_in and isinstance(cache_read, (int, float)):
-        seg.append(f"cache {int(100 * cache_read / total_in)}%")
-
-    conf = run.get("confidence")
-    if isinstance(conf, (int, float)):
-        seg.append(f"conf {int(conf)}%")
+    badge = _qa_badge(qa or {})
+    if badge:
+        seg.append(badge)
 
     return "🛰 " + " · ".join(seg) if seg else ""
 
@@ -290,10 +206,7 @@ def main():
     except Exception:
         pass
     try:
-        print(build_line(claude, run, agents))
-        qa_line = build_qa_line(_qa_state(orbit))
-        if qa_line:
-            print(qa_line)
+        print(build_line(claude, run, agents, _qa_state(orbit)))
     except Exception:
         print("")                                           # never crash the status line
 

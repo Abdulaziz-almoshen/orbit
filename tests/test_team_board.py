@@ -80,12 +80,12 @@ def main():
         if "frontend-engineer" not in js or '"agents"' not in js:
             fails.append("--json missing the agents roster")
 
-        # status line surfaces the active agent by name
+        # status line surfaces only the active owner + progress; long slice titles stay on the board
         claude = {"cwd": d, "context_window": {"used_percentage": 38}}
         line = subprocess.run([sys.executable, SL], input=json.dumps(claude), capture_output=True,
                               text=True, timeout=10).stdout.strip()
-        if "F-S1" not in line or "Frontend Engineer" not in line or "0/" not in line:
-            fails.append(f"status line missing active agent / slice: {line!r}")
+        if "Frontend Engineer" not in line or "0/5" not in line or "F-S1" in line:
+            fails.append(f"status line must keep owner/progress and omit the moving slice title: {line!r}")
 
     # --- orbit-hook drives the roster + attributes edits to the active agent ----------
     with tempfile.TemporaryDirectory() as d:

@@ -70,6 +70,9 @@ impact, repairs failures, and commits only after the goal is proven.
 UI work always adds the Designer. Orbit runs required owners sequentially in Lite mode and widens
 only when evidence and the configured budget justify it.
 
+Sonnet 5 is the everyday Executor; the Opus 4.8 Advisor is on-demand only for expensive forks,
+safety uncertainty, or repeated gate failure.
+
 ## Install
 
 Choose one path—do not install both.

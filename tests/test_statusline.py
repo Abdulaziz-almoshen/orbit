@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """
-Tests assets/orbit-statusline.py (the one-line Claude Code status line) and its scaffold wiring:
-fuses Claude status JSON + .orbit/run.json, drops missing segments, labels cache reuse honestly,
-surfaces a blocked run, and NEVER crashes; the scaffolder wires it only if the user has none.
+Tests the stable one-line Claude Code status surface and its scaffold wiring: only phase, progress,
+owner, cost, blocker, and QA gate render; no animation/second line; malformed input never crashes.
 
 Run: python3 tests/test_statusline.py   (exit 0 = pass)
 """
-import importlib.util
 import json
 import os
 import subprocess
@@ -41,16 +39,19 @@ def main():
            "confidence": 76, "last_ts": "2020-01-01T00:00:00Z", "blocked_question": None}
 
     line, rc = render(full, run)
-    for needle in ("build", "builder", "5/9", "ctx 38%", "$0.42", "cache 61%", "conf 76%"):
+    for needle in ("BUILD", "builder", "5/9", "$0.42"):
         if needle not in line:
             fails.append(f"full status line missing '{needle}': {line!r}")
+    for noise in ("ctx", "cache", "conf", "quiet", "\n"):
+        if noise in line:
+            fails.append(f"stable status line contains noisy/multiline '{noise}': {line!r}")
 
     blocked_run = dict(run); blocked_run["blocked_question"] = "Choose path"
     bl, _ = render(full, blocked_run)
-    if "needs input" not in bl:
-        fails.append(f"blocked run should show 'needs input': {bl!r}")
+    if "⚠ INPUT" not in bl or "builder" in bl.lower():
+        fails.append(f"blocked run should prioritize INPUT over the owner: {bl!r}")
 
-    # Multi-line QA scene belongs directly below Claude Code's activity panel and names real providers.
+    # QA is a fixed one-line badge. Provider choreography and handoff animation belong in the dashboard.
     with tempfile.TemporaryDirectory() as d:
         orbit = os.path.join(d, ".orbit"); os.makedirs(orbit)
         subprocess.run(["git", "init", "-q"], cwd=d, check=True)
@@ -73,37 +74,11 @@ def main():
                                    env={**os.environ, "TERM_PROGRAM": "iTerm.app",
                                         "TERM_SESSION_ID": "term-window-42"},
                                    capture_output=True, text=True, timeout=10)
-        for needle in ("Builder", "Codex: reviewing", "Claude QA: queued"):
-            if needle not in qa_render.stdout:
-                fails.append(f"terminal QA scene missing '{needle}': {qa_render.stdout!r}")
-        if "📦" not in qa_render.stdout and "💬" not in qa_render.stdout:
-            fails.append(f"terminal QA scene missing animated handoff/comment marker: {qa_render.stdout!r}")
-
-        # The parcel must actually TRAVEL. The previous check only asserted the glyph appeared,
-        # which stayed green while an operator-precedence bug pinned the handoff to one frame:
-        #   "──📦──▶" if t % 2 == 0 else "──💬──◀" if moving else "──📦──▶"
-        # parses as A if t else (B if moving else A) — identical in both branches when not moving.
-        spec = importlib.util.spec_from_file_location("orbit_statusline", SL)
-        slm = importlib.util.module_from_spec(spec)
-        sys.modules["orbit_statusline"] = slm
-        spec.loader.exec_module(slm)
-        for status, expect in (("queued", "📦"), ("changes_required", "💬")):
-            frames = {slm._handoff(status, t) for t in range(slm._TRACK)}
-            if len(frames) < slm._TRACK:
-                fails.append(f"handoff '{status}' does not traverse: only {len(frames)} distinct "
-                             f"frame(s) across {slm._TRACK} ticks — {sorted(frames)}")
-            if any(expect not in f for f in frames):
-                fails.append(f"handoff '{status}' lost its {expect} marker on some frame")
-        # Direction encodes the relay: out to the reviewer, back to the Builder with comments.
-        if not slm._handoff("queued", 0).endswith("▶"):
-            fails.append("a queued handoff must point toward the reviewer")
-        if not slm._handoff("changes_required", 0).startswith("◀"):
-            fails.append("changes_required must send the parcel BACK toward the Builder")
-        # A terminal verdict stops the motion — a spinner that never rests reads as false progress.
-        if len({slm._handoff("pass", t) for t in range(4)}) != 1:
-            fails.append("a passed review must stop the animation")
-        if len({slm._handoff("blocked", t) for t in range(4)}) != 1:
-            fails.append("a blocked review must stop the animation")
+        rendered = qa_render.stdout.strip()
+        if "QA REVIEW" not in rendered or "\n" in rendered:
+            fails.append(f"QA must be one stable badge on one line: {rendered!r}")
+        if any(mark in rendered for mark in ("📦", "💬", "▶", "◀", "⚔")):
+            fails.append(f"status line must not animate provider handoffs: {rendered!r}")
         sessions = json.load(open(os.path.join(orbit, "sessions.json")))
         if sessions.get("session-qa-123", {}).get("model") != "Opus 4.8":
             fails.append(f"statusline did not record session/model identity: {sessions}")
@@ -114,7 +89,7 @@ def main():
 
     # missing Claude fields → those segments drop, orbit segments still render, no crash
     partial, rc = render({}, run)
-    if rc != 0 or "build" not in partial or "ctx" in partial or "$" in partial:
+    if rc != 0 or "BUILD" not in partial or "ctx" in partial or "$" in partial:
         fails.append(f"missing-claude-fields case wrong: rc={rc} line={partial!r}")
 
     # empty everything → empty line, exit 0 (never crashes the status bar)
@@ -154,7 +129,7 @@ def main():
         for f in fails:
             print("  -", f)
         sys.exit(1)
-    print("PASS: statusline (fuses claude+run, honest cache label, blocked surface, fail-safe, non-overwrite wiring)")
+    print("PASS: statusline (one stable line · no animation/noise · blocker/QA · fail-safe · non-overwrite)")
 
 
 if __name__ == "__main__":
