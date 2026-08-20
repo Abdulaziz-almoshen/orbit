@@ -80,6 +80,7 @@ _LEGACY_OLD = {
         "93fb9084f4037b2db8a47653529b4ae64629889f5679f1f6d68af162d576457c",  # 0.42.0
         "4ed87c61f0aba95ecf39ce4ee9dd36afb6aa3d50cb4c82b6ed408851f549f9e3",  # 3344f4a scene
         "7319c631a5ec8fee181a7457e41c7f27765404153dc0a9756b97972ecf7af2e1",  # 0.45.0 reporter
+        "793815b325ee3ca17e1b51fbb2bbe76476cd6e93ee634aa37c0206a63c165035",  # 0.66.3 board
     },
     "scripts/orbit-statusline": {
         "7f4b512f83674863fef70d465ee6a483d78191e21382ef6f34a5c5236b914c49",  # 0.62.0 compact reporter
@@ -87,6 +88,7 @@ _LEGACY_OLD = {
         "812c44c72001f4460b825a9bdb8bcc6a0059719e58f0ae74c863cca30d499cb3",  # 0.62.0 static handoff
         "623da7505f26d405e496a68eac43254ecb17f4fb370414036dc0efa52a23a80e",  # 0.65.0 compact board
         "4f8d6ede58670484da4095b4974667c39a82082afaa17686219585901297b740",  # 0.66.2 two-line board
+        "9bbe850da8d3efe99a978245dfdd2c0676da276f097b49e65625e84af9a770c5",  # 0.66.3 goal/task board
     },
 }
 

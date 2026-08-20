@@ -11,7 +11,7 @@
 Orbit maps the repository, selects the smallest qualified team, watches the work, tests the full
 impact, repairs failures, and commits only after the goal is proven.
 
-![version](https://img.shields.io/badge/version-0.66.3-2b6cb0)
+![version](https://img.shields.io/badge/version-0.66.4-2b6cb0)
 ![license](https://img.shields.io/badge/license-MIT-2f855a)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-6b46c1)
 ![tests](https://img.shields.io/badge/tests-all%20passing-10a877)

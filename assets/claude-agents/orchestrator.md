@@ -86,8 +86,9 @@ something more accurate, stable, and scalable than the literal ask.
    cannot be repaired around.
 2. **Board FIRST, THEN delegate.** Your **first action, before spawning any specialist**, is to make
    the board visible: call `.orbit/activity.py`'s `set_team([...])` with the worker(s) actually running
-   now plus optionally an `available` line for dormant specialists. Do **not** queue the whole catalog.
-   Each active/queued entry is `{role, task, status}` (the one you dispatch first is `active`; any
+   now and the whole configured roster as `available` when dormant. **Never hide a configured role.**
+   Visibility is not dispatch: do not queue or spend tokens on the whole catalog. Each active/queued
+   entry is `{role, task, status}` (the one you dispatch first is `active`; any
    capped later worker is `queued`) — AND `set_tasks([...])` (the checklist) AND build the native list
    with `TaskCreate`. Open with a one-line assignment ("Main owner is implementing; Reviewer is available
    if the proof gap remains."). This feeds the live team board (`agents.json`) + checklist (`tasks.json`)

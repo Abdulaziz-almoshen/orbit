@@ -55,12 +55,18 @@ def main():
 
     visible, _ = render(full, {**run, "goal": "Ship the checkout safely"}, [
         {"id": "U1", "title": "Plan checkout", "owner": "planner", "status": "done"},
-        {"id": "U2", "title": "Implement checkout", "owner": "builder", "status": "in_progress"},
+        {"id": "U2", "title": "Implement checkout", "owner": "builder", "status": "in_progress",
+         "token_budget": {"limit": 12000, "spent": 0, "reserved": 0}},
         {"id": "U3", "title": "Regression QA", "owner": "qa-engineer", "status": "pending"},
         {"id": "U4", "title": "CPO verdict", "owner": "cpo", "status": "pending"},
-    ])
+    ], {"team": [{"role": x, "state": "available"} for x in
+                   ("product-discovery", "business-analyst", "market-researcher", "planner",
+                    "designer", "frontend-engineer", "backend-engineer", "safety-gate",
+                    "reviewer", "qa-engineer", "cpo", "reporter")],
+        "builder": {"display": "Builder", "status": "active", "task": "Implement checkout"}})
     for needle in ("GOAL · Ship the checkout safely", "NOW U2 Implement checkout", "NEXT U3 Regression QA",
-                   "✓PLAN", "▸BUILD", "○QA", "○CPO", "observer"):
+                   "tok 0.0/12.0k", "✓PLAN", "▸BUILD", "○QA", "○CPO", "observer",
+                   "Discovery", "Market", "Design", "Frontend", "Backend", "Review"):
         if needle not in visible:
             fails.append(f"persistent goal/queue/pipeline visibility missing '{needle}': {visible!r}")
     with tempfile.TemporaryDirectory() as d:

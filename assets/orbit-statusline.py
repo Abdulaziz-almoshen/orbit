@@ -298,8 +298,15 @@ def build_queue_line(tasks: list, budget: dict = None) -> str:
         if len(label) > 46:
             label = label[:45] + "…"
         owner = str(task.get("owner") or "").replace("-", " ")
+        envelope = task.get("token_budget") if isinstance(task.get("token_budget"), dict) else {}
+        tok = ""
+        if envelope:
+            spent = int(envelope.get("spent", 0) or 0)
+            reserved = int(envelope.get("reserved", 0) or 0)
+            limit = int(envelope.get("limit", 0) or 0)
+            tok = f" · tok {(spent + reserved) / 1000:.1f}/{limit / 1000:.1f}k"
         parts.append(("NOW" if index == 0 else "NEXT") + f" {task.get('id', '')} {label}".rstrip()
-                     + (f" [{owner}]" if owner else ""))
+                     + (f" [{owner}{tok}]" if owner else (f" [{tok[3:]}]" if tok else "")))
     if len(open_tasks) > 2:
         parts.append(f"+{len(open_tasks) - 2} queued")
     total = (budget or {}).get("total")
@@ -342,6 +349,54 @@ def build_pipeline_line(tasks: list) -> str:
             mark = "○"
         rendered.append(f"{mark}{label}")
     return "   " + "  ".join(rendered) + " · 👁 observer"
+
+
+def build_team_lines(agents: dict, tasks: list = None) -> list[str]:
+    """Keep the whole configured bench visible; status controls spend, visibility never does."""
+    order = ["product-discovery", "business-analyst", "market-researcher", "planner", "designer",
+             "frontend-engineer", "backend-engineer", "mobile-developer", "data-engineer",
+             "cli-engineer", "safety-gate", "reviewer", "qa-engineer", "cpo", "reporter"]
+    labels = {"product-discovery": "Discovery", "business-analyst": "BA",
+              "market-researcher": "Market", "planner": "Plan", "designer": "Design",
+              "frontend-engineer": "Frontend", "backend-engineer": "Backend",
+              "mobile-developer": "Mobile", "data-engineer": "Data", "cli-engineer": "CLI",
+              "safety-gate": "Safety", "reviewer": "Review", "qa-engineer": "QA",
+              "cpo": "CPO", "reporter": "Report"}
+    configured = []
+    team = agents.get("team") if isinstance(agents, dict) else []
+    if isinstance(team, list):
+        configured.extend(str(x.get("role")) for x in team if isinstance(x, dict) and x.get("role"))
+    configured.extend(k for k, v in (agents or {}).items() if k not in ("schema", "cycle", "updated", "team")
+                      and isinstance(v, dict))
+    roles = [r for r in order if r in set(configured)]
+    if not roles:
+        return []
+    marks = {"active": "▸", "queued": "○", "blocked": "!", "failed": "!",
+             "done": "✓", "available": "·", "idle": "·"}
+    entries = []
+    for role in roles:
+        detail = (agents or {}).get(role) if isinstance((agents or {}).get(role), dict) else {}
+        fallback = next((x for x in team if isinstance(x, dict) and x.get("role") == role), {})
+        role_tasks = [t for t in (tasks or []) if isinstance(t, dict) and str(t.get("owner") or "") == role]
+        task_states = {str(t.get("status") or "").lower() for t in role_tasks}
+        if task_states & {"active", "in_progress"}:
+            status = "active"
+        elif task_states & {"blocked", "failed"}:
+            status = "blocked"
+        elif role_tasks and task_states <= {"done", "completed", "skipped"}:
+            status = "done"
+        elif role_tasks:
+            status = "queued"
+        elif str(detail.get("status") or "").lower() in ("active", "blocked", "failed"):
+            status = str(detail.get("status")).lower()
+        else:
+            status = "available"
+        entries.append(f"{marks.get(status, '·')}{labels[role]}")
+    lines = []
+    for index in range(0, len(entries), 8):
+        prefix = "   TEAM · " if index == 0 else "          "
+        lines.append(prefix + "  ".join(entries[index:index + 8]))
+    return lines
 
 
 def main():
@@ -394,6 +449,8 @@ def main():
             print(queue)
         if tasks:
             print(build_pipeline_line(tasks))
+        for team_line in build_team_lines(agents, tasks):
+            print(team_line)
         handoff = build_handoff_line(qa)
         if handoff:
             print(handoff)

@@ -499,6 +499,10 @@ Maintenance and direct-answer turns never erase the delivery board. Until CPO ac
 keep the user's goal, full checklist, current owner, next queued task, budget pressure, observer,
 and Plan → Build → Safety → Review → QA → CPO → Report pipeline visible. Suppress only the current
 turn's delivery gate; preserve the active goal and resume its gate ownership on the next task turn.
+Show the whole configured team throughout the run. Required roles are active or queued; every other
+configured specialist remains visibly available and costs zero tokens until dispatched. Each task
+shows its own auto-managed token envelope and spend next to its owner; task and goal budgets resize
+silently within the hard ceiling and never become routine questions for the user.
 
 Then, internally, update `.orbit/STATE.md` and `CLAUDE.md` to reflect what was built — close the
 loop on your own work, the same way the system will.

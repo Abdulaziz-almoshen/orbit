@@ -346,6 +346,7 @@ def snapshot() -> dict:
         ORBIT = _active_orbit()
     run = _json("run.json", {}) or {}
     tasks = _json("tasks.json", []) or []
+    budget = _json("budget.json", {}) or {}
     agents = _json("agents.json", {}) or {}
     agents = agents if isinstance(agents, dict) else {}
     lock = _json("locks/active-writer.json", None)
@@ -368,6 +369,7 @@ def snapshot() -> dict:
                     "product": setup.get("product") if isinstance(setup, dict) else ""},
         "run": run,
         "tasks": tasks if isinstance(tasks, list) else [],
+        "budget": budget if isinstance(budget, dict) else {},
         "agents": agents,
         "active_actors": [v.get("display") or k for k, v in agents.items()
                           if isinstance(v, dict) and v.get("status") == "active"],
@@ -455,7 +457,7 @@ function rows(pairs){const d=E('div');for(const[k,v,cls]of pairs){const r=E('div
 function render(s){
  const app=document.getElementById('app');app.innerHTML='';
  document.getElementById('gen').textContent=' · updated '+ (s.generated_at||'').replace('T',' ').replace('Z','');
- const run=s.run||{}, obs=s.observer||{};
+ const run=s.run||{}, obs=s.observer||{}, budget=s.budget||{}, taskList=Array.isArray(s.tasks)?s.tasks:[];
  // Run summary
  app.appendChild(card('Run',rows([
    ['phase',esc(run.phase||run.mode||'—')],
@@ -466,6 +468,7 @@ function render(s){
  ])));
  // Budget
  app.appendChild(card('Budget',rows([
+   ['goal',esc(budget.goal||run.goal||'—')],['gear',esc(budget.gear||'—')],
    ['tokens',esc((run.tokens||0).toLocaleString())],['cost',esc('$'+(run.cost_usd||0).toFixed? (run.cost_usd||0).toFixed(2):run.cost_usd||0)],
    ['tasks',esc((run.tasks_done||0)+' / '+(run.tasks_total||0))],
  ])));
@@ -477,14 +480,16 @@ function render(s){
  // Owner / agents
  const ab=E('ul');const ags=Object.entries(s.agents||{}).filter(([,v])=>v&&typeof v=='object');
  if(!ags.length)ab.appendChild(E('li','empty','no agents recorded'));
- for(const[role,a]of ags.sort((x,y)=>(x[1].seq||99)-(y[1].seq||99))){const st=a.status||'';const c=st=='active'?'doing':st=='done'?'check':st=='blocked'||st=='failed'?'bad':'todo';
+ for(const[role,a]of ags.sort((x,y)=>(x[1].seq||99)-(y[1].seq||99))){const rt=taskList.filter(t=>t&&t.owner===role),rs=new Set(rt.map(t=>String(t.status||'').toLowerCase()));
+   const st=rs.has('active')||rs.has('in_progress')?'active':rs.has('blocked')||rs.has('failed')?'blocked':rt.length&&[...rs].every(x=>['done','completed','skipped'].includes(x))?'done':rt.length?'queued':(['active','blocked','failed'].includes(a.status)?a.status:'available');const c=st=='active'?'doing':st=='done'?'check':st=='blocked'||st=='failed'?'bad':'todo';
    ab.appendChild(E('li',null,'<span class="'+c+'">●</span> <b>'+esc(a.display||role)+'</b> <span class="pill '+c+'">'+esc(st||'idle')+'</span> <span class=muted>'+esc(a.responsibility||a.mission||'')+'</span>'))}
  app.appendChild(card('Team',ab));
  // Checklist
- const cb=E('ul');const ts=Array.isArray(s.tasks)?s.tasks:[];
+ const cb=E('ul');const ts=taskList;
  if(!ts.length)cb.appendChild(E('li','empty','no tasks yet'));
  for(const t of ts.slice(0,40)){const st=(t.status||'').toLowerCase();const sym=st=='completed'||st=='done'?'<span class=check>✔</span>':st=='in_progress'||st=='active'?'<span class=doing>▸</span>':'<span class=todo>☐</span>';
-   cb.appendChild(E('li',null,sym+' '+esc(t.subject||t.title||t.text||t.name||'task')+(t.owner?' <span class=muted>['+esc(t.owner)+']</span>':'')))}
+   const tb=t.token_budget||{},tok=tb.limit?(' · tok '+(((tb.spent||0)+(tb.reserved||0))/1000).toFixed(1)+'/'+(tb.limit/1000).toFixed(1)+'k'):'';
+   cb.appendChild(E('li',null,sym+' '+esc(t.subject||t.title||t.text||t.name||'task')+(t.owner?' <span class=muted>['+esc(t.owner)+esc(tok)+']</span>':'')))}
  app.appendChild(card('Checklist',cb,true));
  // Decisions / gates
  const db=E('ul');const ds=s.decisions||[];

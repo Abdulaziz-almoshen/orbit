@@ -36,6 +36,9 @@ def main():
         (orbit / "intelligence").mkdir()
         (orbit / "intelligence/latest.json").write_text(json.dumps({
             "policy": {"hops": 1}, "retrieval": {"files": [], "estimated_tokens": 0}}))
+        (orbit / "tasks.json").write_text(json.dumps([
+            {"id": "U1", "title": "Produce the final report", "owner": "reporter", "status": "in_progress"}
+        ]))
         ledger = json.loads((orbit / "budget.json").read_text())
         if ledger.get("total") != 25000 or ledger.get("goal") != "Fix the checkout":
             fails.append("session intake did not open the default governed T1 ledger")
@@ -104,6 +107,9 @@ def main():
         ledger = json.loads((orbit / "budget.json").read_text())
         if ledger["spent"].get("reporter") != 787 or "edge-1" in ledger.get("reservations", {}):
             fails.append("PostToolUse did not reconcile reservation to actual usage")
+        task_budget = json.loads((orbit / "tasks.json").read_text())[0].get("token_budget", {})
+        if (task_budget.get("spent"), task_budget.get("reserved"), task_budget.get("status")) != (787, 0, "managed"):
+            fails.append(f"per-task token envelope did not reconcile automatically: {task_budget}")
 
         (orbit / "activity.jsonl").write_text(json.dumps({"phase": "gear", "gear": "T100"}) + "\n")
         invoke(project, {"hook_event_name": "PreToolUse", "tool_name": "Agent",
