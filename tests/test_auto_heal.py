@@ -68,8 +68,8 @@ def main():
             failures.append("auto-heal did not restore background LLM tasks")
         if "Bash(*)" not in healed_settings.get("permissions", {}).get("allow", []):
             failures.append("auto-heal did not remove routine Bash confirmation prompts")
-        if healed_settings.get("sandbox", {}).get("allowUnsandboxedCommands") is not False:
-            failures.append("auto-heal did not enforce the Bash sandbox boundary")
+        if "sandbox" in healed_settings:
+            failures.append(f"auto-heal wrote a sandbox policy: {healed_settings['sandbox']}")
         setup = json.loads((target / ".orbit/setup.json").read_text())
         if setup.get("orbit_version") != (ROOT / "VERSION").read_text().strip():
             failures.append("setup metadata was not stamped to plugin version")

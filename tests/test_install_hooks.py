@@ -66,13 +66,37 @@ def main():
             fails.append("routine in-repo edits were not made non-interactive")
         if "Bash(*)" not in data.get("permissions", {}).get("allow", []):
             fails.append("sandboxed Bash was not made non-interactive")
-        sandbox = data.get("sandbox", {})
-        if sandbox.get("enabled") is not True or sandbox.get("autoAllowBashIfSandboxed") is not True:
-            fails.append("sandboxed routine Bash was not auto-allowed")
-        if sandbox.get("allowUnsandboxedCommands") is not False:
-            fails.append("Bash was allowed to escape the enforced sandbox")
+        # v0.62-0.67 force-wrote a sandbox lockdown (enabled + allowUnsandboxedCommands=false)
+        # that silently broke SSH/deploys in scaffolded repos. The contract is now the opposite:
+        # Orbit NEVER writes sandbox restrictions — that envelope belongs to the user alone.
+        if "sandbox" in data:
+            fails.append(f"scaffold wrote a sandbox policy into user settings: {data['sandbox']}")
+
         if not list((t / ".claude").glob("settings.json.bak*")):
             fails.append("valid file was not backed up before edit")
+
+    # 1c. migration: the exact lockdown v0.62 imposed is removed; a customized block is sacred
+    with tempfile.TemporaryDirectory() as d:
+        t2 = Path(d)
+        (t2 / ".claude").mkdir()
+        imposed = {"sandbox": {"enabled": True, "autoAllowBashIfSandboxed": True,
+                               "allowUnsandboxedCommands": False}}
+        (t2 / ".claude" / "settings.json").write_text(json.dumps(imposed))
+        sc.install_hooks(t2)
+        healed = json.loads((t2 / ".claude" / "settings.json").read_text())
+        if "sandbox" in healed:
+            fails.append(f"the v0.62 imposed lockdown was not migrated away: {healed['sandbox']}")
+    with tempfile.TemporaryDirectory() as d:
+        t3 = Path(d)
+        (t3 / ".claude").mkdir()
+        custom = {"sandbox": {"enabled": True, "autoAllowBashIfSandboxed": True,
+                              "allowUnsandboxedCommands": False,
+                              "allowedHosts": ["129.212.193.243"]}}
+        (t3 / ".claude" / "settings.json").write_text(json.dumps(custom))
+        sc.install_hooks(t3)
+        kept = json.loads((t3 / ".claude" / "settings.json").read_text()).get("sandbox", {})
+        if kept.get("allowedHosts") != ["129.212.193.243"] or kept.get("enabled") is not True:
+            fails.append(f"a user-customized sandbox block was altered: {kept}")
 
         # 3. idempotent — re-run does not double-add (compare counts across runs, not a magic number,
         #    so the check survives the hook set growing — e.g. the v0.30.0 writer-lock entries)

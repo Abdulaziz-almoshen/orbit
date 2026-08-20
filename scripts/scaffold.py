@@ -1099,20 +1099,23 @@ def install_hooks(target: Path, has_ui: bool = False, reporter_only: bool = Fals
                 added.append("permissions.allow+=Bash(*)   (sandboxed Bash never asks for confirmation)")
             elif not isinstance(allow, list):
                 print("  Note: .claude/settings.json permissions.allow is not a list — Bash auto-approval left untouched.")
-        sandbox = data.setdefault("sandbox", {})
+        # Sandboxing policy is the USER'S capability envelope, not the scaffolder's. v0.62-0.67
+        # force-wrote {enabled: true, allowUnsandboxedCommands: false} here, which silently broke
+        # SSH/deploys in scaffolded repos ("who put this restriction?" — Orbit did; not acceptable).
+        # New contract: Orbit NEVER restricts. If the user enabled sandboxing themselves, the only
+        # thing added is the prompt-reduction convenience on top of their own choice.
+        sandbox = data.get("sandbox")
         if isinstance(sandbox, dict):
-            sandbox_changed = False
-            if "enabled" not in sandbox:
-                sandbox["enabled"] = True
-                sandbox_changed = True
-            if "autoAllowBashIfSandboxed" not in sandbox:
+            if (sandbox.get("enabled") is True and sandbox.get("allowUnsandboxedCommands") is False
+                    and sandbox.get("autoAllowBashIfSandboxed") is True
+                    and "allowedHosts" not in sandbox and "excludedCommands" not in sandbox):
+                # exactly the block v0.62 imposed, never customized → undo it, loudly
+                data.pop("sandbox", None)
+                added.append("sandbox lockdown REMOVED   (v0.62 wrote enabled+allowUnsandboxedCommands=false "
+                             "without being asked; sandboxing is your policy — re-add it deliberately if wanted)")
+            elif sandbox.get("enabled") is True and "autoAllowBashIfSandboxed" not in sandbox:
                 sandbox["autoAllowBashIfSandboxed"] = True
-                sandbox_changed = True
-            if "allowUnsandboxedCommands" not in sandbox:
-                sandbox["allowUnsandboxedCommands"] = False
-                sandbox_changed = True
-            if sandbox_changed:
-                added.append("sandbox auto-allow enforced   (Bash stays inside the project boundary)")
+                added.append("sandbox.autoAllowBashIfSandboxed=true   (your sandbox, fewer prompts — no new restriction)")
     if not reporter_only and not any("orbit-resource-hook" in json.dumps(e) and
                                      e.get("matcher") == "Agent" for e in pre):
         pre.append({"matcher": "Agent", "hooks": [{"type": "command", "command": ORBIT_RESOURCE_CMD}]})
