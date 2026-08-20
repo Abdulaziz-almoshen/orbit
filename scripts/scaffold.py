@@ -48,6 +48,7 @@ MANAGED_CHECKS = {
     ".orbit/loop.py":                   ("loop.py",                  b"Reference self-prompting loop runner"),
     ".orbit/checks/guard.py":           ("checks/guard.py",           b"Orbit safety guard"),
     ".orbit/checks/route.py":           ("checks/route.py",           b"UserPromptSubmit hook"),
+    ".orbit/checks/design-gate.py":     ("checks/design-gate.py",     b"Orbit design gate"),
     ".orbit/checks/user_memory.py":     ("checks/user_memory.py",     b"user-memory intake"),
     ".orbit/checks/learn.py":           ("checks/learn.py",           b"active-learning"),
     ".orbit/checks/orbit-stop-check.py":("checks/orbit-stop-check.py", b"observability backstop"),
